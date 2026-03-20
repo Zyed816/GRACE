@@ -104,10 +104,11 @@ def main():
     parser.add_argument("--gpu_id", type=int, default=0)
     parser.add_argument("--std_weight", type=float, default=0.5)
     parser.add_argument("--topk", type=int, default=10)
-    parser.add_argument("--out", type=str, default="grid_search_iflgr_cora_results.csv")
+    parser.add_argument("--out", type=str, default="results/grid_search_iflgr_cora_results.csv")
     args = parser.parse_args()
 
-    grace_dir = os.path.dirname(os.path.abspath(__file__))
+    tools_dir = os.path.dirname(os.path.abspath(__file__))
+    grace_dir = os.path.abspath(os.path.join(tools_dir, ".."))
     config_path = os.path.join(grace_dir, args.config)
 
     with open(config_path, "r", encoding="utf-8") as f:
@@ -206,6 +207,7 @@ def main():
         )
 
     out_path = os.path.join(grace_dir, args.out)
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
     headers = [
         "timestamp",
         "similarity_percentile",

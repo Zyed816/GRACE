@@ -14,7 +14,7 @@
 ### 方法 1：快速验证（推荐）
 对网格搜索输出的 Top-3 参数各运行 **3 次**，取平均值作为最终评估指标。
 ```bash
-python verify_top_params.py --top_params grid_search_iflgr_cora_results.csv --topk 3 --gpu_id 0
+python tools/verify_top_params.py --top_params results/grid_search_iflgr_cora_results.csv --topk 3 --gpu_id 0
 ```
 
 ### 方法 2：直接使用 Top-1 参数
@@ -28,7 +28,7 @@ python verify_top_params.py --top_params grid_search_iflgr_cora_results.csv --to
 
 ## CSV 文件释义
 
-`grid_search_iflgr_cora_results.csv` 中的列名：
+`results/grid_search_iflgr_cora_results.csv` 中的列名：
 - `similarity_percentile`: 自适应阈值的分位数（较高 = 更严格的伪正样本筛选）
 - `max_du_per_node`: 每个节点最多保留多少个 DU+
 - `unlabeled_weight`: 无标签项的权重系数
@@ -54,12 +54,12 @@ python verify_top_params.py --top_params grid_search_iflgr_cora_results.csv --to
 
 1. **运行网格搜索**（约 20-30 分钟，取决于硬件）
    ```bash
-   python grid_search_iflgr_cora.py --gpu_id 0 --topk 10
+   python tools/grid_search_iflgr_cora.py --gpu_id 0 --topk 10
    ```
 
 2. **验证 Top-3 参数**（约 40-60 分钟，3 遍完整训练）
    ```bash
-   python verify_top_params.py --top_params grid_search_iflgr_cora_results.csv --topk 3 --gpu_id 0
+   python tools/verify_top_params.py --top_params results/grid_search_iflgr_cora_results.csv --topk 3 --gpu_id 0
    ```
 
 3. **更新配置** 或 **进行精搜**（可选）

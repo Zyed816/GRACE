@@ -114,7 +114,8 @@ def main():
     parser.add_argument("--gpu_id", type=int, default=0)
     args = parser.parse_args()
 
-    grace_dir = os.path.dirname(os.path.abspath(__file__))
+    tools_dir = os.path.dirname(os.path.abspath(__file__))
+    grace_dir = os.path.abspath(os.path.join(tools_dir, ".."))
     config_path = os.path.join(grace_dir, "config.yaml")
 
     with open(config_path, "r", encoding="utf-8") as f:
