@@ -13,6 +13,7 @@ Cora:
   tau: 0.4
   num_epochs: 200
   weight_decay: 0.00001
+  dynamic_resample_start_epoch: 100
 CiteSeer:
   seed: 38108
   learning_rate: 0.001
@@ -28,6 +29,7 @@ CiteSeer:
   tau: 0.9
   num_epochs: 200
   weight_decay: 0.00001
+  dynamic_resample_start_epoch: 100
 PubMed:
   seed: 23344
   learning_rate: 0.001
@@ -43,6 +45,7 @@ PubMed:
   tau: 0.7
   num_epochs: 1500
   weight_decay: 0.00001
+  dynamic_resample_start_epoch: 750
 DBLP:
   seed: 83521
   learning_rate: 0.001
@@ -58,3 +61,4 @@ DBLP:
   tau: 0.7
   num_epochs: 1000
   weight_decay: 0.00001
+  dynamic_resample_start_epoch: 500

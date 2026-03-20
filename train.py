@@ -17,7 +17,7 @@ from model import Encoder, Model, drop_feature
 from eval import label_classification
 
 
-def train(model: Model, x, edge_index):
+def train(model: Model, x, edge_index, epoch, dynamic_resample_start_epoch):
     model.train()
     optimizer.zero_grad()
     edge_index_1 = dropout_adj(edge_index, p=drop_edge_rate_1)[0]
@@ -27,11 +27,31 @@ def train(model: Model, x, edge_index):
     z1 = model(x_1, edge_index_1)
     z2 = model(x_2, edge_index_2)
 
-    loss = model.loss(z1, z2, batch_size=0)
+    min_pos_sim = None
+    promoted_pair_count = 0
+
+    if epoch < dynamic_resample_start_epoch:
+        loss = model.loss(z1, z2, batch_size=0)
+    else:
+        with torch.no_grad():
+            sim = model.sim(z1, z2)
+            min_pos_sim = sim.diag().min()
+
+            # Keep original paired positives and promote hard negatives
+            # whose similarity is higher than the weakest original positive.
+            dynamic_pos_mask = sim > min_pos_sim
+            dynamic_pos_mask.fill_diagonal_(True)
+
+            promoted_pair_count = int(dynamic_pos_mask.sum().item() - sim.size(0))
+
+        loss = model.loss(z1, z2, batch_size=0, between_pos_mask=dynamic_pos_mask)
+
     loss.backward()
     optimizer.step()
 
-    return loss.item()
+    if min_pos_sim is None:
+        return loss.item(), None, promoted_pair_count
+    return loss.item(), float(min_pos_sim.item()), promoted_pair_count
 
 
 def test(model: Model, x, edge_index, y, final=False):
@@ -70,6 +90,7 @@ if __name__ == '__main__':
     tau = config['tau']
     num_epochs = config['num_epochs']
     weight_decay = config['weight_decay']
+    dynamic_resample_start_epoch = config.get('dynamic_resample_start_epoch', num_epochs + 1)
 
     def get_dataset(path, name):
         assert name in ['Cora', 'CiteSeer', 'PubMed', 'DBLP']
@@ -96,11 +117,21 @@ if __name__ == '__main__':
     start = t()
     prev = start
     for epoch in range(1, num_epochs + 1):
-        loss = train(model, data.x, data.edge_index)
+        loss, min_pos_sim, promoted_pair_count = train(
+            model,
+            data.x,
+            data.edge_index,
+            epoch,
+            dynamic_resample_start_epoch)
 
         now = t()
-        print(f'(T) | Epoch={epoch:03d}, loss={loss:.4f}, '
-              f'this epoch {now - prev:.4f}, total {now - start:.4f}')
+        if epoch < dynamic_resample_start_epoch:
+            print(f'(T) | Epoch={epoch:03d}, loss={loss:.4f}, '
+                  f'this epoch {now - prev:.4f}, total {now - start:.4f}')
+        else:
+            print(f'(T) | Epoch={epoch:03d}, loss={loss:.4f}, '
+                  f'min_pos_sim={min_pos_sim:.4f}, promoted_pairs={promoted_pair_count}, '
+                  f'this epoch {now - prev:.4f}, total {now - start:.4f}')
         prev = now
 
     print("=== Final ===")
