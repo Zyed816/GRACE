@@ -51,7 +51,7 @@ def label_classification(embeddings, y, ratio):
     Y = y.detach().cpu().numpy()
     Y = Y.reshape(-1, 1)
     onehot_encoder = OneHotEncoder(categories='auto').fit(Y)
-    Y = onehot_encoder.transform(Y).toarray().astype(np.bool)
+    Y = onehot_encoder.transform(Y).toarray().astype(bool)
 
     X = normalize(X, norm='l2')
 
