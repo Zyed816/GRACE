@@ -78,7 +78,7 @@ if __name__ == '__main__':
         return (CitationFull if name == 'dblp' else Planetoid)(
             path,
             name,
-            T.NormalizeFeatures())
+            transform=T.NormalizeFeatures())
 
     path = osp.join(osp.expanduser('~'), 'datasets', args.dataset)
     dataset = get_dataset(path, args.dataset)
