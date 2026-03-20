@@ -1,4 +1,6 @@
 import argparse
+import csv
+import os
 import os.path as osp
 import random
 from time import perf_counter as t
@@ -17,6 +19,38 @@ from model import Encoder, Model, drop_feature
 from eval import label_classification
 
 
+def experiment1_metrics(z1: torch.Tensor, z2: torch.Tensor):
+    with torch.no_grad():
+        z1n = F.normalize(z1, dim=1)
+        z2n = F.normalize(z2, dim=1)
+        sim = torch.mm(z1n, z2n.t())
+
+        pos_sim = sim.diag()
+        num_nodes = sim.size(0)
+        if num_nodes <= 1:
+            return {
+                'violation_rate': 0.0,
+                'mean_margin': 0.0,
+                'p10_margin': 0.0,
+                'mean_pos_sim': pos_sim.mean().item() if num_nodes == 1 else 0.0,
+                'mean_max_neg_sim': 0.0,
+            }
+
+        neg_mask = torch.eye(num_nodes, device=sim.device, dtype=torch.bool)
+        max_neg_sim = sim.masked_fill(neg_mask, float('-inf')).max(dim=1).values
+
+        margins = pos_sim - max_neg_sim
+        violation_rate = (max_neg_sim > pos_sim).float().mean().item()
+
+        return {
+            'violation_rate': violation_rate,
+            'mean_margin': margins.mean().item(),
+            'p10_margin': torch.quantile(margins, 0.1).item(),
+            'mean_pos_sim': pos_sim.mean().item(),
+            'mean_max_neg_sim': max_neg_sim.mean().item(),
+        }
+
+
 def train(model: Model, x, edge_index):
     model.train()
     optimizer.zero_grad()
@@ -26,12 +60,13 @@ def train(model: Model, x, edge_index):
     x_2 = drop_feature(x, drop_feature_rate_2)
     z1 = model(x_1, edge_index_1)
     z2 = model(x_2, edge_index_2)
+    exp1_stats = experiment1_metrics(z1.detach(), z2.detach())
 
     loss = model.loss(z1, z2, batch_size=0)
     loss.backward()
     optimizer.step()
 
-    return loss.item()
+    return loss.item(), exp1_stats
 
 
 def test(model: Model, x, edge_index, y, final=False):
@@ -46,6 +81,7 @@ if __name__ == '__main__':
     parser.add_argument('--dataset', type=str, default='DBLP')
     parser.add_argument('--gpu_id', type=int, default=0)
     parser.add_argument('--config', type=str, default='config.yaml')
+    parser.add_argument('--exp1_log_csv', type=str, default='')
     args = parser.parse_args()
 
     assert args.gpu_id in range(0, 8)
@@ -93,15 +129,51 @@ if __name__ == '__main__':
     optimizer = torch.optim.Adam(
         model.parameters(), lr=learning_rate, weight_decay=weight_decay)
 
+    csv_writer = None
+    csv_fp = None
+    if args.exp1_log_csv:
+        csv_path = args.exp1_log_csv
+        csv_dir = osp.dirname(csv_path)
+        if csv_dir:
+            os.makedirs(csv_dir, exist_ok=True)
+        csv_fp = open(csv_path, mode='w', newline='', encoding='utf-8')
+        csv_writer = csv.DictWriter(csv_fp, fieldnames=[
+            'epoch',
+            'loss',
+            'violation_rate',
+            'mean_margin',
+            'p10_margin',
+            'mean_pos_sim',
+            'mean_max_neg_sim',
+        ])
+        csv_writer.writeheader()
+
     start = t()
     prev = start
     for epoch in range(1, num_epochs + 1):
-        loss = train(model, data.x, data.edge_index)
+        loss, exp1_stats = train(model, data.x, data.edge_index)
 
         now = t()
         print(f'(T) | Epoch={epoch:03d}, loss={loss:.4f}, '
+              f'v_rate={exp1_stats["violation_rate"]:.4f}, '
+              f'm_margin={exp1_stats["mean_margin"]:.4f}, '
+              f'p10={exp1_stats["p10_margin"]:.4f}, '
               f'this epoch {now - prev:.4f}, total {now - start:.4f}')
+        if csv_writer is not None and csv_fp is not None:
+            csv_writer.writerow({
+                'epoch': epoch,
+                'loss': loss,
+                'violation_rate': exp1_stats['violation_rate'],
+                'mean_margin': exp1_stats['mean_margin'],
+                'p10_margin': exp1_stats['p10_margin'],
+                'mean_pos_sim': exp1_stats['mean_pos_sim'],
+                'mean_max_neg_sim': exp1_stats['mean_max_neg_sim'],
+            })
+            csv_fp.flush()
         prev = now
+
+    if csv_fp is not None:
+        csv_fp.close()
 
     print("=== Final ===")
     test(model, data.x, data.edge_index, data.y, final=True)
