@@ -68,11 +68,17 @@ class Model(torch.nn.Module):
         z2 = F.normalize(z2)
         return torch.mm(z1, z2.t())
 
-    def semi_loss(self, z1: torch.Tensor, z2: torch.Tensor,
-                  between_pos_mask: torch.Tensor = None):
+    def _similarity_terms(self, z1: torch.Tensor, z2: torch.Tensor):
         f = lambda x: torch.exp(x / self.tau)
         refl_sim = f(self.sim(z1, z1))
         between_sim = f(self.sim(z1, z2))
+        denom = refl_sim.sum(1) + between_sim.sum(1) - refl_sim.diag()
+        denom = denom.clamp_min(1e-15)
+        return refl_sim, between_sim, denom
+
+    def semi_loss(self, z1: torch.Tensor, z2: torch.Tensor,
+                  between_pos_mask: torch.Tensor = None):
+        _, between_sim, denom = self._similarity_terms(z1, z2)
 
         if between_pos_mask is None:
             numerator = between_sim.diag()
@@ -81,9 +87,30 @@ class Model(torch.nn.Module):
             numerator = (between_sim * pos_mask).sum(1)
             numerator = numerator.clamp_min(1e-15)
 
-        return -torch.log(
-            numerator
-            / (refl_sim.sum(1) + between_sim.sum(1) - refl_sim.diag()))
+        return -torch.log(numerator / denom)
+
+    def corrected_semi_loss(self,
+                            z1: torch.Tensor,
+                            z2: torch.Tensor,
+                            du_pos_mask: torch.Tensor,
+                            du_pos_weight: torch.Tensor,
+                            unlabeled_weight: float = 1.0):
+        _, between_sim, denom = self._similarity_terms(z1, z2)
+
+        # D_L^+: original augmented positive pairs on the diagonal.
+        dl_loss = -torch.log(between_sim.diag().clamp_min(1e-15) / denom)
+
+        # D_U^+: mined unlabeled positives with exponential weights.
+        prob_matrix = between_sim / denom.unsqueeze(1)
+        prob_matrix = prob_matrix.clamp_min(1e-15)
+        weighted_nll = du_pos_weight * (-torch.log(prob_matrix))
+
+        du_weight_sum = du_pos_weight.sum(1)
+        has_du = du_weight_sum > 0
+        du_loss = torch.zeros_like(dl_loss)
+        du_loss[has_du] = weighted_nll[has_du].sum(1) / du_weight_sum[has_du]
+
+        return dl_loss + unlabeled_weight * du_loss
 
     def batched_semi_loss(self, z1: torch.Tensor, z2: torch.Tensor,
                           batch_size: int,
@@ -117,9 +144,36 @@ class Model(torch.nn.Module):
 
     def loss(self, z1: torch.Tensor, z2: torch.Tensor,
              mean: bool = True, batch_size: int = 0,
-             between_pos_mask: torch.Tensor = None):
+             between_pos_mask: torch.Tensor = None,
+             corrected: bool = False,
+             du_pos_mask: torch.Tensor = None,
+             du_pos_weight: torch.Tensor = None,
+             unlabeled_weight: float = 1.0):
         h1 = self.projection(z1)
         h2 = self.projection(z2)
+
+        if corrected:
+            assert du_pos_mask is not None
+            assert du_pos_weight is not None
+
+            if batch_size != 0:
+                raise ValueError('corrected loss currently requires batch_size=0')
+
+            l1 = self.corrected_semi_loss(
+                h1,
+                h2,
+                du_pos_mask=du_pos_mask,
+                du_pos_weight=du_pos_weight,
+                unlabeled_weight=unlabeled_weight)
+            l2 = self.corrected_semi_loss(
+                h2,
+                h1,
+                du_pos_mask=du_pos_mask.t(),
+                du_pos_weight=du_pos_weight.t(),
+                unlabeled_weight=unlabeled_weight)
+            ret = (l1 + l2) * 0.5
+            ret = ret.mean() if mean else ret.sum()
+            return ret
 
         if batch_size == 0:
             l1 = self.semi_loss(h1, h2, between_pos_mask=between_pos_mask)
