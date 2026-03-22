@@ -194,6 +194,56 @@ def train_iflgr(model: Model, x, edge_index, du_pos_mask, du_pos_weight, unlabel
     return loss.item()
 
 
+def train_iflgc(
+        model: Model,
+        x,
+        edge_index,
+        drop_scheme,
+        drop_weights,
+        feature_weights,
+        du_pos_mask,
+        du_pos_weight,
+        unlabeled_weight,
+        refl_du_weight):
+    model.train()
+    optimizer.zero_grad()
+
+    def gca_drop_edge(rate):
+        if drop_scheme == 'uniform':
+            return dropout_adj(edge_index, p=rate)[0]
+        if drop_scheme in ['degree', 'pr']:
+            return drop_edge_weighted(edge_index, drop_weights, p=rate, threshold=0.7)
+        raise ValueError(f'undefined drop scheme: {drop_scheme}')
+
+    edge_index_1 = gca_drop_edge(drop_edge_rate_1)
+    edge_index_2 = gca_drop_edge(drop_edge_rate_2)
+
+    if drop_scheme in ['degree', 'pr']:
+        x_1 = drop_feature_weighted_2(x, feature_weights, drop_feature_rate_1)
+        x_2 = drop_feature_weighted_2(x, feature_weights, drop_feature_rate_2)
+    else:
+        x_1 = drop_feature(x, drop_feature_rate_1)
+        x_2 = drop_feature(x, drop_feature_rate_2)
+
+    z1 = model(x_1, edge_index_1)
+    z2 = model(x_2, edge_index_2)
+
+    loss = model.loss(
+        z1,
+        z2,
+        batch_size=0,
+        corrected=True,
+        du_pos_mask=du_pos_mask,
+        du_pos_weight=du_pos_weight,
+        unlabeled_weight=unlabeled_weight,
+        corrected_variant='ifl-gc',
+        refl_du_weight=refl_du_weight)
+
+    loss.backward()
+    optimizer.step()
+    return loss.item()
+
+
 def train_gca(model: Model, x, edge_index, drop_scheme, drop_weights, feature_weights):
     model.train()
     optimizer.zero_grad()
@@ -236,7 +286,7 @@ if __name__ == '__main__':
     parser.add_argument('--dataset', type=str, default='DBLP')
     parser.add_argument('--gpu_id', type=int, default=0)
     parser.add_argument('--config', type=str, default='config.yaml')
-    parser.add_argument('--method', type=str, default='grace', choices=['grace', 'ifl-gr', 'gca'])
+    parser.add_argument('--method', type=str, default='grace', choices=['grace', 'ifl-gr', 'gca', 'ifl-gc'])
     args = parser.parse_args()
 
     assert args.gpu_id in range(0, 8)
@@ -273,6 +323,7 @@ if __name__ == '__main__':
     corrected_ramp_epochs = config.get('corrected_ramp_epochs', 50)
     gca_drop_scheme = config.get('gca_drop_scheme', 'degree')
     gca_pr_k = config.get('gca_pr_k', 200)
+    iflgc_refl_du_weight = config.get('iflgc_refl_du_weight', 0.3)
 
     def get_dataset(path, name):
         assert name in ['Cora', 'CiteSeer', 'PubMed', 'DBLP']
@@ -302,7 +353,7 @@ if __name__ == '__main__':
     gca_drop_weights = None
     gca_feature_weights = None
 
-    if args.method == 'gca':
+    if args.method in ['gca', 'ifl-gc']:
         if gca_drop_scheme == 'degree':
             gca_drop_weights = degree_drop_weights(data.edge_index).to(device)
             edge_index_ = to_undirected(data.edge_index)
@@ -337,6 +388,49 @@ if __name__ == '__main__':
                 gca_drop_weights,
                 gca_feature_weights)
             phase = 'gca'
+        elif args.method == 'ifl-gc':
+            if epoch <= warmup_epochs:
+                loss = train_gca(
+                    model,
+                    data.x,
+                    data.edge_index,
+                    gca_drop_scheme,
+                    gca_drop_weights,
+                    gca_feature_weights)
+                phase = 'warmup-gca'
+            else:
+                if du_cache is None or (epoch - warmup_epochs - 1) % update_interval == 0:
+                    du_cache = mine_unlabeled_positives(
+                        model,
+                        data.x,
+                        data.edge_index,
+                        similarity_threshold,
+                        similarity_percentile,
+                        max_du_per_node,
+                        use_mutual_topk,
+                        beta)
+                    refresh_du = True
+
+                mined_pairs = du_cache['mined_pairs']
+                mean_weight = du_cache['mean_weight']
+                mean_pairs_per_node = du_cache['mean_pairs_per_node']
+                active_threshold = du_cache['active_threshold']
+
+                progress = max(epoch - warmup_epochs, 0) / max(corrected_ramp_epochs, 1)
+                current_unlabeled_weight = unlabeled_weight * min(progress, 1.0)
+
+                loss = train_iflgc(
+                    model,
+                    data.x,
+                    data.edge_index,
+                    gca_drop_scheme,
+                    gca_drop_weights,
+                    gca_feature_weights,
+                    du_cache['du_pos_mask'],
+                    du_cache['du_pos_weight'],
+                    current_unlabeled_weight,
+                    iflgc_refl_du_weight)
+                phase = 'corrected-gca'
         else:
             if epoch <= warmup_epochs:
                 loss = train_grace(model, data.x, data.edge_index)
@@ -372,7 +466,7 @@ if __name__ == '__main__':
                 phase = 'corrected'
 
         now = t()
-        if args.method in ['grace', 'gca'] or phase == 'warmup':
+        if args.method in ['grace', 'gca'] or phase in ['warmup', 'warmup-gca']:
             print(f'(T) | Epoch={epoch:03d}, phase={phase}, loss={loss:.4f}, '
                   f'this epoch {now - prev:.4f}, total {now - start:.4f}')
         else:

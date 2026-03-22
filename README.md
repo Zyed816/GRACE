@@ -18,12 +18,14 @@ Method selection is supported via `--method`:
 - `grace`: original GRACE training
 - `ifl-gr`: corrected IFL-GR training
 - `gca`: GCA-style structure-aware augmentation training
+- `ifl-gc`: IFL-GC (GCA sampling + semantically guided corrected InfoNCE)
 
 Examples:
 ```
 python train.py --dataset Cora --method grace
 python train.py --dataset Cora --method ifl-gr
 python train.py --dataset Cora --method gca
+python train.py --dataset Cora --method ifl-gc
 ```
 
 ## Requirements

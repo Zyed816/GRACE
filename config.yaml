@@ -24,6 +24,7 @@ Cora:
   corrected_ramp_epochs: 40
   gca_drop_scheme: degree
   gca_pr_k: 200
+  iflgc_refl_du_weight: 0.3
 CiteSeer:
   seed: 38108
   learning_rate: 0.001

@@ -110,6 +110,41 @@ def make_temp_config_from_row_for_method(base_config, csv_row, method):
     if method == "ifl-gr":
         return make_temp_config_from_row(base_config, csv_row)
 
+    if method == "ifl-gc":
+        import copy
+        cfg = copy.deepcopy(base_config)
+
+        cora_updates = {
+            "gca_drop_scheme": csv_row["gca_drop_scheme"],
+            "similarity_percentile": float(csv_row["similarity_percentile"]),
+            "max_du_per_node": int(float(csv_row["max_du_per_node"])),
+            "unlabeled_weight": float(csv_row["unlabeled_weight"]),
+            "iflgc_refl_du_weight": float(csv_row["iflgc_refl_du_weight"]),
+            "warmup_epochs": int(float(csv_row["warmup_epochs"])),
+            "drop_edge_rate_1": float(csv_row["drop_edge_rate_1"]),
+            "drop_edge_rate_2": float(csv_row["drop_edge_rate_2"]),
+            "drop_feature_rate_1": float(csv_row["drop_feature_rate_1"]),
+            "drop_feature_rate_2": float(csv_row["drop_feature_rate_2"]),
+            "update_interval": int(float(csv_row["update_interval"])),
+            "beta": float(csv_row["beta"]),
+            "use_mutual_topk": csv_row["use_mutual_topk"].lower() == "true",
+            "corrected_ramp_epochs": int(float(csv_row["corrected_ramp_epochs"])),
+        }
+
+        if "gca_pr_k" in csv_row and csv_row["gca_pr_k"] != "":
+            cora_updates["gca_pr_k"] = int(float(csv_row["gca_pr_k"]))
+
+        if csv_row.get("similarity_threshold", "").lower() in ["none", "null", ""]:
+            cora_updates["similarity_threshold"] = None
+        elif "similarity_threshold" in csv_row:
+            cora_updates["similarity_threshold"] = float(csv_row["similarity_threshold"])
+
+        cfg["Cora"].update(cora_updates)
+
+        with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False, encoding="utf-8") as f:
+            yaml.safe_dump(cfg, f, sort_keys=False)
+            return f.name
+
     if method == "gca":
         import copy
         cfg = copy.deepcopy(base_config)
@@ -156,6 +191,18 @@ def print_param_summary(csv_row, method):
         )
         return
 
+    if method == "ifl-gc":
+        print(
+            f"scheme={csv_row['gca_drop_scheme']}, "
+            f"sim_p={csv_row['similarity_percentile']}, "
+            f"max_du={csv_row['max_du_per_node']}, "
+            f"lambda_u={csv_row['unlabeled_weight']}, "
+            f"alpha_refl={csv_row['iflgc_refl_du_weight']}, "
+            f"de=({csv_row['drop_edge_rate_1']},{csv_row['drop_edge_rate_2']}), "
+            f"df=({csv_row['drop_feature_rate_1']},{csv_row['drop_feature_rate_2']})"
+        )
+        return
+
     raise ValueError(f"Unsupported method for parameter summary: {method}")
 
 
@@ -165,7 +212,7 @@ def main():
     parser.add_argument("--topk", type=int, default=3, help="Number of top params to verify")
     parser.add_argument("--runs", type=int, default=3, help="Runs per parameter")
     parser.add_argument("--gpu_id", type=int, default=0)
-    parser.add_argument("--method", type=str, default="ifl-gr", choices=["ifl-gr", "gca"])
+    parser.add_argument("--method", type=str, default="ifl-gr", choices=["ifl-gr", "gca", "ifl-gc"])
     args = parser.parse_args()
 
     tools_dir = os.path.dirname(os.path.abspath(__file__))
@@ -244,7 +291,7 @@ def main():
                 "unlabeled_weight": csv_row["unlabeled_weight"],
                 "warmup_epochs": csv_row["warmup_epochs"],
             })
-        else:
+        elif args.method == "gca":
             result.update({
                 "gca_drop_scheme": csv_row["gca_drop_scheme"],
                 "drop_edge_rate_1": csv_row["drop_edge_rate_1"],
@@ -252,6 +299,18 @@ def main():
                 "drop_feature_rate_1": csv_row["drop_feature_rate_1"],
                 "drop_feature_rate_2": csv_row["drop_feature_rate_2"],
                 "tau": csv_row["tau"],
+            })
+        else:
+            result.update({
+                "gca_drop_scheme": csv_row["gca_drop_scheme"],
+                "similarity_percentile": csv_row["similarity_percentile"],
+                "max_du_per_node": csv_row["max_du_per_node"],
+                "unlabeled_weight": csv_row["unlabeled_weight"],
+                "iflgc_refl_du_weight": csv_row["iflgc_refl_du_weight"],
+                "drop_edge_rate_1": csv_row["drop_edge_rate_1"],
+                "drop_edge_rate_2": csv_row["drop_edge_rate_2"],
+                "drop_feature_rate_1": csv_row["drop_feature_rate_1"],
+                "drop_feature_rate_2": csv_row["drop_feature_rate_2"],
             })
         verification_results.append(result)
 
@@ -275,7 +334,7 @@ def main():
                 f"max_du={res['max_du_per_node']}, "
                 f"lambda_u={res['unlabeled_weight']}"
             )
-        else:
+        elif args.method == "gca":
             print(
                 f"#{res['param_rank']}: "
                 f"F1Mi={res['avg_F1Mi_mean']:.4f}±{res['std_F1Mi_mean']:.4f}, "
@@ -284,6 +343,17 @@ def main():
                 f"de1={res['drop_edge_rate_1']}, "
                 f"de2={res['drop_edge_rate_2']}, "
                 f"tau={res['tau']}"
+            )
+        else:
+            print(
+                f"#{res['param_rank']}: "
+                f"F1Mi={res['avg_F1Mi_mean']:.4f}±{res['std_F1Mi_mean']:.4f}, "
+                f"runs={res['runs']}, "
+                f"params: scheme={res['gca_drop_scheme']}, "
+                f"sim_p={res['similarity_percentile']}, "
+                f"max_du={res['max_du_per_node']}, "
+                f"lambda_u={res['unlabeled_weight']}, "
+                f"alpha_refl={res['iflgc_refl_du_weight']}"
             )
 
     recommendation = verification_results[0] if verification_results else None

@@ -112,6 +112,38 @@ class Model(torch.nn.Module):
 
         return dl_loss + unlabeled_weight * du_loss
 
+    def corrected_semi_loss_iflgc(self,
+                                  z1: torch.Tensor,
+                                  z2: torch.Tensor,
+                                  du_pos_mask: torch.Tensor,
+                                  du_pos_weight: torch.Tensor,
+                                  unlabeled_weight: float = 1.0,
+                                  refl_du_weight: float = 0.3):
+        refl_sim, between_sim, denom = self._similarity_terms(z1, z2)
+
+        # D_L^+: original augmented positive pairs on the diagonal.
+        dl_loss = -torch.log(between_sim.diag().clamp_min(1e-15) / denom)
+
+        # D_U^+: semantically guided positives contribute from both views.
+        prob_between = (between_sim / denom.unsqueeze(1)).clamp_min(1e-15)
+        prob_refl = (refl_sim / denom.unsqueeze(1)).clamp_min(1e-15)
+
+        weighted_nll_between = du_pos_weight * (-torch.log(prob_between))
+        weighted_nll_refl = du_pos_weight * (-torch.log(prob_refl))
+
+        du_weight_sum = du_pos_weight.sum(1)
+        has_du = du_weight_sum > 0
+
+        du_loss_between = torch.zeros_like(dl_loss)
+        du_loss_refl = torch.zeros_like(dl_loss)
+        du_loss_between[has_du] = weighted_nll_between[has_du].sum(1) / du_weight_sum[has_du]
+        du_loss_refl[has_du] = weighted_nll_refl[has_du].sum(1) / du_weight_sum[has_du]
+
+        refl_du_weight = min(max(float(refl_du_weight), 0.0), 1.0)
+        du_loss = (1.0 - refl_du_weight) * du_loss_between + refl_du_weight * du_loss_refl
+
+        return dl_loss + unlabeled_weight * du_loss
+
     def batched_semi_loss(self, z1: torch.Tensor, z2: torch.Tensor,
                           batch_size: int,
                           between_pos_mask: torch.Tensor = None):
@@ -148,7 +180,9 @@ class Model(torch.nn.Module):
              corrected: bool = False,
              du_pos_mask: torch.Tensor = None,
              du_pos_weight: torch.Tensor = None,
-             unlabeled_weight: float = 1.0):
+             unlabeled_weight: float = 1.0,
+             corrected_variant: str = 'ifl-gr',
+             refl_du_weight: float = 0.3):
         h1 = self.projection(z1)
         h2 = self.projection(z2)
 
@@ -159,18 +193,34 @@ class Model(torch.nn.Module):
             if batch_size != 0:
                 raise ValueError('corrected loss currently requires batch_size=0')
 
-            l1 = self.corrected_semi_loss(
-                h1,
-                h2,
-                du_pos_mask=du_pos_mask,
-                du_pos_weight=du_pos_weight,
-                unlabeled_weight=unlabeled_weight)
-            l2 = self.corrected_semi_loss(
-                h2,
-                h1,
-                du_pos_mask=du_pos_mask.t(),
-                du_pos_weight=du_pos_weight.t(),
-                unlabeled_weight=unlabeled_weight)
+            if corrected_variant == 'ifl-gc':
+                l1 = self.corrected_semi_loss_iflgc(
+                    h1,
+                    h2,
+                    du_pos_mask=du_pos_mask,
+                    du_pos_weight=du_pos_weight,
+                    unlabeled_weight=unlabeled_weight,
+                    refl_du_weight=refl_du_weight)
+                l2 = self.corrected_semi_loss_iflgc(
+                    h2,
+                    h1,
+                    du_pos_mask=du_pos_mask.t(),
+                    du_pos_weight=du_pos_weight.t(),
+                    unlabeled_weight=unlabeled_weight,
+                    refl_du_weight=refl_du_weight)
+            else:
+                l1 = self.corrected_semi_loss(
+                    h1,
+                    h2,
+                    du_pos_mask=du_pos_mask,
+                    du_pos_weight=du_pos_weight,
+                    unlabeled_weight=unlabeled_weight)
+                l2 = self.corrected_semi_loss(
+                    h2,
+                    h1,
+                    du_pos_mask=du_pos_mask.t(),
+                    du_pos_weight=du_pos_weight.t(),
+                    unlabeled_weight=unlabeled_weight)
             ret = (l1 + l2) * 0.5
             ret = ret.mean() if mean else ret.sum()
             return ret
