@@ -16,6 +16,12 @@ from torch_geometric.nn import GCNConv
 from model import Encoder, Model, drop_feature
 from eval import label_classification
 
+# Unified training entry for four methods on one dataset:
+# - grace   : vanilla GRACE augment + InfoNCE
+# - ifl-gr  : GRACE augment + semantically guided corrected InfoNCE
+# - gca     : GCA structure-aware augment + InfoNCE
+# - ifl-gc  : GCA augment + semantically guided corrected InfoNCE
+
 
 def compute_pr(edge_index: torch.Tensor, damp: float = 0.85, k: int = 10):
     num_nodes = int(edge_index.max().item()) + 1
@@ -136,7 +142,7 @@ def mine_unlabeled_positives(
         else:
             active_threshold = torch.tensor(float(similarity_threshold), device=sim.device)
 
-        # D_U^+: mined from non-augmented pairs with high semantic similarity.
+        # D_U^+: mined from high-similarity pairs on clean embeddings.
         du_pos_mask = (sim > active_threshold) & (~eye_mask)
 
         if max_du_per_node > 0:
@@ -208,6 +214,7 @@ def train_iflgc(
     model.train()
     optimizer.zero_grad()
 
+    # Reuse GCA-style structure-aware views for IFL-GC.
     def gca_drop_edge(rate):
         if drop_scheme == 'uniform':
             return dropout_adj(edge_index, p=rate)[0]
@@ -275,6 +282,7 @@ def train_gca(model: Model, x, edge_index, drop_scheme, drop_weights, feature_we
 
 
 def test(model: Model, x, edge_index, y, final=False):
+    # Keep evaluation identical across all methods.
     model.eval()
     z = model(x, edge_index)
 
@@ -353,6 +361,7 @@ if __name__ == '__main__':
     gca_drop_weights = None
     gca_feature_weights = None
 
+    # Precompute GCA augmentation weights once if needed by method.
     if args.method in ['gca', 'ifl-gc']:
         if gca_drop_scheme == 'degree':
             gca_drop_weights = degree_drop_weights(data.edge_index).to(device)
@@ -377,9 +386,11 @@ if __name__ == '__main__':
         current_unlabeled_weight = 0.0
 
         if args.method == 'grace':
+            # Baseline branch: pure GRACE.
             loss = train_grace(model, data.x, data.edge_index)
             phase = 'grace'
         elif args.method == 'gca':
+            # GCA branch: structure-aware augmentation only.
             loss = train_gca(
                 model,
                 data.x,
@@ -389,6 +400,10 @@ if __name__ == '__main__':
                 gca_feature_weights)
             phase = 'gca'
         elif args.method == 'ifl-gc':
+            # IFL-GC branch:
+            # 1) warmup with GCA objective
+            # 2) periodically mine D_U^+
+            # 3) optimize corrected InfoNCE (cross-view + same-view semantic terms)
             if epoch <= warmup_epochs:
                 loss = train_gca(
                     model,
@@ -432,6 +447,10 @@ if __name__ == '__main__':
                     iflgc_refl_du_weight)
                 phase = 'corrected-gca'
         else:
+            # IFL-GR branch:
+            # 1) warmup with GRACE objective
+            # 2) periodically mine D_U^+
+            # 3) optimize corrected InfoNCE (cross-view semantic term)
             if epoch <= warmup_epochs:
                 loss = train_grace(model, data.x, data.edge_index)
                 phase = 'warmup'

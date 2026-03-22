@@ -10,6 +10,10 @@ from collections import defaultdict
 import numpy as np
 import yaml
 
+# Verification pipeline:
+# - read top-k rows from grid-search CSV
+# - rebuild temporary config per method
+# - rerun multiple times to estimate stability
 
 F1_PATTERN = re.compile(
     r"\(E\) \| label_classification: "
@@ -68,6 +72,7 @@ def run_train(grace_dir, config_path, method, gpu_id):
 
 
 def read_grid_csv(csv_path, topk):
+    # Read ranked candidates from CSV top to bottom.
     results = []
     with open(csv_path, "r", encoding="utf-8") as f:
         reader = csv.DictReader(f)
@@ -107,6 +112,7 @@ def make_temp_config_from_row(base_config, csv_row):
 
 
 def make_temp_config_from_row_for_method(base_config, csv_row, method):
+    # Dispatch CSV->config mapping by method-specific columns.
     if method == "ifl-gr":
         return make_temp_config_from_row(base_config, csv_row)
 

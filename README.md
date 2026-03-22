@@ -20,6 +20,10 @@ Method selection is supported via `--method`:
 - `gca`: GCA-style structure-aware augmentation training
 - `ifl-gc`: IFL-GC (GCA sampling + semantically guided corrected InfoNCE)
 
+Code navigation:
+- `CODE_STRUCTURE.md`: file-by-file responsibilities, method training/testing flow, and hyper-parameter search flow.
+- `tools/GRID_SEARCH_GUIDE.md`: practical commands for grid search and top-parameter verification.
+
 Examples:
 ```
 python train.py --dataset Cora --method grace

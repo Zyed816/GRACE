@@ -10,6 +10,10 @@ from datetime import datetime
 
 import yaml
 
+# Grid-search pipeline (IFL-GR on Cora):
+# 1) run GRACE baseline
+# 2) sweep parameter grid with temporary config files
+# 3) rank by robust_score and save CSV
 
 F1_PATTERN = re.compile(
     r"\(E\) \| label_classification: "
@@ -37,6 +41,7 @@ def parse_metrics(output_text):
 
 
 def robust_score(metrics, std_weight):
+    # Penalize unstable settings by subtracting weighted std.
     return metrics["F1Mi_mean"] - std_weight * metrics["F1Mi_std"]
 
 
