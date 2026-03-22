@@ -38,14 +38,14 @@ def robust_score(metrics, std_weight):
     return metrics["F1Mi_mean"] - std_weight * metrics["F1Mi_std"]
 
 
-def run_train(grace_dir, config_path, method, gpu_id):
+def run_train(grace_dir, config_path, dataset, method, gpu_id):
     start = t()
     print(f"[train:{method}] start")
     cmd = [
         sys.executable,
         "train.py",
         "--dataset",
-        "Cora",
+        dataset,
         "--method",
         method,
         "--config",
@@ -80,7 +80,7 @@ def run_train(grace_dir, config_path, method, gpu_id):
     return metrics, combined
 
 
-def run_grid_script(grace_dir, script_name, gpu_id, topk, std_weight):
+def run_grid_script(grace_dir, script_name, gpu_id, topk, std_weight, dataset):
     start = t()
     print(f"[grid:{script_name}] start")
     cmd = [
@@ -92,6 +92,8 @@ def run_grid_script(grace_dir, script_name, gpu_id, topk, std_weight):
         str(topk),
         "--std_weight",
         str(std_weight),
+        "--dataset",
+        dataset,
     ]
 
     env = os.environ.copy()
@@ -154,11 +156,11 @@ def try_read_top_rows(csv_path, topk):
     return rows
 
 
-def make_temp_config_for_method(base_config, csv_row, method):
+def make_temp_config_for_method(base_config, dataset_key, csv_row, method):
     cfg = copy.deepcopy(base_config)
 
     if method == "ifl-gr":
-        cora_updates = {
+        dataset_updates = {
             "similarity_percentile": float(csv_row["similarity_percentile"]),
             "max_du_per_node": int(float(csv_row["max_du_per_node"])),
             "unlabeled_weight": float(csv_row["unlabeled_weight"]),
@@ -169,14 +171,14 @@ def make_temp_config_for_method(base_config, csv_row, method):
             "corrected_ramp_epochs": int(float(csv_row["corrected_ramp_epochs"])),
         }
         if "tau" in csv_row and csv_row["tau"] != "":
-            cora_updates["tau"] = float(csv_row["tau"])
+            dataset_updates["tau"] = float(csv_row["tau"])
         if csv_row.get("similarity_threshold", "").lower() in ["none", "null", ""]:
-            cora_updates["similarity_threshold"] = None
+            dataset_updates["similarity_threshold"] = None
         elif "similarity_threshold" in csv_row:
-            cora_updates["similarity_threshold"] = float(csv_row["similarity_threshold"])
+            dataset_updates["similarity_threshold"] = float(csv_row["similarity_threshold"])
 
     elif method == "gca":
-        cora_updates = {
+        dataset_updates = {
             "gca_drop_scheme": csv_row["gca_drop_scheme"],
             "drop_edge_rate_1": float(csv_row["drop_edge_rate_1"]),
             "drop_edge_rate_2": float(csv_row["drop_edge_rate_2"]),
@@ -185,10 +187,10 @@ def make_temp_config_for_method(base_config, csv_row, method):
             "tau": float(csv_row["tau"]),
         }
         if "gca_pr_k" in csv_row and csv_row["gca_pr_k"] != "":
-            cora_updates["gca_pr_k"] = int(float(csv_row["gca_pr_k"]))
+            dataset_updates["gca_pr_k"] = int(float(csv_row["gca_pr_k"]))
 
     elif method == "ifl-gc":
-        cora_updates = {
+        dataset_updates = {
             "gca_drop_scheme": csv_row["gca_drop_scheme"],
             "similarity_percentile": float(csv_row["similarity_percentile"]),
             "max_du_per_node": int(float(csv_row["max_du_per_node"])),
@@ -206,16 +208,16 @@ def make_temp_config_for_method(base_config, csv_row, method):
             "corrected_ramp_epochs": int(float(csv_row["corrected_ramp_epochs"])),
         }
         if "gca_pr_k" in csv_row and csv_row["gca_pr_k"] != "":
-            cora_updates["gca_pr_k"] = int(float(csv_row["gca_pr_k"]))
+            dataset_updates["gca_pr_k"] = int(float(csv_row["gca_pr_k"]))
         if csv_row.get("similarity_threshold", "").lower() in ["none", "null", ""]:
-            cora_updates["similarity_threshold"] = None
+            dataset_updates["similarity_threshold"] = None
         elif "similarity_threshold" in csv_row:
-            cora_updates["similarity_threshold"] = float(csv_row["similarity_threshold"])
+            dataset_updates["similarity_threshold"] = float(csv_row["similarity_threshold"])
 
     else:
         raise ValueError(f"Unsupported method: {method}")
 
-    cfg["Cora"].update(cora_updates)
+    cfg[dataset_key].update(dataset_updates)
 
     with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False, encoding="utf-8") as f:
         yaml.safe_dump(cfg, f, sort_keys=False)
@@ -403,7 +405,7 @@ def append_method_summary_rows(csv_path):
         )
 
 
-def method_pipeline(grace_dir, base_config, method, grid_script, grid_csv_name, args, baseline_robust, out_csv_path):
+def method_pipeline(grace_dir, base_config, dataset_key, method, grid_script, grid_csv_name, args, baseline_robust, out_csv_path):
     grid_csv_path = os.path.join(grace_dir, "results", grid_csv_name)
     top_rows = []
 
@@ -428,6 +430,7 @@ def method_pipeline(grace_dir, base_config, method, grid_script, grid_csv_name, 
             gpu_id=args.gpu_id,
             topk=max(args.topk_verify, 10),
             std_weight=args.std_weight,
+            dataset=dataset_key,
         )
         top_rows = read_top_rows(grid_csv_path, args.topk_verify)
 
@@ -436,9 +439,15 @@ def method_pipeline(grace_dir, base_config, method, grid_script, grid_csv_name, 
         print(f"[{method}] candidate #{rank}")
         for run_idx in range(1, args.runs_per_top + 1):
             print(f"[{method}] candidate #{rank} run {run_idx}/{args.runs_per_top} start")
-            temp_cfg = make_temp_config_for_method(base_config, csv_row, method)
+            temp_cfg = make_temp_config_for_method(base_config, dataset_key, csv_row, method)
             try:
-                metrics, _ = run_train(grace_dir, temp_cfg, method=method, gpu_id=args.gpu_id)
+                metrics, _ = run_train(
+                    grace_dir,
+                    temp_cfg,
+                    dataset=dataset_key,
+                    method=method,
+                    gpu_id=args.gpu_id,
+                )
                 score = robust_score(metrics, args.std_weight)
                 delta = score - baseline_robust
 
@@ -474,10 +483,11 @@ def method_pipeline(grace_dir, base_config, method, grid_script, grid_csv_name, 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Automate Cora comparison: GRACE baseline + IFL-GR/GCA/IFL-GC search and top verification"
+        description="Automate dataset comparison: GRACE baseline + IFL-GR/GCA/IFL-GC search and top verification"
     )
     parser.add_argument("--gpu_id", type=int, default=0)
     parser.add_argument("--config", type=str, default="config.yaml")
+    parser.add_argument("--dataset", type=str, default="Cora", choices=["Cora", "CiteSeer", "PubMed", "DBLP"])
     parser.add_argument("--std_weight", type=float, default=0.5)
     parser.add_argument("--baseline_runs", type=int, default=3)
     parser.add_argument("--topk_verify", type=int, default=3)
@@ -490,7 +500,7 @@ def main():
     parser.add_argument(
         "--out",
         type=str,
-        default=os.path.join("results", "cora_full_pipeline_results.csv"),
+        default=None,
         help="Output CSV (single file for all methods)",
     )
     args = parser.parse_args()
@@ -502,7 +512,9 @@ def main():
     with open(config_path, "r", encoding="utf-8") as f:
         base_config = yaml.safe_load(f)
 
-    out_path = os.path.join(grace_dir, args.out)
+    dataset_slug = args.dataset.lower()
+    out_rel_path = args.out if args.out else os.path.join("results", f"{dataset_slug}_full_pipeline_results.csv")
+    out_path = os.path.join(grace_dir, out_rel_path)
     if os.path.exists(out_path):
         os.remove(out_path)
 
@@ -516,7 +528,13 @@ def main():
     print("=== [grace] baseline runs ===")
     baseline_scores = []
     for run_idx in range(1, args.baseline_runs + 1):
-        metrics, _ = run_train(grace_dir, config_path, method="grace", gpu_id=args.gpu_id)
+        metrics, _ = run_train(
+            grace_dir,
+            config_path,
+            dataset=args.dataset,
+            method="grace",
+            gpu_id=args.gpu_id,
+        )
         score = robust_score(metrics, args.std_weight)
         baseline_scores.append(score)
 
@@ -551,9 +569,10 @@ def main():
     method_pipeline(
         grace_dir=grace_dir,
         base_config=base_config,
+        dataset_key=args.dataset,
         method="ifl-gr",
         grid_script="grid_search_iflgr_cora.py",
-        grid_csv_name="grid_search_iflgr_cora_results.csv",
+        grid_csv_name=f"grid_search_iflgr_{dataset_slug}_results.csv",
         args=args,
         baseline_robust=baseline_robust,
         out_csv_path=out_path,
@@ -562,9 +581,10 @@ def main():
     method_pipeline(
         grace_dir=grace_dir,
         base_config=base_config,
+        dataset_key=args.dataset,
         method="gca",
         grid_script="grid_search_gca_cora.py",
-        grid_csv_name="grid_search_gca_cora_results.csv",
+        grid_csv_name=f"grid_search_gca_{dataset_slug}_results.csv",
         args=args,
         baseline_robust=baseline_robust,
         out_csv_path=out_path,
@@ -573,9 +593,10 @@ def main():
     method_pipeline(
         grace_dir=grace_dir,
         base_config=base_config,
+        dataset_key=args.dataset,
         method="ifl-gc",
         grid_script="grid_search_iflgc_cora.py",
-        grid_csv_name="grid_search_iflgc_cora_results.csv",
+        grid_csv_name=f"grid_search_iflgc_{dataset_slug}_results.csv",
         args=args,
         baseline_robust=baseline_robust,
         out_csv_path=out_path,

@@ -35,12 +35,12 @@ def parse_metrics(output_text):
     }
 
 
-def run_train(grace_dir, config_path, method, gpu_id):
+def run_train(grace_dir, config_path, dataset, method, gpu_id):
     cmd = [
         sys.executable,
         "train.py",
         "--dataset",
-        "Cora",
+        dataset,
         "--method",
         method,
         "--config",
@@ -83,11 +83,11 @@ def read_grid_csv(csv_path, topk):
     return results
 
 
-def make_temp_config_from_row(base_config, csv_row):
+def make_temp_config_from_row(base_config, dataset_key, csv_row):
     import copy
     cfg = copy.deepcopy(base_config)
 
-    cora_updates = {
+    dataset_updates = {
         "similarity_percentile": float(csv_row["similarity_percentile"]),
         "max_du_per_node": int(csv_row["max_du_per_node"]),
         "unlabeled_weight": float(csv_row["unlabeled_weight"]),
@@ -99,31 +99,31 @@ def make_temp_config_from_row(base_config, csv_row):
     }
 
     if "tau" in csv_row and csv_row["tau"] != "":
-        cora_updates["tau"] = float(csv_row["tau"])
+        dataset_updates["tau"] = float(csv_row["tau"])
 
     # Handle null values
     if csv_row.get("similarity_threshold", "").lower() in ["none", "null", ""]:
-        cora_updates["similarity_threshold"] = None
+        dataset_updates["similarity_threshold"] = None
     else:
-        cora_updates["similarity_threshold"] = float(csv_row["similarity_threshold"])
+        dataset_updates["similarity_threshold"] = float(csv_row["similarity_threshold"])
 
-    cfg["Cora"].update(cora_updates)
+    cfg[dataset_key].update(dataset_updates)
 
     with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False, encoding="utf-8") as f:
         yaml.safe_dump(cfg, f, sort_keys=False)
         return f.name
 
 
-def make_temp_config_from_row_for_method(base_config, csv_row, method):
+def make_temp_config_from_row_for_method(base_config, dataset_key, csv_row, method):
     # Dispatch CSV->config mapping by method-specific columns.
     if method == "ifl-gr":
-        return make_temp_config_from_row(base_config, csv_row)
+        return make_temp_config_from_row(base_config, dataset_key, csv_row)
 
     if method == "ifl-gc":
         import copy
         cfg = copy.deepcopy(base_config)
 
-        cora_updates = {
+        dataset_updates = {
             "gca_drop_scheme": csv_row["gca_drop_scheme"],
             "similarity_percentile": float(csv_row["similarity_percentile"]),
             "max_du_per_node": int(float(csv_row["max_du_per_node"])),
@@ -142,14 +142,14 @@ def make_temp_config_from_row_for_method(base_config, csv_row, method):
         }
 
         if "gca_pr_k" in csv_row and csv_row["gca_pr_k"] != "":
-            cora_updates["gca_pr_k"] = int(float(csv_row["gca_pr_k"]))
+            dataset_updates["gca_pr_k"] = int(float(csv_row["gca_pr_k"]))
 
         if csv_row.get("similarity_threshold", "").lower() in ["none", "null", ""]:
-            cora_updates["similarity_threshold"] = None
+            dataset_updates["similarity_threshold"] = None
         elif "similarity_threshold" in csv_row:
-            cora_updates["similarity_threshold"] = float(csv_row["similarity_threshold"])
+            dataset_updates["similarity_threshold"] = float(csv_row["similarity_threshold"])
 
-        cfg["Cora"].update(cora_updates)
+        cfg[dataset_key].update(dataset_updates)
 
         with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False, encoding="utf-8") as f:
             yaml.safe_dump(cfg, f, sort_keys=False)
@@ -159,7 +159,7 @@ def make_temp_config_from_row_for_method(base_config, csv_row, method):
         import copy
         cfg = copy.deepcopy(base_config)
 
-        cora_updates = {
+        dataset_updates = {
             "gca_drop_scheme": csv_row["gca_drop_scheme"],
             "drop_edge_rate_1": float(csv_row["drop_edge_rate_1"]),
             "drop_edge_rate_2": float(csv_row["drop_edge_rate_2"]),
@@ -169,9 +169,9 @@ def make_temp_config_from_row_for_method(base_config, csv_row, method):
         }
 
         if "gca_pr_k" in csv_row and csv_row["gca_pr_k"] != "":
-            cora_updates["gca_pr_k"] = int(float(csv_row["gca_pr_k"]))
+            dataset_updates["gca_pr_k"] = int(float(csv_row["gca_pr_k"]))
 
-        cfg["Cora"].update(cora_updates)
+        cfg[dataset_key].update(dataset_updates)
 
         with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False, encoding="utf-8") as f:
             yaml.safe_dump(cfg, f, sort_keys=False)
@@ -225,6 +225,7 @@ def main():
     parser.add_argument("--topk", type=int, default=3, help="Number of top params to verify")
     parser.add_argument("--runs", type=int, default=3, help="Runs per parameter")
     parser.add_argument("--gpu_id", type=int, default=0)
+    parser.add_argument("--dataset", type=str, default="Cora", choices=["Cora", "CiteSeer", "PubMed", "DBLP"])
     parser.add_argument("--method", type=str, default="ifl-gr", choices=["ifl-gr", "gca", "ifl-gc"])
     args = parser.parse_args()
 
@@ -249,10 +250,16 @@ def main():
         run_metrics = []
 
         for run_idx in range(1, args.runs + 1):
-            temp_cfg = make_temp_config_from_row_for_method(base_config, csv_row, args.method)
+            temp_cfg = make_temp_config_from_row_for_method(base_config, args.dataset, csv_row, args.method)
 
             try:
-                metrics, _ = run_train(grace_dir, temp_cfg, method=args.method, gpu_id=args.gpu_id)
+                metrics, _ = run_train(
+                    grace_dir,
+                    temp_cfg,
+                    dataset=args.dataset,
+                    method=args.method,
+                    gpu_id=args.gpu_id,
+                )
                 run_metrics.append(metrics)
 
                 print(

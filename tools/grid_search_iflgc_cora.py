@@ -41,12 +41,12 @@ def robust_score(metrics, std_weight):
     return metrics["F1Mi_mean"] - std_weight * metrics["F1Mi_std"]
 
 
-def run_train(grace_dir, config_path, method, gpu_id):
+def run_train(grace_dir, config_path, dataset, method, gpu_id):
     cmd = [
         sys.executable,
         "train.py",
         "--dataset",
-        "Cora",
+        dataset,
         "--method",
         method,
         "--config",
@@ -77,9 +77,9 @@ def run_train(grace_dir, config_path, method, gpu_id):
     return metrics, combined
 
 
-def make_temp_config(base_config, cora_updates):
+def make_temp_config(base_config, dataset_key, dataset_updates):
     cfg = copy.deepcopy(base_config)
-    cfg["Cora"].update(cora_updates)
+    cfg[dataset_key].update(dataset_updates)
 
     with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False, encoding="utf-8") as f:
         yaml.safe_dump(cfg, f, sort_keys=False)
@@ -87,12 +87,13 @@ def make_temp_config(base_config, cora_updates):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Grid search for IFL-GC on Cora")
+    parser = argparse.ArgumentParser(description="Grid search for IFL-GC on selected dataset")
     parser.add_argument("--config", type=str, default="config.yaml")
     parser.add_argument("--gpu_id", type=int, default=0)
+    parser.add_argument("--dataset", type=str, default="Cora", choices=["Cora", "CiteSeer", "PubMed", "DBLP"])
     parser.add_argument("--std_weight", type=float, default=0.5)
     parser.add_argument("--topk", type=int, default=10)
-    parser.add_argument("--out", type=str, default="results/grid_search_iflgc_cora_results.csv")
+    parser.add_argument("--out", type=str, default=None)
     args = parser.parse_args()
 
     tools_dir = os.path.dirname(os.path.abspath(__file__))
@@ -101,6 +102,10 @@ def main():
 
     with open(config_path, "r", encoding="utf-8") as f:
         base_config = yaml.safe_load(f)
+
+    dataset_key = args.dataset
+    dataset_slug = dataset_key.lower()
+    out_rel_path = args.out if args.out else f"results/grid_search_iflgc_{dataset_slug}_results.csv"
 
     # Keep a practical search size while covering key IFL-GC controls.
     search_space = {
@@ -132,8 +137,14 @@ def main():
         "gca_pr_k": 200,
     }
 
-    print("[1/3] Running GRACE baseline on Cora...")
-    baseline_metrics, _ = run_train(grace_dir, config_path, method="grace", gpu_id=args.gpu_id)
+    print(f"[1/3] Running GRACE baseline on {dataset_key}...")
+    baseline_metrics, _ = run_train(
+        grace_dir,
+        config_path,
+        dataset=dataset_key,
+        method="grace",
+        gpu_id=args.gpu_id,
+    )
     baseline_score = robust_score(baseline_metrics, args.std_weight)
     print(
         "Baseline GRACE: "
@@ -158,13 +169,19 @@ def main():
                 trial_params.update(feat_cfg)
                 trial_params.update(fixed_overrides)
 
-                cora_epochs = base_config["Cora"]["num_epochs"]
-                trial_params["warmup_epochs"] = min(int(trial_params["warmup_epochs"]), cora_epochs - 10)
+                num_epochs = base_config[dataset_key]["num_epochs"]
+                trial_params["warmup_epochs"] = min(int(trial_params["warmup_epochs"]), num_epochs - 10)
 
-                temp_cfg = make_temp_config(base_config, trial_params)
+                temp_cfg = make_temp_config(base_config, dataset_key, trial_params)
 
                 try:
-                    metrics, _ = run_train(grace_dir, temp_cfg, method="ifl-gc", gpu_id=args.gpu_id)
+                    metrics, _ = run_train(
+                        grace_dir,
+                        temp_cfg,
+                        dataset=dataset_key,
+                        method="ifl-gc",
+                        gpu_id=args.gpu_id,
+                    )
                     score = robust_score(metrics, args.std_weight)
                     delta = score - baseline_score
 
@@ -223,7 +240,7 @@ def main():
             f"warmup_epochs={r['warmup_epochs']}}}"
         )
 
-    out_path = os.path.join(grace_dir, args.out)
+    out_path = os.path.join(grace_dir, out_rel_path)
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
 
     headers = [

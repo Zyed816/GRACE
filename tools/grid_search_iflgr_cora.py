@@ -45,12 +45,12 @@ def robust_score(metrics, std_weight):
     return metrics["F1Mi_mean"] - std_weight * metrics["F1Mi_std"]
 
 
-def run_train(grace_dir, config_path, method, gpu_id):
+def run_train(grace_dir, config_path, dataset, method, gpu_id):
     cmd = [
         sys.executable,
         "train.py",
         "--dataset",
-        "Cora",
+        dataset,
         "--method",
         method,
         "--config",
@@ -81,35 +81,36 @@ def run_train(grace_dir, config_path, method, gpu_id):
     return metrics, combined
 
 
-def make_temp_config(base_config, cora_updates):
+def make_temp_config(base_config, dataset_key, dataset_updates):
     cfg = copy.deepcopy(base_config)
-    cfg["Cora"].update(cora_updates)
+    cfg[dataset_key].update(dataset_updates)
 
     with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False, encoding="utf-8") as f:
         yaml.safe_dump(cfg, f, sort_keys=False)
         return f.name
 
 
-def ensure_seed_consistency(base_config):
+def ensure_seed_consistency(base_config, dataset_key):
     import random
     import numpy as np
     import torch
-    cora_seed = base_config["Cora"].get("seed", 39788)
-    torch.manual_seed(cora_seed)
+    dataset_seed = base_config[dataset_key].get("seed", 39788)
+    torch.manual_seed(dataset_seed)
     random.seed(12345)
     try:
-        np.random.seed(cora_seed)
+        np.random.seed(dataset_seed)
     except:
         pass
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Grid search for IFL-GR on Cora")
+    parser = argparse.ArgumentParser(description="Grid search for IFL-GR on selected dataset")
     parser.add_argument("--config", type=str, default="config.yaml")
     parser.add_argument("--gpu_id", type=int, default=0)
+    parser.add_argument("--dataset", type=str, default="Cora", choices=["Cora", "CiteSeer", "PubMed", "DBLP"])
     parser.add_argument("--std_weight", type=float, default=0.5)
     parser.add_argument("--topk", type=int, default=10)
-    parser.add_argument("--out", type=str, default="results/grid_search_iflgr_cora_results.csv")
+    parser.add_argument("--out", type=str, default=None)
     args = parser.parse_args()
 
     tools_dir = os.path.dirname(os.path.abspath(__file__))
@@ -119,7 +120,11 @@ def main():
     with open(config_path, "r", encoding="utf-8") as f:
         base_config = yaml.safe_load(f)
 
-    # Search 4 key hyperparameters with a compact grid.
+    dataset_key = args.dataset
+    dataset_slug = dataset_key.lower()
+    out_rel_path = args.out if args.out else f"results/grid_search_iflgr_{dataset_slug}_results.csv"
+
+    # Search key hyperparameters with a compact grid.
     search_space = {
         "similarity_percentile": [99.3, 99.5, 99.7],
         "max_du_per_node": [6, 10, 14],
@@ -136,8 +141,14 @@ def main():
         "corrected_ramp_epochs": 40,
     }
 
-    print("[1/3] Running GRACE baseline on Cora...")
-    baseline_metrics, _ = run_train(grace_dir, config_path, method="grace", gpu_id=args.gpu_id)
+    print(f"[1/3] Running GRACE baseline on {dataset_key}...")
+    baseline_metrics, _ = run_train(
+        grace_dir,
+        config_path,
+        dataset=dataset_key,
+        method="grace",
+        gpu_id=args.gpu_id,
+    )
     baseline_score = robust_score(baseline_metrics, args.std_weight)
     print(
         "Baseline GRACE: "
@@ -156,15 +167,21 @@ def main():
         trial_params = dict(zip(keys, values))
         trial_params.update(fixed_overrides)
 
-        # Keep warm-up valid under Cora epochs.
-        cora_epochs = base_config["Cora"]["num_epochs"]
-        trial_params["warmup_epochs"] = min(trial_params["warmup_epochs"], cora_epochs - 10)
+        # Keep warm-up valid under current dataset epochs.
+        num_epochs = base_config[dataset_key]["num_epochs"]
+        trial_params["warmup_epochs"] = min(trial_params["warmup_epochs"], num_epochs - 10)
 
-        temp_cfg = make_temp_config(base_config, trial_params)
-        ensure_seed_consistency(base_config)
+        temp_cfg = make_temp_config(base_config, dataset_key, trial_params)
+        ensure_seed_consistency(base_config, dataset_key)
 
         try:
-            metrics, _ = run_train(grace_dir, temp_cfg, method="ifl-gr", gpu_id=args.gpu_id)
+            metrics, _ = run_train(
+                grace_dir,
+                temp_cfg,
+                dataset=dataset_key,
+                method="ifl-gr",
+                gpu_id=args.gpu_id,
+            )
             score = robust_score(metrics, args.std_weight)
             delta = score - baseline_score
 
@@ -214,7 +231,7 @@ def main():
             f"tau={r['tau']}}}"
         )
 
-    out_path = os.path.join(grace_dir, args.out)
+    out_path = os.path.join(grace_dir, out_rel_path)
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     headers = [
         "timestamp",
