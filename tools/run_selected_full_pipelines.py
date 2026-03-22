@@ -22,6 +22,8 @@ def run_one(grace_dir, dataset, script_name, child_args):
     print(f"[dispatch] command: {' '.join(cmd)}")
 
     start = t()
+    env = os.environ.copy()
+    env["PYTHONUNBUFFERED"] = "1"
     proc = subprocess.Popen(
         cmd,
         cwd=grace_dir,
@@ -29,6 +31,7 @@ def run_one(grace_dir, dataset, script_name, child_args):
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         bufsize=1,
+        env=env,
     )
 
     assert proc.stdout is not None
