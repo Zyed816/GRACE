@@ -63,3 +63,24 @@ python tools/verify_top_params.py --top_params results/grid_search_iflgr_cora_re
    ```
 
 3. **更新配置** 或 **进行精搜**（可选）
+
+## GCA 参数搜索
+
+GCA 的搜索脚本与 IFL-GR 保持一致的输出与对比方式（同样使用 robust_score 和 delta_vs_grace）：
+
+1. **运行 GCA 网格搜索**（默认 108 个 trial）
+   ```bash
+   python tools/grid_search_gca_cora.py --gpu_id 0 --topk 10
+   ```
+
+2. **验证 GCA Top 参数**（复用 verify 工具）
+   ```bash
+   python tools/verify_top_params.py --method gca --top_params results/grid_search_gca_cora_results.csv --topk 3 --runs 3 --gpu_id 0
+   ```
+
+`results/grid_search_gca_cora_results.csv` 关键列：
+- `gca_drop_scheme`: 增强策略（degree / pr / uniform）
+- `drop_edge_rate_1`, `drop_edge_rate_2`: 两个视图的边丢弃率
+- `drop_feature_rate_1`, `drop_feature_rate_2`: 两个视图的特征丢弃率
+- `tau`: 对比温度
+- `robust_score`, `delta_vs_grace`: 与 IFL-GR 搜索同定义

@@ -14,6 +14,18 @@ python train.py --dataset Cora
 ```
 The `--dataset` argument should be one of [ Cora, CiteSeer, PubMed, DBLP ].
 
+Method selection is supported via `--method`:
+- `grace`: original GRACE training
+- `ifl-gr`: corrected IFL-GR training
+- `gca`: GCA-style structure-aware augmentation training
+
+Examples:
+```
+python train.py --dataset Cora --method grace
+python train.py --dataset Cora --method ifl-gr
+python train.py --dataset Cora --method gca
+```
+
 ## Requirements
 
 - torch 1.4.0

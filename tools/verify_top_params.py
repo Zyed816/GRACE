@@ -106,12 +106,66 @@ def make_temp_config_from_row(base_config, csv_row):
         return f.name
 
 
+def make_temp_config_from_row_for_method(base_config, csv_row, method):
+    if method == "ifl-gr":
+        return make_temp_config_from_row(base_config, csv_row)
+
+    if method == "gca":
+        import copy
+        cfg = copy.deepcopy(base_config)
+
+        cora_updates = {
+            "gca_drop_scheme": csv_row["gca_drop_scheme"],
+            "drop_edge_rate_1": float(csv_row["drop_edge_rate_1"]),
+            "drop_edge_rate_2": float(csv_row["drop_edge_rate_2"]),
+            "drop_feature_rate_1": float(csv_row["drop_feature_rate_1"]),
+            "drop_feature_rate_2": float(csv_row["drop_feature_rate_2"]),
+            "tau": float(csv_row["tau"]),
+        }
+
+        if "gca_pr_k" in csv_row and csv_row["gca_pr_k"] != "":
+            cora_updates["gca_pr_k"] = int(float(csv_row["gca_pr_k"]))
+
+        cfg["Cora"].update(cora_updates)
+
+        with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False, encoding="utf-8") as f:
+            yaml.safe_dump(cfg, f, sort_keys=False)
+            return f.name
+
+    raise ValueError(f"Unsupported method for verification: {method}")
+
+
+def print_param_summary(csv_row, method):
+    if method == "ifl-gr":
+        print(
+            f"sim_p={csv_row['similarity_percentile']}, "
+            f"max_du={csv_row['max_du_per_node']}, "
+            f"lambda_u={csv_row['unlabeled_weight']}, "
+            f"warmup={csv_row['warmup_epochs']}"
+        )
+        return
+
+    if method == "gca":
+        print(
+            f"scheme={csv_row['gca_drop_scheme']}, "
+            f"de1={csv_row['drop_edge_rate_1']}, "
+            f"de2={csv_row['drop_edge_rate_2']}, "
+            f"df1={csv_row['drop_feature_rate_1']}, "
+            f"df2={csv_row['drop_feature_rate_2']}, "
+            f"tau={csv_row['tau']}"
+        )
+        return
+
+    raise ValueError(f"Unsupported method for parameter summary: {method}")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Verify top IFL-GR parameters by multiple runs")
     parser.add_argument("--top_params", type=str, required=True, help="Path to grid_search CSV")
     parser.add_argument("--topk", type=int, default=3, help="Number of top params to verify")
     parser.add_argument("--runs", type=int, default=3, help="Runs per parameter")
     parser.add_argument("--gpu_id", type=int, default=0)
+    parser.add_argument("--method", type=str, default="ifl-gr", choices=["ifl-gr", "gca"])
     args = parser.parse_args()
 
     tools_dir = os.path.dirname(os.path.abspath(__file__))
@@ -130,20 +184,15 @@ def main():
 
     for param_idx, csv_row in enumerate(top_rows, start=1):
         print(f"\n--- Parameter Set #{param_idx} ---")
-        print(
-            f"sim_p={csv_row['similarity_percentile']}, "
-            f"max_du={csv_row['max_du_per_node']}, "
-            f"lambda_u={csv_row['unlabeled_weight']}, "
-            f"warmup={csv_row['warmup_epochs']}"
-        )
+        print_param_summary(csv_row, args.method)
 
         run_metrics = []
 
         for run_idx in range(1, args.runs + 1):
-            temp_cfg = make_temp_config_from_row(base_config, csv_row)
+            temp_cfg = make_temp_config_from_row_for_method(base_config, csv_row, args.method)
 
             try:
-                metrics, _ = run_train(grace_dir, temp_cfg, method="ifl-gr", gpu_id=args.gpu_id)
+                metrics, _ = run_train(grace_dir, temp_cfg, method=args.method, gpu_id=args.gpu_id)
                 run_metrics.append(metrics)
 
                 print(
@@ -179,10 +228,6 @@ def main():
 
         result = {
             "param_rank": param_idx,
-            "similarity_percentile": csv_row["similarity_percentile"],
-            "max_du_per_node": csv_row["max_du_per_node"],
-            "unlabeled_weight": csv_row["unlabeled_weight"],
-            "warmup_epochs": csv_row["warmup_epochs"],
             "runs": len(run_metrics),
             "avg_F1Mi_mean": avg_f1mi_mean,
             "std_F1Mi_mean": std_f1mi_mean,
@@ -191,6 +236,23 @@ def main():
             "std_F1Ma_mean": std_f1ma_mean,
             "avg_F1Ma_std": avg_f1ma_std,
         }
+
+        if args.method == "ifl-gr":
+            result.update({
+                "similarity_percentile": csv_row["similarity_percentile"],
+                "max_du_per_node": csv_row["max_du_per_node"],
+                "unlabeled_weight": csv_row["unlabeled_weight"],
+                "warmup_epochs": csv_row["warmup_epochs"],
+            })
+        else:
+            result.update({
+                "gca_drop_scheme": csv_row["gca_drop_scheme"],
+                "drop_edge_rate_1": csv_row["drop_edge_rate_1"],
+                "drop_edge_rate_2": csv_row["drop_edge_rate_2"],
+                "drop_feature_rate_1": csv_row["drop_feature_rate_1"],
+                "drop_feature_rate_2": csv_row["drop_feature_rate_2"],
+                "tau": csv_row["tau"],
+            })
         verification_results.append(result)
 
         print(
@@ -204,14 +266,25 @@ def main():
     print("VERIFICATION SUMMARY")
     print("=" * 80)
     for res in verification_results:
-        print(
-            f"#{res['param_rank']}: "
-            f"F1Mi={res['avg_F1Mi_mean']:.4f}±{res['std_F1Mi_mean']:.4f}, "
-            f"runs={res['runs']}, "
-            f"params: sim_p={res['similarity_percentile']}, "
-            f"max_du={res['max_du_per_node']}, "
-            f"lambda_u={res['unlabeled_weight']}"
-        )
+        if args.method == "ifl-gr":
+            print(
+                f"#{res['param_rank']}: "
+                f"F1Mi={res['avg_F1Mi_mean']:.4f}±{res['std_F1Mi_mean']:.4f}, "
+                f"runs={res['runs']}, "
+                f"params: sim_p={res['similarity_percentile']}, "
+                f"max_du={res['max_du_per_node']}, "
+                f"lambda_u={res['unlabeled_weight']}"
+            )
+        else:
+            print(
+                f"#{res['param_rank']}: "
+                f"F1Mi={res['avg_F1Mi_mean']:.4f}±{res['std_F1Mi_mean']:.4f}, "
+                f"runs={res['runs']}, "
+                f"params: scheme={res['gca_drop_scheme']}, "
+                f"de1={res['drop_edge_rate_1']}, "
+                f"de2={res['drop_edge_rate_2']}, "
+                f"tau={res['tau']}"
+            )
 
     recommendation = verification_results[0] if verification_results else None
     if recommendation:

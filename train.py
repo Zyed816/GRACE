@@ -10,11 +10,84 @@ import torch_geometric.transforms as T
 import torch.nn.functional as F
 import torch.nn as nn
 from torch_geometric.datasets import Planetoid, CitationFull
-from torch_geometric.utils import dropout_adj
+from torch_geometric.utils import dropout_adj, degree, to_undirected
 from torch_geometric.nn import GCNConv
 
 from model import Encoder, Model, drop_feature
 from eval import label_classification
+
+
+def compute_pr(edge_index: torch.Tensor, damp: float = 0.85, k: int = 10):
+    num_nodes = int(edge_index.max().item()) + 1
+    src, dst = edge_index
+    deg_out = degree(src, num_nodes=num_nodes).clamp_min(1.0)
+    x = torch.ones((num_nodes,), dtype=torch.float32, device=edge_index.device)
+
+    for _ in range(k):
+        edge_msg = x[src] / deg_out[src]
+        agg_msg = torch.zeros_like(x)
+        agg_msg.index_add_(0, dst, edge_msg)
+        x = (1.0 - damp) * x + damp * agg_msg
+
+    return x
+
+
+def drop_edge_weighted(edge_index, edge_weights, p: float, threshold: float = 1.0):
+    edge_weights = edge_weights / edge_weights.mean() * p
+    edge_weights = edge_weights.where(edge_weights < threshold, torch.ones_like(edge_weights) * threshold)
+    sel_mask = torch.bernoulli(1.0 - edge_weights).to(torch.bool)
+
+    return edge_index[:, sel_mask]
+
+
+def drop_feature_weighted_2(x, w, p: float, threshold: float = 0.7):
+    w = w / w.mean() * p
+    w = w.where(w < threshold, torch.ones_like(w) * threshold)
+    drop_mask = torch.bernoulli(w).to(torch.bool)
+
+    x = x.clone()
+    x[:, drop_mask] = 0.0
+
+    return x
+
+
+def feature_drop_weights(x, node_c):
+    x = x.to(torch.bool).to(torch.float32)
+    w = x.t() @ node_c
+    w = w.clamp_min(1e-12).log()
+    s = (w.max() - w) / (w.max() - w.mean() + 1e-12)
+
+    return s
+
+
+def degree_drop_weights(edge_index):
+    edge_index_ = to_undirected(edge_index)
+    deg = degree(edge_index_[1])
+    deg_col = deg[edge_index[1]].to(torch.float32)
+    s_col = deg_col.clamp_min(1e-12).log()
+    weights = (s_col.max() - s_col) / (s_col.max() - s_col.mean() + 1e-12)
+
+    return weights
+
+
+def pr_drop_weights(edge_index, aggr: str = 'sink', k: int = 10):
+    pv = compute_pr(edge_index, k=k)
+    pv_row = pv[edge_index[0]].to(torch.float32)
+    pv_col = pv[edge_index[1]].to(torch.float32)
+    s_row = pv_row.clamp_min(1e-12).log()
+    s_col = pv_col.clamp_min(1e-12).log()
+
+    if aggr == 'sink':
+        s = s_col
+    elif aggr == 'source':
+        s = s_row
+    elif aggr == 'mean':
+        s = (s_col + s_row) * 0.5
+    else:
+        s = s_col
+
+    weights = (s.max() - s) / (s.max() - s.mean() + 1e-12)
+    return weights
 
 
 def percentile_threshold(values: torch.Tensor, percentile: float) -> torch.Tensor:
@@ -121,6 +194,36 @@ def train_iflgr(model: Model, x, edge_index, du_pos_mask, du_pos_weight, unlabel
     return loss.item()
 
 
+def train_gca(model: Model, x, edge_index, drop_scheme, drop_weights, feature_weights):
+    model.train()
+    optimizer.zero_grad()
+
+    def gca_drop_edge(rate):
+        if drop_scheme == 'uniform':
+            return dropout_adj(edge_index, p=rate)[0]
+        if drop_scheme in ['degree', 'pr']:
+            return drop_edge_weighted(edge_index, drop_weights, p=rate, threshold=0.7)
+        raise ValueError(f'undefined drop scheme: {drop_scheme}')
+
+    edge_index_1 = gca_drop_edge(drop_edge_rate_1)
+    edge_index_2 = gca_drop_edge(drop_edge_rate_2)
+
+    if drop_scheme in ['degree', 'pr']:
+        x_1 = drop_feature_weighted_2(x, feature_weights, drop_feature_rate_1)
+        x_2 = drop_feature_weighted_2(x, feature_weights, drop_feature_rate_2)
+    else:
+        x_1 = drop_feature(x, drop_feature_rate_1)
+        x_2 = drop_feature(x, drop_feature_rate_2)
+
+    z1 = model(x_1, edge_index_1)
+    z2 = model(x_2, edge_index_2)
+
+    loss = model.loss(z1, z2, batch_size=0)
+    loss.backward()
+    optimizer.step()
+    return loss.item()
+
+
 def test(model: Model, x, edge_index, y, final=False):
     model.eval()
     z = model(x, edge_index)
@@ -133,7 +236,7 @@ if __name__ == '__main__':
     parser.add_argument('--dataset', type=str, default='DBLP')
     parser.add_argument('--gpu_id', type=int, default=0)
     parser.add_argument('--config', type=str, default='config.yaml')
-    parser.add_argument('--method', type=str, default='grace', choices=['grace', 'ifl-gr'])
+    parser.add_argument('--method', type=str, default='grace', choices=['grace', 'ifl-gr', 'gca'])
     args = parser.parse_args()
 
     assert args.gpu_id in range(0, 8)
@@ -168,6 +271,8 @@ if __name__ == '__main__':
     beta = config.get('beta', 2.0)
     unlabeled_weight = config.get('unlabeled_weight', 1.0)
     corrected_ramp_epochs = config.get('corrected_ramp_epochs', 50)
+    gca_drop_scheme = config.get('gca_drop_scheme', 'degree')
+    gca_pr_k = config.get('gca_pr_k', 200)
 
     def get_dataset(path, name):
         assert name in ['Cora', 'CiteSeer', 'PubMed', 'DBLP']
@@ -194,6 +299,23 @@ if __name__ == '__main__':
     start = t()
     prev = start
     du_cache = None
+    gca_drop_weights = None
+    gca_feature_weights = None
+
+    if args.method == 'gca':
+        if gca_drop_scheme == 'degree':
+            gca_drop_weights = degree_drop_weights(data.edge_index).to(device)
+            edge_index_ = to_undirected(data.edge_index)
+            node_deg = degree(edge_index_[1])
+            gca_feature_weights = feature_drop_weights(data.x, node_deg).to(device)
+        elif gca_drop_scheme == 'pr':
+            gca_drop_weights = pr_drop_weights(data.edge_index, aggr='sink', k=gca_pr_k).to(device)
+            node_pr = compute_pr(data.edge_index, k=gca_pr_k)
+            gca_feature_weights = feature_drop_weights(data.x, node_pr).to(device)
+        elif gca_drop_scheme == 'uniform':
+            gca_feature_weights = None
+        else:
+            raise ValueError(f'unsupported gca_drop_scheme: {gca_drop_scheme}')
 
     for epoch in range(1, num_epochs + 1):
         refresh_du = False
@@ -206,6 +328,15 @@ if __name__ == '__main__':
         if args.method == 'grace':
             loss = train_grace(model, data.x, data.edge_index)
             phase = 'grace'
+        elif args.method == 'gca':
+            loss = train_gca(
+                model,
+                data.x,
+                data.edge_index,
+                gca_drop_scheme,
+                gca_drop_weights,
+                gca_feature_weights)
+            phase = 'gca'
         else:
             if epoch <= warmup_epochs:
                 loss = train_grace(model, data.x, data.edge_index)
@@ -241,7 +372,7 @@ if __name__ == '__main__':
                 phase = 'corrected'
 
         now = t()
-        if args.method == 'grace' or phase == 'warmup':
+        if args.method in ['grace', 'gca'] or phase == 'warmup':
             print(f'(T) | Epoch={epoch:03d}, phase={phase}, loss={loss:.4f}, '
                   f'this epoch {now - prev:.4f}, total {now - start:.4f}')
         else:

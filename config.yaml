@@ -22,6 +22,8 @@ Cora:
   beta: 2.0
   unlabeled_weight: 0.3
   corrected_ramp_epochs: 40
+  gca_drop_scheme: degree
+  gca_pr_k: 200
 CiteSeer:
   seed: 38108
   learning_rate: 0.001
