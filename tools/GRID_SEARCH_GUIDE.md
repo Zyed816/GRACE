@@ -255,3 +255,21 @@ python tools/run_dblp_full_pipeline.py --gpu_id 0
 ```bash
 python tools/run_dblp_full_pipeline.py --gpu_id 0 --baseline_runs 3 --topk_verify 3 --runs_per_top 3 --out results/dblp_compare.csv
 ```
+
+## 统一调度脚本（多数据集顺序运行）
+
+如果你希望通过一个脚本顺序执行多个 `run_*_full_pipeline.py`，可使用：
+
+```bash
+python tools/run_selected_full_pipelines.py --datasets Cora CiteSeer PubMed DBLP --gpu_id 0
+```
+
+说明：
+- `--datasets` 按给定顺序执行，可选：`Cora`、`CiteSeer`、`PubMed`、`DBLP`
+- 统一脚本未识别的参数会透传给每个子脚本（例如 `--gpu_id`、`--baseline_runs`、`--topk_verify`）
+- 默认遇到失败会停止；如需失败后继续后续数据集，可加 `--continue_on_error`
+
+示例：仅运行 Cora + CiteSeer
+```bash
+python tools/run_selected_full_pipelines.py --datasets Cora CiteSeer --gpu_id 0 --baseline_runs 3 --topk_verify 3 --runs_per_top 3
+```

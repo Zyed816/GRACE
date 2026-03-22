@@ -35,6 +35,7 @@ GRACE/
     run_citeseer_full_pipeline.py     # CiteSeer 一键自动化完整流程
     run_pubmed_full_pipeline.py       # PubMed 一键自动化完整流程
     run_dblp_full_pipeline.py         # DBLP 一键自动化完整流程
+    run_selected_full_pipelines.py    # 多数据集统一调度入口（顺序调用各 run_*_full_pipeline）
     GRID_SEARCH_GUIDE.md              # 搜索与复验说明
 ```
 
