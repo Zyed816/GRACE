@@ -169,3 +169,45 @@ python tools/run_citeseer_full_pipeline.py --gpu_id 0
 ```bash
 python tools/run_citeseer_full_pipeline.py --gpu_id 0 --baseline_runs 3 --topk_verify 3 --runs_per_top 3 --out results/citeseer_compare.csv
 ```
+
+## PubMed 对应流程（与 Cora / CiteSeer 同命名规范）
+
+你现在可以直接使用 PubMed 对应入口脚本，结果会写入 `results/` 下同风格命名的 CSV。
+
+### 1) GRACE 基线（3 次）
+```bash
+python train.py --dataset PubMed --method grace
+python train.py --dataset PubMed --method grace
+python train.py --dataset PubMed --method grace
+```
+
+### 2) IFL-GR：先寻参，再复验
+```bash
+python tools/grid_search_iflgr_pubmed.py --gpu_id 0 --topk 10
+python tools/verify_top_params.py --dataset PubMed --method ifl-gr --top_params results/grid_search_iflgr_pubmed_results.csv --topk 3 --runs 3 --gpu_id 0
+```
+
+### 3) GCA：先寻参，再复验
+```bash
+python tools/grid_search_gca_pubmed.py --gpu_id 0 --topk 10
+python tools/verify_top_params.py --dataset PubMed --method gca --top_params results/grid_search_gca_pubmed_results.csv --topk 3 --runs 3 --gpu_id 0
+```
+
+### 4) IFL-GC：先寻参，再复验
+```bash
+python tools/grid_search_iflgc_pubmed.py --gpu_id 0 --topk 10
+python tools/verify_top_params.py --dataset PubMed --method ifl-gc --top_params results/grid_search_iflgc_pubmed_results.csv --topk 3 --runs 3 --gpu_id 0
+```
+
+### 5) 一键完整流程（推荐）
+```bash
+python tools/run_pubmed_full_pipeline.py --gpu_id 0
+```
+
+默认统一结果文件：
+- `results/pubmed_full_pipeline_results.csv`
+
+可调参数示例：
+```bash
+python tools/run_pubmed_full_pipeline.py --gpu_id 0 --baseline_runs 3 --topk_verify 3 --runs_per_top 3 --out results/pubmed_compare.csv
+```

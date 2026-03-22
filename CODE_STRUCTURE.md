@@ -24,9 +24,13 @@ GRACE/
     grid_search_iflgr_citeseer.py     # IFL-GR(CiteSeer) 网格搜索入口
     grid_search_gca_citeseer.py       # GCA(CiteSeer) 网格搜索入口
     grid_search_iflgc_citeseer.py     # IFL-GC(CiteSeer) 网格搜索入口
+    grid_search_iflgr_pubmed.py       # IFL-GR(PubMed) 网格搜索入口
+    grid_search_gca_pubmed.py         # GCA(PubMed) 网格搜索入口
+    grid_search_iflgc_pubmed.py       # IFL-GC(PubMed) 网格搜索入口
     verify_top_params.py              # Top-K 参数复验（支持 ifl-gr / gca / ifl-gc）
     run_cora_full_pipeline.py         # 一键自动化：基线+三方法寻参+Top复验+统一结果文件
     run_citeseer_full_pipeline.py     # CiteSeer 一键自动化完整流程
+    run_pubmed_full_pipeline.py       # PubMed 一键自动化完整流程
     GRID_SEARCH_GUIDE.md              # 搜索与复验说明
 ```
 

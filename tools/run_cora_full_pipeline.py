@@ -10,6 +10,7 @@ import sys
 import tempfile
 from datetime import datetime
 from time import perf_counter as t
+import time
 
 import yaml
 
@@ -54,24 +55,69 @@ def run_train(grace_dir, config_path, dataset, method, gpu_id):
         str(gpu_id),
     ]
 
-    proc = subprocess.run(
-        cmd,
-        cwd=grace_dir,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+    if dataset == "PubMed":
+        print(
+            f"[train:{method}] PubMed detected; first output may take longer. "
+            "Will print heartbeat every 30s."
+        )
+        with tempfile.NamedTemporaryFile("w+", suffix="_pubmed_train.log", delete=False, encoding="utf-8") as lf:
+            log_path = lf.name
 
-    if proc.returncode != 0:
-        raise RuntimeError(
-            "Training failed.\n"
-            f"Command: {' '.join(cmd)}\n"
-            f"Return code: {proc.returncode}\n"
-            f"STDOUT:\n{proc.stdout}\n"
-            f"STDERR:\n{proc.stderr}"
+        try:
+            with open(log_path, "w", encoding="utf-8") as logf:
+                proc = subprocess.Popen(
+                    cmd,
+                    cwd=grace_dir,
+                    text=True,
+                    stdout=logf,
+                    stderr=subprocess.STDOUT,
+                )
+
+                last_heartbeat = t()
+                while proc.poll() is None:
+                    now = t()
+                    if now - last_heartbeat >= 30.0:
+                        elapsed = int(now - start)
+                        print(
+                            f"[train:{method}] PubMed still running... "
+                            f"elapsed={elapsed}s"
+                        )
+                        last_heartbeat = now
+                    time.sleep(2.0)
+
+            with open(log_path, "r", encoding="utf-8") as logf:
+                combined = logf.read()
+
+            if proc.returncode != 0:
+                raise RuntimeError(
+                    "Training failed.\n"
+                    f"Command: {' '.join(cmd)}\n"
+                    f"Return code: {proc.returncode}\n"
+                    f"OUTPUT:\n{combined}"
+                )
+        finally:
+            if os.path.exists(log_path):
+                os.remove(log_path)
+    else:
+        proc = subprocess.run(
+            cmd,
+            cwd=grace_dir,
+            text=True,
+            capture_output=True,
+            check=False,
         )
 
-    combined = proc.stdout + "\n" + proc.stderr
+        if proc.returncode != 0:
+            raise RuntimeError(
+                "Training failed.\n"
+                f"Command: {' '.join(cmd)}\n"
+                f"Return code: {proc.returncode}\n"
+                f"STDOUT:\n{proc.stdout}\n"
+                f"STDERR:\n{proc.stderr}"
+            )
+
+        combined = proc.stdout + "\n" + proc.stderr
+
     metrics = parse_metrics(combined)
     print(
         f"[train:{method}] done in {t() - start:.1f}s | "
@@ -99,24 +145,61 @@ def run_grid_script(grace_dir, script_name, gpu_id, topk, std_weight, dataset):
     env = os.environ.copy()
     env["PYTHONUNBUFFERED"] = "1"
 
-    proc = subprocess.Popen(
-        cmd,
-        cwd=grace_dir,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        env=env,
-        bufsize=1,
-    )
+    if dataset == "PubMed":
+        print(
+            f"[grid:{script_name}] PubMed detected; per-trial output may be sparse. "
+            "Will print heartbeat every 30s."
+        )
+        with tempfile.NamedTemporaryFile("w+", suffix="_pubmed_grid.log", delete=False, encoding="utf-8") as lf:
+            log_path = lf.name
 
-    output_lines = []
-    assert proc.stdout is not None
-    for line in proc.stdout:
-        output_lines.append(line)
-        print(f"[grid:{script_name}] {line.rstrip()}")
+        try:
+            with open(log_path, "w", encoding="utf-8") as logf:
+                proc = subprocess.Popen(
+                    cmd,
+                    cwd=grace_dir,
+                    text=True,
+                    stdout=logf,
+                    stderr=subprocess.STDOUT,
+                    env=env,
+                )
 
-    proc.wait()
-    combined_output = "".join(output_lines)
+                last_heartbeat = t()
+                while proc.poll() is None:
+                    now = t()
+                    if now - last_heartbeat >= 30.0:
+                        elapsed = int(now - start)
+                        print(
+                            f"[grid:{script_name}] PubMed grid search still running... "
+                            f"elapsed={elapsed}s"
+                        )
+                        last_heartbeat = now
+                    time.sleep(2.0)
+
+            with open(log_path, "r", encoding="utf-8") as logf:
+                combined_output = logf.read()
+        finally:
+            if os.path.exists(log_path):
+                os.remove(log_path)
+    else:
+        proc = subprocess.Popen(
+            cmd,
+            cwd=grace_dir,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            env=env,
+            bufsize=1,
+        )
+
+        output_lines = []
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            output_lines.append(line)
+            print(f"[grid:{script_name}] {line.rstrip()}")
+
+        proc.wait()
+        combined_output = "".join(output_lines)
 
     if proc.returncode != 0:
         raise RuntimeError(
