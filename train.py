@@ -104,7 +104,56 @@ def percentile_threshold(values: torch.Tensor, percentile: float) -> torch.Tenso
     return sorted_vals[idx]
 
 
-def train_grace(model: Model, x, edge_index):
+def _build_csr_from_row_lists(row_cols, row_weights, num_nodes, device):
+    row_ptr = [0]
+    col_idx = []
+    col_w = []
+
+    for i in range(num_nodes):
+        cols_i = row_cols[i]
+        ws_i = row_weights[i]
+        if cols_i.numel() > 0:
+            col_idx.append(cols_i)
+            col_w.append(ws_i)
+        row_ptr.append(row_ptr[-1] + int(cols_i.numel()))
+
+    if col_idx:
+        col_idx = torch.cat(col_idx, dim=0).to(device=device, dtype=torch.long)
+        col_w = torch.cat(col_w, dim=0).to(device=device, dtype=torch.float32)
+    else:
+        col_idx = torch.empty((0,), device=device, dtype=torch.long)
+        col_w = torch.empty((0,), device=device, dtype=torch.float32)
+
+    row_ptr = torch.tensor(row_ptr, device=device, dtype=torch.long)
+    return row_ptr, col_idx, col_w
+
+
+def _transpose_row_lists(row_cols, row_weights, num_nodes):
+    cols_t = [[] for _ in range(num_nodes)]
+    ws_t = [[] for _ in range(num_nodes)]
+    for r in range(num_nodes):
+        if row_cols[r].numel() == 0:
+            continue
+        cols_r = row_cols[r].tolist()
+        ws_r = row_weights[r].tolist()
+        for c, w in zip(cols_r, ws_r):
+            cols_t[c].append(r)
+            ws_t[c].append(w)
+
+    out_cols = []
+    out_ws = []
+    for i in range(num_nodes):
+        if cols_t[i]:
+            out_cols.append(torch.tensor(cols_t[i], dtype=torch.long))
+            out_ws.append(torch.tensor(ws_t[i], dtype=torch.float32))
+        else:
+            out_cols.append(torch.empty((0,), dtype=torch.long))
+            out_ws.append(torch.empty((0,), dtype=torch.float32))
+
+    return out_cols, out_ws
+
+
+def train_grace(model: Model, x, edge_index, contrastive_batch_size=0):
     model.train()
     optimizer.zero_grad()
     edge_index_1 = dropout_adj(edge_index, p=drop_edge_rate_1)[0]
@@ -114,7 +163,7 @@ def train_grace(model: Model, x, edge_index):
     z1 = model(x_1, edge_index_1)
     z2 = model(x_2, edge_index_2)
 
-    loss = model.loss(z1, z2, batch_size=0)
+    loss = model.loss(z1, z2, batch_size=contrastive_batch_size)
     loss.backward()
     optimizer.step()
     return loss.item()
@@ -128,47 +177,167 @@ def mine_unlabeled_positives(
         similarity_percentile,
         max_du_per_node,
         use_mutual_topk,
-        beta):
+        beta,
+    mining_batch_size=0):
     model.eval()
     with torch.no_grad():
         z = model(x, edge_index)
-        sim = model.sim(z, z)
+        z = F.normalize(z)
+        num_nodes = z.size(0)
 
-        num_nodes = sim.size(0)
-        eye_mask = torch.eye(num_nodes, dtype=torch.bool, device=sim.device)
+        if mining_batch_size <= 0:
+            sim = torch.mm(z, z.t())
 
-        offdiag = sim[~eye_mask]
-        if similarity_threshold is None:
-            active_threshold = percentile_threshold(offdiag, similarity_percentile)
+            eye_mask = torch.eye(num_nodes, dtype=torch.bool, device=sim.device)
+
+            offdiag = sim[~eye_mask]
+            if similarity_threshold is None:
+                active_threshold = percentile_threshold(offdiag, similarity_percentile)
+            else:
+                active_threshold = torch.tensor(float(similarity_threshold), device=sim.device)
+
+            # D_U^+: mined from high-similarity pairs on clean embeddings.
+            du_pos_mask = (sim > active_threshold) & (~eye_mask)
+
+            if max_du_per_node > 0:
+                k = min(max_du_per_node, num_nodes - 1)
+                topk_idx = torch.topk(sim.masked_fill(eye_mask, -1e9), k=k, dim=1).indices
+                topk_mask = torch.zeros_like(du_pos_mask)
+                topk_mask.scatter_(1, topk_idx, True)
+                du_pos_mask = du_pos_mask & topk_mask
+
+            if use_mutual_topk:
+                du_pos_mask = du_pos_mask & du_pos_mask.t()
+
+            sim_min = offdiag.min()
+            sim_max = offdiag.max()
+            sim_norm = (sim - sim_min) / (sim_max - sim_min + 1e-12)
+            du_pos_weight = torch.exp(beta * sim_norm) * du_pos_mask.float()
+
+            mined_pairs = int(du_pos_mask.sum().item())
+            mean_weight = float(du_pos_weight[du_pos_mask].mean().item()) if mined_pairs > 0 else 0.0
+            mean_pairs_per_node = float(du_pos_mask.float().sum(1).mean().item())
+
+            return {
+                'du_pos_mask': du_pos_mask,
+                'du_pos_weight': du_pos_weight,
+                'du_pos_csr': None,
+                'du_pos_csr_t': None,
+                'mined_pairs': mined_pairs,
+                'sim_min': float(sim_min.item()),
+                'sim_max': float(sim_max.item()),
+                'active_threshold': float(active_threshold.item()),
+                'mean_weight': mean_weight,
+                'mean_pairs_per_node': mean_pairs_per_node
+            }
+
+        # Chunked mining path: avoid forming dense NxN similarity matrix.
+        device = z.device
+        batch_size = int(mining_batch_size)
+        num_batches = (num_nodes - 1) // batch_size + 1
+
+        # Pass-1: gather min/max (off-diagonal) and optional histogram for percentile threshold.
+        sim_min = torch.tensor(float('inf'), device=device)
+        sim_max = torch.tensor(float('-inf'), device=device)
+
+        hist_bins = 4096
+        hist = torch.zeros((hist_bins,), device=device)
+        use_percentile = similarity_threshold is None
+
+        for bi in range(num_batches):
+            s = bi * batch_size
+            e = min((bi + 1) * batch_size, num_nodes)
+            rows = torch.arange(s, e, device=device)
+            sim_chunk = torch.mm(z[rows], z.t())
+            sim_chunk[torch.arange(e - s, device=device), rows] = -2.0
+
+            flat = sim_chunk.reshape(-1)
+            sim_min = torch.minimum(sim_min, flat.min())
+            sim_max = torch.maximum(sim_max, flat.max())
+
+            if use_percentile:
+                # Cosine similarity range is approximately [-1, 1].
+                bucket = torch.clamp(((flat + 1.0) * 0.5 * (hist_bins - 1)).long(), 0, hist_bins - 1)
+                hist.scatter_add_(0, bucket, torch.ones_like(flat, dtype=hist.dtype))
+
+        if use_percentile:
+            total = int(hist.sum().item())
+            rank = int((min(max(similarity_percentile, 0.0), 100.0) / 100.0) * max(total - 1, 0))
+            cdf = torch.cumsum(hist, dim=0)
+            idx = int(torch.searchsorted(cdf, torch.tensor(rank + 1, device=device)).item())
+            idx = max(0, min(hist_bins - 1, idx))
+            active_threshold = torch.tensor(-1.0 + 2.0 * idx / (hist_bins - 1), device=device)
         else:
-            active_threshold = torch.tensor(float(similarity_threshold), device=sim.device)
+            active_threshold = torch.tensor(float(similarity_threshold), device=device)
 
-        # D_U^+: mined from high-similarity pairs on clean embeddings.
-        du_pos_mask = (sim > active_threshold) & (~eye_mask)
+        k = min(max_du_per_node, num_nodes - 1) if max_du_per_node > 0 else 0
+        row_cols = [torch.empty((0,), device=device, dtype=torch.long) for _ in range(num_nodes)]
+        row_sims = [torch.empty((0,), device=device, dtype=torch.float32) for _ in range(num_nodes)]
 
-        if max_du_per_node > 0:
-            k = min(max_du_per_node, num_nodes - 1)
-            topk_idx = torch.topk(sim.masked_fill(eye_mask, -1e9), k=k, dim=1).indices
-            topk_mask = torch.zeros_like(du_pos_mask)
-            topk_mask.scatter_(1, topk_idx, True)
-            du_pos_mask = du_pos_mask & topk_mask
+        # Pass-2: build directed candidate lists row-wise.
+        for bi in range(num_batches):
+            s = bi * batch_size
+            e = min((bi + 1) * batch_size, num_nodes)
+            rows = torch.arange(s, e, device=device)
+            sim_chunk = torch.mm(z[rows], z.t())
+            sim_chunk[torch.arange(e - s, device=device), rows] = -2.0
+
+            if k > 0:
+                topk_vals, topk_idx = torch.topk(sim_chunk, k=k, dim=1)
+                keep = topk_vals > active_threshold
+                for li in range(e - s):
+                    gi = s + li
+                    cols = topk_idx[li][keep[li]]
+                    vals = topk_vals[li][keep[li]]
+                    row_cols[gi] = cols.to(torch.long)
+                    row_sims[gi] = vals.to(torch.float32)
+            else:
+                keep = sim_chunk > active_threshold
+                for li in range(e - s):
+                    gi = s + li
+                    cols = torch.nonzero(keep[li], as_tuple=False).view(-1)
+                    vals = sim_chunk[li, cols]
+                    row_cols[gi] = cols.to(torch.long)
+                    row_sims[gi] = vals.to(torch.float32)
 
         if use_mutual_topk:
-            du_pos_mask = du_pos_mask & du_pos_mask.t()
+            row_sets = [set(rc.tolist()) for rc in row_cols]
+            for i in range(num_nodes):
+                if row_cols[i].numel() == 0:
+                    continue
+                cols_i = row_cols[i]
+                vals_i = row_sims[i]
+                keep_mask = torch.tensor([i in row_sets[int(c.item())] for c in cols_i], device=device, dtype=torch.bool)
+                row_cols[i] = cols_i[keep_mask]
+                row_sims[i] = vals_i[keep_mask]
 
-        sim_min = offdiag.min()
-        sim_max = offdiag.max()
-        sim_norm = (sim - sim_min) / (sim_max - sim_min + 1e-12)
-        du_pos_weight = torch.exp(beta * sim_norm) * du_pos_mask.float()
+        denom = (sim_max - sim_min + 1e-12)
+        row_weights = []
+        pair_count = 0
+        weight_sum = 0.0
+        for i in range(num_nodes):
+            if row_sims[i].numel() == 0:
+                row_weights.append(torch.empty((0,), device=device, dtype=torch.float32))
+                continue
+            sims = row_sims[i]
+            ws = torch.exp(beta * ((sims - sim_min) / denom)).to(torch.float32)
+            row_weights.append(ws)
+            pair_count += int(ws.numel())
+            weight_sum += float(ws.sum().item())
 
-        mined_pairs = int(du_pos_mask.sum().item())
-        mean_weight = float(du_pos_weight[du_pos_mask].mean().item()) if mined_pairs > 0 else 0.0
-        mean_pairs_per_node = float(du_pos_mask.float().sum(1).mean().item())
+        mean_pairs_per_node = float(pair_count / max(num_nodes, 1))
+        mean_weight = float(weight_sum / max(pair_count, 1)) if pair_count > 0 else 0.0
+
+        du_pos_csr = _build_csr_from_row_lists(row_cols, row_weights, num_nodes, device)
+        row_cols_t, row_weights_t = _transpose_row_lists(row_cols, row_weights, num_nodes)
+        du_pos_csr_t = _build_csr_from_row_lists(row_cols_t, row_weights_t, num_nodes, device)
 
     return {
-        'du_pos_mask': du_pos_mask,
-        'du_pos_weight': du_pos_weight,
-        'mined_pairs': mined_pairs,
+        'du_pos_mask': None,
+        'du_pos_weight': None,
+        'du_pos_csr': du_pos_csr,
+        'du_pos_csr_t': du_pos_csr_t,
+        'mined_pairs': pair_count,
         'sim_min': float(sim_min.item()),
         'sim_max': float(sim_max.item()),
         'active_threshold': float(active_threshold.item()),
@@ -177,7 +346,8 @@ def mine_unlabeled_positives(
     }
 
 
-def train_iflgr(model: Model, x, edge_index, du_pos_mask, du_pos_weight, unlabeled_weight):
+def train_iflgr(model: Model, x, edge_index, du_pos_mask, du_pos_weight, unlabeled_weight, corrected_batch_size=0,
+                du_pos_csr=None, du_pos_csr_t=None):
     model.train()
     optimizer.zero_grad()
     edge_index_1 = dropout_adj(edge_index, p=drop_edge_rate_1)[0]
@@ -190,10 +360,12 @@ def train_iflgr(model: Model, x, edge_index, du_pos_mask, du_pos_weight, unlabel
     loss = model.loss(
         z1,
         z2,
-        batch_size=0,
+        batch_size=corrected_batch_size,
         corrected=True,
         du_pos_mask=du_pos_mask,
         du_pos_weight=du_pos_weight,
+        du_pos_csr=du_pos_csr,
+        du_pos_csr_t=du_pos_csr_t,
         unlabeled_weight=unlabeled_weight)
 
     loss.backward()
@@ -211,7 +383,10 @@ def train_iflgc(
         du_pos_mask,
         du_pos_weight,
         unlabeled_weight,
-        refl_du_weight):
+        refl_du_weight,
+        corrected_batch_size=0,
+        du_pos_csr=None,
+        du_pos_csr_t=None):
     model.train()
     optimizer.zero_grad()
 
@@ -239,10 +414,12 @@ def train_iflgc(
     loss = model.loss(
         z1,
         z2,
-        batch_size=0,
+        batch_size=corrected_batch_size,
         corrected=True,
         du_pos_mask=du_pos_mask,
         du_pos_weight=du_pos_weight,
+        du_pos_csr=du_pos_csr,
+        du_pos_csr_t=du_pos_csr_t,
         unlabeled_weight=unlabeled_weight,
         corrected_variant='ifl-gc',
         refl_du_weight=refl_du_weight)
@@ -252,7 +429,7 @@ def train_iflgc(
     return loss.item()
 
 
-def train_gca(model: Model, x, edge_index, drop_scheme, drop_weights, feature_weights):
+def train_gca(model: Model, x, edge_index, drop_scheme, drop_weights, feature_weights, contrastive_batch_size=0):
     model.train()
     optimizer.zero_grad()
 
@@ -276,7 +453,7 @@ def train_gca(model: Model, x, edge_index, drop_scheme, drop_weights, feature_we
     z1 = model(x_1, edge_index_1)
     z2 = model(x_2, edge_index_2)
 
-    loss = model.loss(z1, z2, batch_size=0)
+    loss = model.loss(z1, z2, batch_size=contrastive_batch_size)
     loss.backward()
     optimizer.step()
     return loss.item()
@@ -331,10 +508,24 @@ if __name__ == '__main__':
     use_mutual_topk = config.get('use_mutual_topk', True)
     beta = config.get('beta', 2.0)
     unlabeled_weight = config.get('unlabeled_weight', 1.0)
+    contrastive_batch_size = int(config.get('contrastive_batch_size', 0))
     corrected_ramp_epochs = config.get('corrected_ramp_epochs', 50)
+    corrected_batch_size = int(config.get('corrected_batch_size', 0))
+    mining_batch_size = int(config.get('mining_batch_size', 0))
     gca_drop_scheme = config.get('gca_drop_scheme', 'degree')
     gca_pr_k = config.get('gca_pr_k', 200)
     iflgc_refl_du_weight = config.get('iflgc_refl_du_weight', 0.3)
+
+    # PubMed often needs chunked corrected-loss computation to avoid OOM.
+    if args.dataset == 'PubMed' and corrected_batch_size <= 0:
+        corrected_batch_size = 1024
+        print(f"(I) | PubMed corrected loss chunking enabled: corrected_batch_size={corrected_batch_size}")
+    if args.dataset == 'PubMed' and mining_batch_size <= 0:
+        mining_batch_size = 1024
+        print(f"(I) | PubMed DU mining chunking enabled: mining_batch_size={mining_batch_size}")
+    if args.dataset == 'PubMed' and contrastive_batch_size <= 0:
+        contrastive_batch_size = 1024
+        print(f"(I) | PubMed contrastive loss chunking enabled: contrastive_batch_size={contrastive_batch_size}")
 
     def get_dataset(path, name):
         assert name in ['Cora', 'CiteSeer', 'PubMed', 'DBLP']
@@ -397,7 +588,7 @@ if __name__ == '__main__':
 
         if args.method == 'grace':
             # Baseline branch: pure GRACE.
-            loss = train_grace(model, data.x, data.edge_index)
+            loss = train_grace(model, data.x, data.edge_index, contrastive_batch_size=contrastive_batch_size)
             phase = 'grace'
         elif args.method == 'gca':
             # GCA branch: structure-aware augmentation only.
@@ -407,7 +598,8 @@ if __name__ == '__main__':
                 data.edge_index,
                 gca_drop_scheme,
                 gca_drop_weights,
-                gca_feature_weights)
+                gca_feature_weights,
+                contrastive_batch_size=contrastive_batch_size)
             phase = 'gca'
         elif args.method == 'ifl-gc':
             # IFL-GC branch:
@@ -421,7 +613,8 @@ if __name__ == '__main__':
                     data.edge_index,
                     gca_drop_scheme,
                     gca_drop_weights,
-                    gca_feature_weights)
+                    gca_feature_weights,
+                    contrastive_batch_size=contrastive_batch_size)
                 phase = 'warmup-gca'
             else:
                 if du_cache is None or (epoch - warmup_epochs - 1) % update_interval == 0:
@@ -433,7 +626,8 @@ if __name__ == '__main__':
                         similarity_percentile,
                         max_du_per_node,
                         use_mutual_topk,
-                        beta)
+                        beta,
+                        mining_batch_size=mining_batch_size)
                     refresh_du = True
 
                 mined_pairs = du_cache['mined_pairs']
@@ -454,7 +648,10 @@ if __name__ == '__main__':
                     du_cache['du_pos_mask'],
                     du_cache['du_pos_weight'],
                     current_unlabeled_weight,
-                    iflgc_refl_du_weight)
+                    iflgc_refl_du_weight,
+                    corrected_batch_size=corrected_batch_size,
+                    du_pos_csr=du_cache.get('du_pos_csr'),
+                    du_pos_csr_t=du_cache.get('du_pos_csr_t'))
                 phase = 'corrected-gca'
         else:
             # IFL-GR branch:
@@ -462,7 +659,11 @@ if __name__ == '__main__':
             # 2) periodically mine D_U^+
             # 3) optimize corrected InfoNCE (cross-view semantic term)
             if epoch <= warmup_epochs:
-                loss = train_grace(model, data.x, data.edge_index)
+                loss = train_grace(
+                    model,
+                    data.x,
+                    data.edge_index,
+                    contrastive_batch_size=contrastive_batch_size)
                 phase = 'warmup'
             else:
                 if du_cache is None or (epoch - warmup_epochs - 1) % update_interval == 0:
@@ -474,7 +675,8 @@ if __name__ == '__main__':
                         similarity_percentile,
                         max_du_per_node,
                         use_mutual_topk,
-                        beta)
+                        beta,
+                        mining_batch_size=mining_batch_size)
                     refresh_du = True
 
                 mined_pairs = du_cache['mined_pairs']
@@ -491,7 +693,10 @@ if __name__ == '__main__':
                     data.edge_index,
                     du_cache['du_pos_mask'],
                     du_cache['du_pos_weight'],
-                    current_unlabeled_weight)
+                    current_unlabeled_weight,
+                    corrected_batch_size=corrected_batch_size,
+                    du_pos_csr=du_cache.get('du_pos_csr'),
+                    du_pos_csr_t=du_cache.get('du_pos_csr_t'))
                 phase = 'corrected'
 
         now = t()

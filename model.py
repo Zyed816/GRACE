@@ -144,6 +144,199 @@ class Model(torch.nn.Module):
 
         return dl_loss + unlabeled_weight * du_loss
 
+    def batched_corrected_semi_loss(self,
+                                    z1: torch.Tensor,
+                                    z2: torch.Tensor,
+                                    du_pos_weight: torch.Tensor,
+                                    batch_size: int,
+                                    unlabeled_weight: float = 1.0):
+        # Space complexity: O(BN) for corrected IFL-GR variant.
+        device = z1.device
+        num_nodes = z1.size(0)
+        num_batches = (num_nodes - 1) // batch_size + 1
+        f = lambda x: torch.exp(x / self.tau)
+        indices = torch.arange(0, num_nodes, device=device)
+        losses = []
+
+        for i in range(num_batches):
+            mask = indices[i * batch_size:(i + 1) * batch_size]
+            refl_sim = f(self.sim(z1[mask], z1))  # [B, N]
+            between_sim = f(self.sim(z1[mask], z2))  # [B, N]
+
+            local_idx = torch.arange(mask.size(0), device=device)
+            refl_diag = refl_sim[local_idx, mask]
+            between_diag = between_sim[local_idx, mask].clamp_min(1e-15)
+
+            denom = (refl_sim.sum(1) + between_sim.sum(1) - refl_diag).clamp_min(1e-15)
+            dl_loss = -torch.log(between_diag / denom)
+
+            prob_between = (between_sim / denom.unsqueeze(1)).clamp_min(1e-15)
+            batch_weight = du_pos_weight[mask].float()
+            weighted_nll = batch_weight * (-torch.log(prob_between))
+
+            du_weight_sum = batch_weight.sum(1)
+            has_du = du_weight_sum > 0
+            du_loss = torch.zeros_like(dl_loss)
+            if has_du.any():
+                du_loss[has_du] = weighted_nll[has_du].sum(1) / du_weight_sum[has_du]
+
+            losses.append(dl_loss + unlabeled_weight * du_loss)
+
+        return torch.cat(losses)
+
+    def batched_corrected_semi_loss_iflgc(self,
+                                          z1: torch.Tensor,
+                                          z2: torch.Tensor,
+                                          du_pos_weight: torch.Tensor,
+                                          batch_size: int,
+                                          unlabeled_weight: float = 1.0,
+                                          refl_du_weight: float = 0.3):
+        # Space complexity: O(BN) for corrected IFL-GC variant.
+        device = z1.device
+        num_nodes = z1.size(0)
+        num_batches = (num_nodes - 1) // batch_size + 1
+        f = lambda x: torch.exp(x / self.tau)
+        indices = torch.arange(0, num_nodes, device=device)
+        losses = []
+        refl_du_weight = min(max(float(refl_du_weight), 0.0), 1.0)
+
+        for i in range(num_batches):
+            mask = indices[i * batch_size:(i + 1) * batch_size]
+            refl_sim = f(self.sim(z1[mask], z1))  # [B, N]
+            between_sim = f(self.sim(z1[mask], z2))  # [B, N]
+
+            local_idx = torch.arange(mask.size(0), device=device)
+            refl_diag = refl_sim[local_idx, mask]
+            between_diag = between_sim[local_idx, mask].clamp_min(1e-15)
+
+            denom = (refl_sim.sum(1) + between_sim.sum(1) - refl_diag).clamp_min(1e-15)
+            dl_loss = -torch.log(between_diag / denom)
+
+            prob_between = (between_sim / denom.unsqueeze(1)).clamp_min(1e-15)
+            prob_refl = (refl_sim / denom.unsqueeze(1)).clamp_min(1e-15)
+
+            batch_weight = du_pos_weight[mask].float()
+            weighted_nll_between = batch_weight * (-torch.log(prob_between))
+            weighted_nll_refl = batch_weight * (-torch.log(prob_refl))
+
+            du_weight_sum = batch_weight.sum(1)
+            has_du = du_weight_sum > 0
+
+            du_loss_between = torch.zeros_like(dl_loss)
+            du_loss_refl = torch.zeros_like(dl_loss)
+            if has_du.any():
+                du_loss_between[has_du] = weighted_nll_between[has_du].sum(1) / du_weight_sum[has_du]
+                du_loss_refl[has_du] = weighted_nll_refl[has_du].sum(1) / du_weight_sum[has_du]
+
+            du_loss = (1.0 - refl_du_weight) * du_loss_between + refl_du_weight * du_loss_refl
+            losses.append(dl_loss + unlabeled_weight * du_loss)
+
+        return torch.cat(losses)
+
+    def batched_corrected_semi_loss_sparse(self,
+                                           z1: torch.Tensor,
+                                           z2: torch.Tensor,
+                                           du_row_ptr: torch.Tensor,
+                                           du_col_idx: torch.Tensor,
+                                           du_col_w: torch.Tensor,
+                                           batch_size: int,
+                                           unlabeled_weight: float = 1.0):
+        # Sparse DU+ version for IFL-GR: O(BN + B*K), avoids dense NxN DU weights.
+        device = z1.device
+        num_nodes = z1.size(0)
+        num_batches = (num_nodes - 1) // batch_size + 1
+        f = lambda x: torch.exp(x / self.tau)
+        indices = torch.arange(0, num_nodes, device=device)
+        losses = []
+
+        for i in range(num_batches):
+            mask = indices[i * batch_size:(i + 1) * batch_size]
+            refl_sim = f(self.sim(z1[mask], z1))
+            between_sim = f(self.sim(z1[mask], z2))
+
+            local_idx = torch.arange(mask.size(0), device=device)
+            refl_diag = refl_sim[local_idx, mask]
+            between_diag = between_sim[local_idx, mask].clamp_min(1e-15)
+
+            denom = (refl_sim.sum(1) + between_sim.sum(1) - refl_diag).clamp_min(1e-15)
+            dl_loss = -torch.log(between_diag / denom)
+
+            prob_between = (between_sim / denom.unsqueeze(1)).clamp_min(1e-15)
+            du_loss = torch.zeros_like(dl_loss)
+
+            for bi in range(mask.size(0)):
+                r = int(mask[bi].item())
+                s = int(du_row_ptr[r].item())
+                e = int(du_row_ptr[r + 1].item())
+                if e <= s:
+                    continue
+
+                cols = du_col_idx[s:e]
+                ws = du_col_w[s:e]
+                probs = prob_between[bi, cols]
+                du_loss[bi] = (ws * (-torch.log(probs))).sum() / ws.sum().clamp_min(1e-15)
+
+            losses.append(dl_loss + unlabeled_weight * du_loss)
+
+        return torch.cat(losses)
+
+    def batched_corrected_semi_loss_iflgc_sparse(self,
+                                                 z1: torch.Tensor,
+                                                 z2: torch.Tensor,
+                                                 du_row_ptr: torch.Tensor,
+                                                 du_col_idx: torch.Tensor,
+                                                 du_col_w: torch.Tensor,
+                                                 batch_size: int,
+                                                 unlabeled_weight: float = 1.0,
+                                                 refl_du_weight: float = 0.3):
+        # Sparse DU+ version for IFL-GC: O(BN + B*K), avoids dense NxN DU weights.
+        device = z1.device
+        num_nodes = z1.size(0)
+        num_batches = (num_nodes - 1) // batch_size + 1
+        f = lambda x: torch.exp(x / self.tau)
+        indices = torch.arange(0, num_nodes, device=device)
+        losses = []
+        refl_du_weight = min(max(float(refl_du_weight), 0.0), 1.0)
+
+        for i in range(num_batches):
+            mask = indices[i * batch_size:(i + 1) * batch_size]
+            refl_sim = f(self.sim(z1[mask], z1))
+            between_sim = f(self.sim(z1[mask], z2))
+
+            local_idx = torch.arange(mask.size(0), device=device)
+            refl_diag = refl_sim[local_idx, mask]
+            between_diag = between_sim[local_idx, mask].clamp_min(1e-15)
+
+            denom = (refl_sim.sum(1) + between_sim.sum(1) - refl_diag).clamp_min(1e-15)
+            dl_loss = -torch.log(between_diag / denom)
+
+            prob_between = (between_sim / denom.unsqueeze(1)).clamp_min(1e-15)
+            prob_refl = (refl_sim / denom.unsqueeze(1)).clamp_min(1e-15)
+
+            du_loss_between = torch.zeros_like(dl_loss)
+            du_loss_refl = torch.zeros_like(dl_loss)
+
+            for bi in range(mask.size(0)):
+                r = int(mask[bi].item())
+                s = int(du_row_ptr[r].item())
+                e = int(du_row_ptr[r + 1].item())
+                if e <= s:
+                    continue
+
+                cols = du_col_idx[s:e]
+                ws = du_col_w[s:e]
+                pb = prob_between[bi, cols]
+                pr = prob_refl[bi, cols]
+
+                wsum = ws.sum().clamp_min(1e-15)
+                du_loss_between[bi] = (ws * (-torch.log(pb))).sum() / wsum
+                du_loss_refl[bi] = (ws * (-torch.log(pr))).sum() / wsum
+
+            du_loss = (1.0 - refl_du_weight) * du_loss_between + refl_du_weight * du_loss_refl
+            losses.append(dl_loss + unlabeled_weight * du_loss)
+
+        return torch.cat(losses)
+
     def batched_semi_loss(self, z1: torch.Tensor, z2: torch.Tensor,
                           batch_size: int,
                           between_pos_mask: torch.Tensor = None):
@@ -180,6 +373,8 @@ class Model(torch.nn.Module):
              corrected: bool = False,
              du_pos_mask: torch.Tensor = None,
              du_pos_weight: torch.Tensor = None,
+             du_pos_csr=None,
+             du_pos_csr_t=None,
              unlabeled_weight: float = 1.0,
              corrected_variant: str = 'ifl-gr',
              refl_du_weight: float = 0.3):
@@ -187,40 +382,112 @@ class Model(torch.nn.Module):
         h2 = self.projection(z2)
 
         if corrected:
-            assert du_pos_mask is not None
-            assert du_pos_weight is not None
+            if du_pos_csr is None:
+                assert du_pos_mask is not None
+                assert du_pos_weight is not None
 
-            if batch_size != 0:
-                raise ValueError('corrected loss currently requires batch_size=0')
-
-            if corrected_variant == 'ifl-gc':
-                l1 = self.corrected_semi_loss_iflgc(
-                    h1,
-                    h2,
-                    du_pos_mask=du_pos_mask,
-                    du_pos_weight=du_pos_weight,
-                    unlabeled_weight=unlabeled_weight,
-                    refl_du_weight=refl_du_weight)
-                l2 = self.corrected_semi_loss_iflgc(
-                    h2,
-                    h1,
-                    du_pos_mask=du_pos_mask.t(),
-                    du_pos_weight=du_pos_weight.t(),
-                    unlabeled_weight=unlabeled_weight,
-                    refl_du_weight=refl_du_weight)
+            if batch_size == 0:
+                if corrected_variant == 'ifl-gc':
+                    l1 = self.corrected_semi_loss_iflgc(
+                        h1,
+                        h2,
+                        du_pos_mask=du_pos_mask,
+                        du_pos_weight=du_pos_weight,
+                        unlabeled_weight=unlabeled_weight,
+                        refl_du_weight=refl_du_weight)
+                    l2 = self.corrected_semi_loss_iflgc(
+                        h2,
+                        h1,
+                        du_pos_mask=du_pos_mask.t(),
+                        du_pos_weight=du_pos_weight.t(),
+                        unlabeled_weight=unlabeled_weight,
+                        refl_du_weight=refl_du_weight)
+                else:
+                    l1 = self.corrected_semi_loss(
+                        h1,
+                        h2,
+                        du_pos_mask=du_pos_mask,
+                        du_pos_weight=du_pos_weight,
+                        unlabeled_weight=unlabeled_weight)
+                    l2 = self.corrected_semi_loss(
+                        h2,
+                        h1,
+                        du_pos_mask=du_pos_mask.t(),
+                        du_pos_weight=du_pos_weight.t(),
+                        unlabeled_weight=unlabeled_weight)
             else:
-                l1 = self.corrected_semi_loss(
-                    h1,
-                    h2,
-                    du_pos_mask=du_pos_mask,
-                    du_pos_weight=du_pos_weight,
-                    unlabeled_weight=unlabeled_weight)
-                l2 = self.corrected_semi_loss(
-                    h2,
-                    h1,
-                    du_pos_mask=du_pos_mask.t(),
-                    du_pos_weight=du_pos_weight.t(),
-                    unlabeled_weight=unlabeled_weight)
+                if du_pos_csr is not None:
+                    if du_pos_csr_t is None:
+                        du_pos_csr_t = du_pos_csr
+
+                    row_ptr, col_idx, col_w = du_pos_csr
+                    row_ptr_t, col_idx_t, col_w_t = du_pos_csr_t
+
+                    if corrected_variant == 'ifl-gc':
+                        l1 = self.batched_corrected_semi_loss_iflgc_sparse(
+                            h1,
+                            h2,
+                            du_row_ptr=row_ptr,
+                            du_col_idx=col_idx,
+                            du_col_w=col_w,
+                            batch_size=batch_size,
+                            unlabeled_weight=unlabeled_weight,
+                            refl_du_weight=refl_du_weight)
+                        l2 = self.batched_corrected_semi_loss_iflgc_sparse(
+                            h2,
+                            h1,
+                            du_row_ptr=row_ptr_t,
+                            du_col_idx=col_idx_t,
+                            du_col_w=col_w_t,
+                            batch_size=batch_size,
+                            unlabeled_weight=unlabeled_weight,
+                            refl_du_weight=refl_du_weight)
+                    else:
+                        l1 = self.batched_corrected_semi_loss_sparse(
+                            h1,
+                            h2,
+                            du_row_ptr=row_ptr,
+                            du_col_idx=col_idx,
+                            du_col_w=col_w,
+                            batch_size=batch_size,
+                            unlabeled_weight=unlabeled_weight)
+                        l2 = self.batched_corrected_semi_loss_sparse(
+                            h2,
+                            h1,
+                            du_row_ptr=row_ptr_t,
+                            du_col_idx=col_idx_t,
+                            du_col_w=col_w_t,
+                            batch_size=batch_size,
+                            unlabeled_weight=unlabeled_weight)
+                else:
+                    if corrected_variant == 'ifl-gc':
+                        l1 = self.batched_corrected_semi_loss_iflgc(
+                            h1,
+                            h2,
+                            du_pos_weight=du_pos_weight,
+                            batch_size=batch_size,
+                            unlabeled_weight=unlabeled_weight,
+                            refl_du_weight=refl_du_weight)
+                        l2 = self.batched_corrected_semi_loss_iflgc(
+                            h2,
+                            h1,
+                            du_pos_weight=du_pos_weight.t(),
+                            batch_size=batch_size,
+                            unlabeled_weight=unlabeled_weight,
+                            refl_du_weight=refl_du_weight)
+                    else:
+                        l1 = self.batched_corrected_semi_loss(
+                            h1,
+                            h2,
+                            du_pos_weight=du_pos_weight,
+                            batch_size=batch_size,
+                            unlabeled_weight=unlabeled_weight)
+                        l2 = self.batched_corrected_semi_loss(
+                            h2,
+                            h1,
+                            du_pos_weight=du_pos_weight.t(),
+                            batch_size=batch_size,
+                            unlabeled_weight=unlabeled_weight)
             ret = (l1 + l2) * 0.5
             ret = ret.mean() if mean else ret.sum()
             return ret
