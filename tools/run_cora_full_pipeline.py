@@ -4,6 +4,7 @@ import csv
 import json
 import os
 import re
+import statistics
 import subprocess
 import sys
 import tempfile
@@ -140,6 +141,19 @@ def read_top_rows(csv_path, topk):
     return rows
 
 
+def try_read_top_rows(csv_path, topk):
+    if not os.path.exists(csv_path):
+        return []
+    rows = []
+    with open(csv_path, "r", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for idx, row in enumerate(reader, start=1):
+            if idx > topk:
+                break
+            rows.append(row)
+    return rows
+
+
 def make_temp_config_for_method(base_config, csv_row, method):
     cfg = copy.deepcopy(base_config)
 
@@ -228,23 +242,193 @@ def append_result_row(csv_path, row, write_header=False):
         writer = csv.DictWriter(f, fieldnames=headers)
         if write_header:
             writer.writeheader()
-        writer.writerow(row)
+        if row is not None:
+            writer.writerow(row)
 
 
-def method_pipeline(grace_dir, base_config, method, grid_script, grid_csv_name, args, baseline_robust):
-    print(f"\n=== [{method}] grid search ===")
-    run_grid_script(
-        grace_dir=grace_dir,
-        script_name=grid_script,
-        gpu_id=args.gpu_id,
-        topk=max(args.topk_verify, 10),
-        std_weight=args.std_weight,
+def _safe_mean(values):
+    return sum(values) / len(values) if values else 0.0
+
+
+def _safe_std(values):
+    if not values:
+        return 0.0
+    if len(values) == 1:
+        return 0.0
+    return statistics.pstdev(values)
+
+
+def append_method_summary_rows(csv_path):
+    """
+    Hierarchical summary output:
+    1. For each (method, candidate_rank), output per-candidate mean (one row per candidate).
+    2. For each method, then output overall mean across all candidates (one final row per method).
+    Baseline (grace) has only 1 candidate, others (ifl-gr, gca, ifl-gc) have multiple.
+    """
+    if not os.path.exists(csv_path):
+        return
+
+    rows = []
+    with open(csv_path, "r", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        rows = list(reader)
+
+    # Keep only raw experiment rows; skip any existing summary rows.
+    valid_rows = [r for r in rows if r.get("stage") in {"baseline", "top_verify"}]
+    if not valid_rows:
+        return
+
+    # Group by (method, candidate_rank) and compute per-candidate mean
+    by_method_and_rank = {}
+    for r in valid_rows:
+        method = r.get("method", "").strip()
+        candidate_rank = r.get("candidate_rank", "").strip()
+        if not method:
+            continue
+
+        try:
+            f1mi = float(r["F1Mi_mean"])
+            f1ma = float(r["F1Ma_mean"])
+            robust = float(r["robust_score"])
+        except (ValueError, KeyError, TypeError):
+            continue
+
+        key = (method, candidate_rank)
+        if key not in by_method_and_rank:
+            by_method_and_rank[key] = {"f1mi": [], "f1ma": [], "robust": []}
+        by_method_and_rank[key]["f1mi"].append(f1mi)
+        by_method_and_rank[key]["f1ma"].append(f1ma)
+        by_method_and_rank[key]["robust"].append(robust)
+
+    if not by_method_and_rank:
+        return
+
+    # Compute per-candidate means and collect for overall method mean
+    candidate_means_by_method = {}
+    candidate_order_by_method = {}
+    for (method, rank), vals in sorted(by_method_and_rank.items()):
+        if method not in candidate_means_by_method:
+            candidate_means_by_method[method] = {}
+            candidate_order_by_method[method] = []
+
+        rank_key = rank  # Keep rank as string for ordering
+        candidate_order_by_method[method].append(rank_key)
+
+        candidate_means_by_method[method][rank_key] = {
+            "f1mi": _safe_mean(vals["f1mi"]),
+            "f1ma": _safe_mean(vals["f1ma"]),
+            "robust": _safe_mean(vals["robust"]),
+            "count": len(vals["robust"]),
+        }
+
+    # Compute baseline robust reference (grace)
+    grace_candidates = candidate_means_by_method.get("grace", {})
+    grace_robust_ref = _safe_mean([c["robust"] for c in grace_candidates.values()]) if grace_candidates else 0.0
+
+    preferred_order = ["grace", "ifl-gr", "gca", "ifl-gc"]
+    methods = [m for m in preferred_order if m in candidate_means_by_method]
+    methods.extend(
+        sorted([m for m in candidate_means_by_method.keys() if m not in preferred_order])
     )
 
-    grid_csv_path = os.path.join(grace_dir, "results", grid_csv_name)
-    top_rows = read_top_rows(grid_csv_path, args.topk_verify)
+    # Output per-candidate rows, then overall row for each method
+    for method in methods:
+        candidates = candidate_means_by_method[method]
+        ranks = sorted(set(candidate_order_by_method[method]), key=lambda x: (x != "", int(x) if x else -1))
 
-    print(f"=== [{method}] top-{args.topk_verify} verification ({args.runs_per_top} runs each) ===")
+        # Per-candidate summary rows
+        for rank in ranks:
+            if rank not in candidates:
+                continue
+            cand = candidates[rank]
+            delta_vs_grace = cand["robust"] - grace_robust_ref
+
+            append_result_row(
+                csv_path=csv_path,
+                row={
+                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "stage": "summary",
+                    "method": method,
+                    "candidate_rank": rank,
+                    "run_idx": "",
+                    "F1Mi_mean": f"{cand['f1mi']:.6f}",
+                    "F1Mi_std": "",  # No std at per-candidate level in summary
+                    "F1Ma_mean": f"{cand['f1ma']:.6f}",
+                    "F1Ma_std": "",
+                    "robust_score": f"{cand['robust']:.6f}",
+                    "delta_vs_grace": f"{delta_vs_grace:.6f}",
+                    "grid_csv": "",
+                    "params_json": json.dumps({"n_runs": cand["count"]}, ensure_ascii=True),
+                    "notes": f"candidate #{rank} mean",
+                },
+            )
+
+        # Overall method mean (across all candidates)
+        all_robust = [candidates[rank]["robust"] for rank in ranks]
+        all_f1mi = [candidates[rank]["f1mi"] for rank in ranks]
+        all_f1ma = [candidates[rank]["f1ma"] for rank in ranks]
+        total_count = sum(candidates[rank]["count"] for rank in ranks)
+
+        f1mi_overall = _safe_mean(all_f1mi)
+        f1mi_std_of_candidates = _safe_std(all_f1mi)
+        f1ma_overall = _safe_mean(all_f1ma)
+        f1ma_std_of_candidates = _safe_std(all_f1ma)
+        robust_overall = _safe_mean(all_robust)
+        delta_vs_grace = robust_overall - grace_robust_ref
+
+        append_result_row(
+            csv_path=csv_path,
+            row={
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "stage": "summary",
+                "method": method,
+                "candidate_rank": "overall",
+                "run_idx": "",
+                "F1Mi_mean": f"{f1mi_overall:.6f}",
+                "F1Mi_std": f"{f1mi_std_of_candidates:.6f}",
+                "F1Ma_mean": f"{f1ma_overall:.6f}",
+                "F1Ma_std": f"{f1ma_std_of_candidates:.6f}",
+                "robust_score": f"{robust_overall:.6f}",
+                "delta_vs_grace": f"{delta_vs_grace:.6f}",
+                "grid_csv": "",
+                "params_json": json.dumps(
+                    {"n_candidates": len(ranks), "n_runs": total_count},
+                    ensure_ascii=True,
+                ),
+                "notes": "method overall mean across all candidates",
+            },
+        )
+
+
+def method_pipeline(grace_dir, base_config, method, grid_script, grid_csv_name, args, baseline_robust, out_csv_path):
+    grid_csv_path = os.path.join(grace_dir, "results", grid_csv_name)
+    top_rows = []
+
+    if (not args.force_grid) and os.path.exists(grid_csv_path):
+        top_rows = try_read_top_rows(grid_csv_path, args.topk_verify)
+        if top_rows:
+            print(
+                f"\n=== [{method}] found existing candidate file: {grid_csv_path} | "
+                f"skip grid search, run top-{len(top_rows)} verification directly ==="
+            )
+        else:
+            print(
+                f"\n=== [{method}] existing candidate file is empty/invalid: {grid_csv_path} | "
+                "will run grid search ==="
+            )
+
+    if not top_rows:
+        print(f"\n=== [{method}] grid search ===")
+        run_grid_script(
+            grace_dir=grace_dir,
+            script_name=grid_script,
+            gpu_id=args.gpu_id,
+            topk=max(args.topk_verify, 10),
+            std_weight=args.std_weight,
+        )
+        top_rows = read_top_rows(grid_csv_path, args.topk_verify)
+
+    print(f"=== [{method}] top-{len(top_rows)} verification ({args.runs_per_top} runs each) ===")
     for rank, csv_row in enumerate(top_rows, start=1):
         print(f"[{method}] candidate #{rank}")
         for run_idx in range(1, args.runs_per_top + 1):
@@ -256,7 +440,7 @@ def method_pipeline(grace_dir, base_config, method, grid_script, grid_csv_name, 
                 delta = score - baseline_robust
 
                 append_result_row(
-                    csv_path=args.out,
+                    csv_path=out_csv_path,
                     row={
                         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                         "stage": "top_verify",
@@ -296,6 +480,11 @@ def main():
     parser.add_argument("--topk_verify", type=int, default=3)
     parser.add_argument("--runs_per_top", type=int, default=3)
     parser.add_argument(
+        "--force_grid",
+        action="store_true",
+        help="Force rerun grid search even if an existing candidate CSV is found.",
+    )
+    parser.add_argument(
         "--out",
         type=str,
         default=os.path.join("results", "cora_full_pipeline_results.csv"),
@@ -317,22 +506,7 @@ def main():
     # Write CSV header once.
     append_result_row(
         csv_path=out_path,
-        row={
-            "timestamp": "",
-            "stage": "",
-            "method": "",
-            "candidate_rank": "",
-            "run_idx": "",
-            "F1Mi_mean": "",
-            "F1Mi_std": "",
-            "F1Ma_mean": "",
-            "F1Ma_std": "",
-            "robust_score": "",
-            "delta_vs_grace": "",
-            "grid_csv": "",
-            "params_json": "",
-            "notes": "",
-        },
+        row=None,
         write_header=True,
     )
 
@@ -379,6 +553,7 @@ def main():
         grid_csv_name="grid_search_iflgr_cora_results.csv",
         args=args,
         baseline_robust=baseline_robust,
+        out_csv_path=out_path,
     )
 
     method_pipeline(
@@ -389,6 +564,7 @@ def main():
         grid_csv_name="grid_search_gca_cora_results.csv",
         args=args,
         baseline_robust=baseline_robust,
+        out_csv_path=out_path,
     )
 
     method_pipeline(
@@ -399,7 +575,12 @@ def main():
         grid_csv_name="grid_search_iflgc_cora_results.csv",
         args=args,
         baseline_robust=baseline_robust,
+        out_csv_path=out_path,
     )
+
+    print("\n=== [summary] aggregate method-level statistics ===")
+    append_method_summary_rows(out_path)
+    print("[summary] appended method aggregate rows")
 
     print(f"\nAll stages completed. Unified results saved to: {out_path}")
 
