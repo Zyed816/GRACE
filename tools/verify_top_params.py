@@ -98,6 +98,9 @@ def make_temp_config_from_row(base_config, csv_row):
         "corrected_ramp_epochs": int(csv_row["corrected_ramp_epochs"]),
     }
 
+    if "tau" in csv_row and csv_row["tau"] != "":
+        cora_updates["tau"] = float(csv_row["tau"])
+
     # Handle null values
     if csv_row.get("similarity_threshold", "").lower() in ["none", "null", ""]:
         cora_updates["similarity_threshold"] = None
@@ -127,6 +130,7 @@ def make_temp_config_from_row_for_method(base_config, csv_row, method):
             "unlabeled_weight": float(csv_row["unlabeled_weight"]),
             "iflgc_refl_du_weight": float(csv_row["iflgc_refl_du_weight"]),
             "warmup_epochs": int(float(csv_row["warmup_epochs"])),
+            "tau": float(csv_row["tau"]),
             "drop_edge_rate_1": float(csv_row["drop_edge_rate_1"]),
             "drop_edge_rate_2": float(csv_row["drop_edge_rate_2"]),
             "drop_feature_rate_1": float(csv_row["drop_feature_rate_1"]),
@@ -178,11 +182,13 @@ def make_temp_config_from_row_for_method(base_config, csv_row, method):
 
 def print_param_summary(csv_row, method):
     if method == "ifl-gr":
+        tau_text = f", tau={csv_row['tau']}" if "tau" in csv_row and csv_row["tau"] != "" else ""
         print(
             f"sim_p={csv_row['similarity_percentile']}, "
             f"max_du={csv_row['max_du_per_node']}, "
             f"lambda_u={csv_row['unlabeled_weight']}, "
             f"warmup={csv_row['warmup_epochs']}"
+            f"{tau_text}"
         )
         return
 
@@ -204,6 +210,7 @@ def print_param_summary(csv_row, method):
             f"max_du={csv_row['max_du_per_node']}, "
             f"lambda_u={csv_row['unlabeled_weight']}, "
             f"alpha_refl={csv_row['iflgc_refl_du_weight']}, "
+            f"tau={csv_row['tau']}, "
             f"de=({csv_row['drop_edge_rate_1']},{csv_row['drop_edge_rate_2']}), "
             f"df=({csv_row['drop_feature_rate_1']},{csv_row['drop_feature_rate_2']})"
         )
@@ -296,6 +303,7 @@ def main():
                 "max_du_per_node": csv_row["max_du_per_node"],
                 "unlabeled_weight": csv_row["unlabeled_weight"],
                 "warmup_epochs": csv_row["warmup_epochs"],
+                "tau": csv_row.get("tau", ""),
             })
         elif args.method == "gca":
             result.update({
@@ -313,6 +321,7 @@ def main():
                 "max_du_per_node": csv_row["max_du_per_node"],
                 "unlabeled_weight": csv_row["unlabeled_weight"],
                 "iflgc_refl_du_weight": csv_row["iflgc_refl_du_weight"],
+                "tau": csv_row["tau"],
                 "drop_edge_rate_1": csv_row["drop_edge_rate_1"],
                 "drop_edge_rate_2": csv_row["drop_edge_rate_2"],
                 "drop_feature_rate_1": csv_row["drop_feature_rate_1"],
@@ -332,6 +341,7 @@ def main():
     print("=" * 80)
     for res in verification_results:
         if args.method == "ifl-gr":
+            tau_tail = f", tau={res['tau']}" if res.get("tau", "") else ""
             print(
                 f"#{res['param_rank']}: "
                 f"F1Mi={res['avg_F1Mi_mean']:.4f}±{res['std_F1Mi_mean']:.4f}, "
@@ -339,6 +349,7 @@ def main():
                 f"params: sim_p={res['similarity_percentile']}, "
                 f"max_du={res['max_du_per_node']}, "
                 f"lambda_u={res['unlabeled_weight']}"
+                f"{tau_tail}"
             )
         elif args.method == "gca":
             print(
@@ -359,7 +370,8 @@ def main():
                 f"sim_p={res['similarity_percentile']}, "
                 f"max_du={res['max_du_per_node']}, "
                 f"lambda_u={res['unlabeled_weight']}, "
-                f"alpha_refl={res['iflgc_refl_du_weight']}"
+                f"alpha_refl={res['iflgc_refl_du_weight']}, "
+                f"tau={res['tau']}"
             )
 
     recommendation = verification_results[0] if verification_results else None

@@ -168,6 +168,8 @@ def make_temp_config_for_method(base_config, csv_row, method):
             "use_mutual_topk": csv_row["use_mutual_topk"].lower() == "true",
             "corrected_ramp_epochs": int(float(csv_row["corrected_ramp_epochs"])),
         }
+        if "tau" in csv_row and csv_row["tau"] != "":
+            cora_updates["tau"] = float(csv_row["tau"])
         if csv_row.get("similarity_threshold", "").lower() in ["none", "null", ""]:
             cora_updates["similarity_threshold"] = None
         elif "similarity_threshold" in csv_row:
@@ -193,6 +195,7 @@ def make_temp_config_for_method(base_config, csv_row, method):
             "unlabeled_weight": float(csv_row["unlabeled_weight"]),
             "iflgc_refl_du_weight": float(csv_row["iflgc_refl_du_weight"]),
             "warmup_epochs": int(float(csv_row["warmup_epochs"])),
+            "tau": float(csv_row["tau"]),
             "drop_edge_rate_1": float(csv_row["drop_edge_rate_1"]),
             "drop_edge_rate_2": float(csv_row["drop_edge_rate_2"]),
             "drop_feature_rate_1": float(csv_row["drop_feature_rate_1"]),

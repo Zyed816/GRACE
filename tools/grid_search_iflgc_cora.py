@@ -110,6 +110,7 @@ def main():
         "unlabeled_weight": [0.2, 0.3],
         "warmup_epochs": [80, 100],
         "iflgc_refl_du_weight": [0.2, 0.5],
+        "tau": [0.4, 0.6],
     }
 
     edge_profiles = [
@@ -181,6 +182,7 @@ def main():
                         f"max_du={trial_params['max_du_per_node']}, "
                         f"lambda_u={trial_params['unlabeled_weight']}, "
                         f"alpha_refl={trial_params['iflgc_refl_du_weight']}, "
+                        f"tau={trial_params['tau']}, "
                         f"de=({trial_params['drop_edge_rate_1']},{trial_params['drop_edge_rate_2']}), "
                         f"df=({trial_params['drop_feature_rate_1']},{trial_params['drop_feature_rate_2']})"
                     )
@@ -213,6 +215,7 @@ def main():
             f"max_du_per_node={r['max_du_per_node']}, "
             f"unlabeled_weight={r['unlabeled_weight']}, "
             f"iflgc_refl_du_weight={r['iflgc_refl_du_weight']}, "
+            f"tau={r['tau']}, "
             f"drop_edge_rate_1={r['drop_edge_rate_1']}, "
             f"drop_edge_rate_2={r['drop_edge_rate_2']}, "
             f"drop_feature_rate_1={r['drop_feature_rate_1']}, "
@@ -231,6 +234,7 @@ def main():
         "unlabeled_weight",
         "iflgc_refl_du_weight",
         "warmup_epochs",
+        "tau",
         "drop_edge_rate_1",
         "drop_edge_rate_2",
         "drop_feature_rate_1",
@@ -262,6 +266,7 @@ def main():
                 "unlabeled_weight": r["unlabeled_weight"],
                 "iflgc_refl_du_weight": r["iflgc_refl_du_weight"],
                 "warmup_epochs": r["warmup_epochs"],
+                "tau": r["tau"],
                 "drop_edge_rate_1": r["drop_edge_rate_1"],
                 "drop_edge_rate_2": r["drop_edge_rate_2"],
                 "drop_feature_rate_1": r["drop_feature_rate_1"],

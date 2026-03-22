@@ -125,6 +125,7 @@ def main():
         "max_du_per_node": [6, 10, 14],
         "unlabeled_weight": [0.1, 0.2, 0.3],
         "warmup_epochs": [100, 120],
+        "tau": [0.4, 0.6],
     }
 
     fixed_overrides = {
@@ -179,7 +180,8 @@ def main():
                 f"sim_p={trial_params['similarity_percentile']}, "
                 f"max_du={trial_params['max_du_per_node']}, "
                 f"lambda_u={trial_params['unlabeled_weight']}, "
-                f"warmup={trial_params['warmup_epochs']}"
+                f"warmup={trial_params['warmup_epochs']}, "
+                f"tau={trial_params['tau']}"
             )
             print(
                 f"Trial {trial_idx:02d}/{total_trials}: "
@@ -208,7 +210,8 @@ def main():
             f"params={{similarity_percentile={r['similarity_percentile']}, "
             f"max_du_per_node={r['max_du_per_node']}, "
             f"unlabeled_weight={r['unlabeled_weight']}, "
-            f"warmup_epochs={r['warmup_epochs']}}}"
+            f"warmup_epochs={r['warmup_epochs']}, "
+            f"tau={r['tau']}}}"
         )
 
     out_path = os.path.join(grace_dir, args.out)
@@ -219,6 +222,7 @@ def main():
         "max_du_per_node",
         "unlabeled_weight",
         "warmup_epochs",
+        "tau",
         "update_interval",
         "beta",
         "use_mutual_topk",
@@ -241,6 +245,7 @@ def main():
                 str(r["max_du_per_node"]),
                 str(r["unlabeled_weight"]),
                 str(r["warmup_epochs"]),
+                str(r["tau"]),
                 str(r["update_interval"]),
                 str(r["beta"]),
                 str(r["use_mutual_topk"]),
