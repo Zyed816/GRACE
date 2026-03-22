@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 from datetime import datetime
+from time import perf_counter as t
 
 import yaml
 
@@ -37,6 +38,8 @@ def robust_score(metrics, std_weight):
 
 
 def run_train(grace_dir, config_path, method, gpu_id):
+    start = t()
+    print(f"[train:{method}] start")
     cmd = [
         sys.executable,
         "train.py",
@@ -69,10 +72,16 @@ def run_train(grace_dir, config_path, method, gpu_id):
 
     combined = proc.stdout + "\n" + proc.stderr
     metrics = parse_metrics(combined)
+    print(
+        f"[train:{method}] done in {t() - start:.1f}s | "
+        f"F1Mi={metrics['F1Mi_mean']:.4f}+-{metrics['F1Mi_std']:.4f}"
+    )
     return metrics, combined
 
 
 def run_grid_script(grace_dir, script_name, gpu_id, topk, std_weight):
+    start = t()
+    print(f"[grid:{script_name}] start")
     cmd = [
         sys.executable,
         os.path.join("tools", script_name),
@@ -84,24 +93,38 @@ def run_grid_script(grace_dir, script_name, gpu_id, topk, std_weight):
         str(std_weight),
     ]
 
-    proc = subprocess.run(
+    env = os.environ.copy()
+    env["PYTHONUNBUFFERED"] = "1"
+
+    proc = subprocess.Popen(
         cmd,
         cwd=grace_dir,
         text=True,
-        capture_output=True,
-        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        env=env,
+        bufsize=1,
     )
+
+    output_lines = []
+    assert proc.stdout is not None
+    for line in proc.stdout:
+        output_lines.append(line)
+        print(f"[grid:{script_name}] {line.rstrip()}")
+
+    proc.wait()
+    combined_output = "".join(output_lines)
 
     if proc.returncode != 0:
         raise RuntimeError(
             "Grid search failed.\n"
             f"Command: {' '.join(cmd)}\n"
             f"Return code: {proc.returncode}\n"
-            f"STDOUT:\n{proc.stdout}\n"
-            f"STDERR:\n{proc.stderr}"
+            f"OUTPUT:\n{combined_output}"
         )
 
-    return proc.stdout + "\n" + proc.stderr
+    print(f"[grid:{script_name}] done in {t() - start:.1f}s")
+    return combined_output
 
 
 def read_top_rows(csv_path, topk):
@@ -225,6 +248,7 @@ def method_pipeline(grace_dir, base_config, method, grid_script, grid_csv_name, 
     for rank, csv_row in enumerate(top_rows, start=1):
         print(f"[{method}] candidate #{rank}")
         for run_idx in range(1, args.runs_per_top + 1):
+            print(f"[{method}] candidate #{rank} run {run_idx}/{args.runs_per_top} start")
             temp_cfg = make_temp_config_for_method(base_config, csv_row, method)
             try:
                 metrics, _ = run_train(grace_dir, temp_cfg, method=method, gpu_id=args.gpu_id)
