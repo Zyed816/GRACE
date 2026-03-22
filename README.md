@@ -32,6 +32,13 @@ python train.py --dataset Cora --method gca
 python train.py --dataset Cora --method ifl-gc
 ```
 
+Dataset location behavior:
+- By default, datasets are cached under `GRACE/datasets/`.
+- If files already exist there, training reads them directly.
+- If files are missing, PyG will download/process and store them under `GRACE/datasets/`.
+- For Cora/CiteSeer/PubMed, the typical layout is `GRACE/datasets/<DatasetName>/{raw,processed}`.
+- You can override with `--dataset_root <path>`.
+
 ## Requirements
 
 - torch 1.4.0

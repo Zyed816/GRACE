@@ -1,4 +1,5 @@
 import argparse
+import os
 import os.path as osp
 import random
 from time import perf_counter as t
@@ -294,6 +295,8 @@ if __name__ == '__main__':
     parser.add_argument('--dataset', type=str, default='DBLP')
     parser.add_argument('--gpu_id', type=int, default=0)
     parser.add_argument('--config', type=str, default='config.yaml')
+    parser.add_argument('--dataset_root', type=str, default=None,
+                        help='Dataset cache root. Defaults to GRACE/datasets')
     parser.add_argument('--method', type=str, default='grace', choices=['grace', 'ifl-gr', 'gca', 'ifl-gc'])
     args = parser.parse_args()
 
@@ -342,7 +345,14 @@ if __name__ == '__main__':
             name,
             transform=T.NormalizeFeatures())
 
-    path = osp.join(osp.expanduser('~'), 'datasets', args.dataset)
+    # Prefer project-local cache directory so server runs do not depend on ~/datasets.
+    grace_dir = osp.dirname(osp.abspath(__file__))
+    dataset_root = args.dataset_root if args.dataset_root else osp.join(grace_dir, 'datasets')
+    os.makedirs(dataset_root, exist_ok=True)
+
+    # Pass dataset_root directly. PyG datasets append dataset name internally.
+    # This avoids duplicated folders like datasets/Cora/Cora.
+    path = dataset_root
     dataset = get_dataset(path, args.dataset)
     data = dataset[0]
 
