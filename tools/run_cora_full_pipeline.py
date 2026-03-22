@@ -55,9 +55,9 @@ def run_train(grace_dir, config_path, dataset, method, gpu_id):
         str(gpu_id),
     ]
 
-    if dataset == "PubMed":
+    if dataset in {"PubMed", "DBLP"}:
         print(
-            f"[train:{method}] PubMed detected; first output may take longer. "
+            f"[train:{method}] {dataset} detected; first output may take longer. "
             "Will print heartbeat every 30s."
         )
         with tempfile.NamedTemporaryFile("w+", suffix="_pubmed_train.log", delete=False, encoding="utf-8") as lf:
@@ -79,7 +79,7 @@ def run_train(grace_dir, config_path, dataset, method, gpu_id):
                     if now - last_heartbeat >= 30.0:
                         elapsed = int(now - start)
                         print(
-                            f"[train:{method}] PubMed still running... "
+                            f"[train:{method}] {dataset} still running... "
                             f"elapsed={elapsed}s"
                         )
                         last_heartbeat = now
@@ -145,9 +145,9 @@ def run_grid_script(grace_dir, script_name, gpu_id, topk, std_weight, dataset):
     env = os.environ.copy()
     env["PYTHONUNBUFFERED"] = "1"
 
-    if dataset == "PubMed":
+    if dataset in {"PubMed", "DBLP"}:
         print(
-            f"[grid:{script_name}] PubMed detected; per-trial output may be sparse. "
+            f"[grid:{script_name}] {dataset} detected; per-trial output may be sparse. "
             "Will print heartbeat every 30s."
         )
         with tempfile.NamedTemporaryFile("w+", suffix="_pubmed_grid.log", delete=False, encoding="utf-8") as lf:
@@ -170,7 +170,7 @@ def run_grid_script(grace_dir, script_name, gpu_id, topk, std_weight, dataset):
                     if now - last_heartbeat >= 30.0:
                         elapsed = int(now - start)
                         print(
-                            f"[grid:{script_name}] PubMed grid search still running... "
+                            f"[grid:{script_name}] {dataset} grid search still running... "
                             f"elapsed={elapsed}s"
                         )
                         last_heartbeat = now

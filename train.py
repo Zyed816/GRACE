@@ -516,16 +516,18 @@ if __name__ == '__main__':
     gca_pr_k = config.get('gca_pr_k', 200)
     iflgc_refl_du_weight = config.get('iflgc_refl_du_weight', 0.3)
 
-    # PubMed often needs chunked corrected-loss computation to avoid OOM.
-    if args.dataset == 'PubMed' and corrected_batch_size <= 0:
+    large_dataset = args.dataset in ['PubMed', 'DBLP']
+
+    # Large datasets often need chunked computation to avoid OOM.
+    if large_dataset and corrected_batch_size <= 0:
         corrected_batch_size = 1024
-        print(f"(I) | PubMed corrected loss chunking enabled: corrected_batch_size={corrected_batch_size}")
-    if args.dataset == 'PubMed' and mining_batch_size <= 0:
+        print(f"(I) | {args.dataset} corrected loss chunking enabled: corrected_batch_size={corrected_batch_size}")
+    if large_dataset and mining_batch_size <= 0:
         mining_batch_size = 1024
-        print(f"(I) | PubMed DU mining chunking enabled: mining_batch_size={mining_batch_size}")
-    if args.dataset == 'PubMed' and contrastive_batch_size <= 0:
+        print(f"(I) | {args.dataset} DU mining chunking enabled: mining_batch_size={mining_batch_size}")
+    if large_dataset and contrastive_batch_size <= 0:
         contrastive_batch_size = 1024
-        print(f"(I) | PubMed contrastive loss chunking enabled: contrastive_batch_size={contrastive_batch_size}")
+        print(f"(I) | {args.dataset} contrastive loss chunking enabled: contrastive_batch_size={contrastive_batch_size}")
 
     def get_dataset(path, name):
         assert name in ['Cora', 'CiteSeer', 'PubMed', 'DBLP']

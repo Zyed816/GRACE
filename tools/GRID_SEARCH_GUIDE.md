@@ -211,3 +211,47 @@ python tools/run_pubmed_full_pipeline.py --gpu_id 0
 ```bash
 python tools/run_pubmed_full_pipeline.py --gpu_id 0 --baseline_runs 3 --topk_verify 3 --runs_per_top 3 --out results/pubmed_compare.csv
 ```
+
+## DBLP 对应流程（与 Cora / CiteSeer / PubMed 同命名规范）
+
+你现在可以直接使用 DBLP 对应入口脚本，结果会写入 `results/` 下同风格命名的 CSV。
+
+> 说明：DBLP 与 PubMed 一样，已自动启用分块对比损失、分块修正损失与分块挖掘，默认用于降低 OOM 风险。
+
+### 1) GRACE 基线（3 次）
+```bash
+python train.py --dataset DBLP --method grace
+python train.py --dataset DBLP --method grace
+python train.py --dataset DBLP --method grace
+```
+
+### 2) IFL-GR：先寻参，再复验
+```bash
+python tools/grid_search_iflgr_dblp.py --gpu_id 0 --topk 10
+python tools/verify_top_params.py --dataset DBLP --method ifl-gr --top_params results/grid_search_iflgr_dblp_results.csv --topk 3 --runs 3 --gpu_id 0
+```
+
+### 3) GCA：先寻参，再复验
+```bash
+python tools/grid_search_gca_dblp.py --gpu_id 0 --topk 10
+python tools/verify_top_params.py --dataset DBLP --method gca --top_params results/grid_search_gca_dblp_results.csv --topk 3 --runs 3 --gpu_id 0
+```
+
+### 4) IFL-GC：先寻参，再复验
+```bash
+python tools/grid_search_iflgc_dblp.py --gpu_id 0 --topk 10
+python tools/verify_top_params.py --dataset DBLP --method ifl-gc --top_params results/grid_search_iflgc_dblp_results.csv --topk 3 --runs 3 --gpu_id 0
+```
+
+### 5) 一键完整流程（推荐）
+```bash
+python tools/run_dblp_full_pipeline.py --gpu_id 0
+```
+
+默认统一结果文件：
+- `results/dblp_full_pipeline_results.csv`
+
+可调参数示例：
+```bash
+python tools/run_dblp_full_pipeline.py --gpu_id 0 --baseline_runs 3 --topk_verify 3 --runs_per_top 3 --out results/dblp_compare.csv
+```
