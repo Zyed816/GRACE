@@ -22,6 +22,7 @@ GRACE/
     grid_search_gca_cora.py           # GCA 网格搜索
     grid_search_iflgc_cora.py         # IFL-GC 网格搜索
     verify_top_params.py              # Top-K 参数复验（支持 ifl-gr / gca / ifl-gc）
+    run_cora_full_pipeline.py         # 一键自动化：基线+三方法寻参+Top复验+统一结果文件
     GRID_SEARCH_GUIDE.md              # 搜索与复验说明
 ```
 
@@ -129,6 +130,9 @@ python tools/grid_search_iflgc_cora.py --gpu_id 0 --topk 10
 python tools/verify_top_params.py --method ifl-gr --top_params results/grid_search_iflgr_cora_results.csv --topk 3 --runs 3 --gpu_id 0
 python tools/verify_top_params.py --method gca --top_params results/grid_search_gca_cora_results.csv --topk 3 --runs 3 --gpu_id 0
 python tools/verify_top_params.py --method ifl-gc --top_params results/grid_search_iflgc_cora_results.csv --topk 3 --runs 3 --gpu_id 0
+
+# 一键自动化完整流程（基线3次 + 三方法自动寻参 + Top3各3次复验）
+python tools/run_cora_full_pipeline.py --gpu_id 0
 ```
 
 ## 6. 推荐阅读顺序
