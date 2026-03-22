@@ -13,18 +13,6 @@ Cora:
   tau: 0.4
   num_epochs: 200
   weight_decay: 0.00001
-  warmup_epochs: 100
-  update_interval: 5
-  similarity_threshold: null
-  similarity_percentile: 99.3
-  max_du_per_node: 14
-  use_mutual_topk: true
-  beta: 2.0
-  unlabeled_weight: 0.3
-  corrected_ramp_epochs: 40
-  gca_drop_scheme: degree
-  gca_pr_k: 200
-  iflgc_refl_du_weight: 0.3
 CiteSeer:
   seed: 38108
   learning_rate: 0.001
@@ -40,15 +28,6 @@ CiteSeer:
   tau: 0.9
   num_epochs: 200
   weight_decay: 0.00001
-  warmup_epochs: 120
-  update_interval: 5
-  similarity_threshold: null
-  similarity_percentile: 99.5
-  max_du_per_node: 8
-  use_mutual_topk: true
-  beta: 2.0
-  unlabeled_weight: 0.2
-  corrected_ramp_epochs: 40
 PubMed:
   seed: 23344
   learning_rate: 0.001
@@ -64,15 +43,6 @@ PubMed:
   tau: 0.7
   num_epochs: 1500
   weight_decay: 0.00001
-  warmup_epochs: 400
-  update_interval: 20
-  similarity_threshold: null
-  similarity_percentile: 99.7
-  max_du_per_node: 20
-  use_mutual_topk: true
-  beta: 2.0
-  unlabeled_weight: 0.15
-  corrected_ramp_epochs: 100
 DBLP:
   seed: 83521
   learning_rate: 0.001
@@ -88,12 +58,3 @@ DBLP:
   tau: 0.7
   num_epochs: 1000
   weight_decay: 0.00001
-  warmup_epochs: 300
-  update_interval: 20
-  similarity_threshold: null
-  similarity_percentile: 99.7
-  max_du_per_node: 20
-  use_mutual_topk: true
-  beta: 2.0
-  unlabeled_weight: 0.15
-  corrected_ramp_epochs: 80
