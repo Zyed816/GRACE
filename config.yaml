@@ -60,5 +60,9 @@ DBLP:
   drop_feature_rate_1: 0.1
   drop_feature_rate_2: 0.0
   tau: 0.7
+  # Lower OOM risk on large dataset by enabling chunked computation.
+  contrastive_batch_size: 12288
+  corrected_batch_size: 12288
+  mining_batch_size: 12288
   num_epochs: 1000
   weight_decay: 0.00001
