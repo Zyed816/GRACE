@@ -41,6 +41,10 @@ PubMed:
   drop_feature_rate_1: 0.0
   drop_feature_rate_2: 0.2
   tau: 0.7
+  # 防止 OOM 错误，调整批量大小
+  contrastive_batch_size: 20000
+  corrected_batch_size: 20000
+  mining_batch_size: 20000
   num_epochs: 1500
   weight_decay: 0.00001
 DBLP:
