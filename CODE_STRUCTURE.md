@@ -18,9 +18,11 @@ GRACE/
   results/
     grid_search_iflgr_cora_results.csv
   tools/
-    grid_search_iflgr_cora.py         # IFL-GR 网格搜索
-    grid_search_gca_cora.py           # GCA 网格搜索
-    grid_search_iflgc_cora.py         # IFL-GC 网格搜索
+    grid_search_iflgr_cora.py         # IFL-GR 网格搜索（一阶段）
+    grid_search_gca_cora.py           # GCA 网格搜索（一阶段）
+    grid_search_iflgc_cora.py         # IFL-GC 网格搜索（一阶段）
+    grid_search_iflgr_cora_2stage.py  # IFL-GR 二阶段网格搜索（NEW）
+    grid_search_iflgc_cora_2stage.py  # IFL-GC 二阶段网格搜索（NEW）
     grid_search_iflgr_citeseer.py     # IFL-GR(CiteSeer) 网格搜索入口
     grid_search_gca_citeseer.py       # GCA(CiteSeer) 网格搜索入口
     grid_search_iflgc_citeseer.py     # IFL-GC(CiteSeer) 网格搜索入口
@@ -31,12 +33,14 @@ GRACE/
     grid_search_gca_dblp.py           # GCA(DBLP) 网格搜索入口
     grid_search_iflgc_dblp.py         # IFL-GC(DBLP) 网格搜索入口
     verify_top_params.py              # Top-K 参数复验（支持 ifl-gr / gca / ifl-gc）
-    run_cora_full_pipeline.py         # 一键自动化：基线+三方法寻参+Top复验+统一结果文件
+    run_cora_full_pipeline.py         # 一键自动化：一阶段流程（基线+三方法寻参+Top复验+统一结果文件）
+    run_cora_full_pipeline_2stage.py  # 一键自动化：二阶段流程（基线+IFL-GR/IFL-GC二阶段+Top复验+统一结果文件）（NEW）
     run_citeseer_full_pipeline.py     # CiteSeer 一键自动化完整流程
     run_pubmed_full_pipeline.py       # PubMed 一键自动化完整流程
     run_dblp_full_pipeline.py         # DBLP 一键自动化完整流程
     run_selected_full_pipelines.py    # 多数据集统一调度入口（顺序调用各 run_*_full_pipeline）
-    GRID_SEARCH_GUIDE.md              # 搜索与复验说明
+    GRID_SEARCH_GUIDE.md              # 搜索与复验说明（一阶段）
+    TWOSTAGE_GUIDE.md                 # 二阶段搜索详细说明（NEW）
 ```
 
 ## 2. 统一训练入口怎么读（train.py）
@@ -111,7 +115,34 @@ GRACE/
    - `delta_vs_grace = robust_score - baseline_robust`
 5. 按 `robust_score` 排序输出 CSV
 
-### 4.2 Top 参数复验
+### 4.2 Two-Stage Grid Search (NEW)
+
+**Files** (Cora-specific; CiteSeer/PubMed/DBLP variants also available):
+- `tools/grid_search_iflgr_cora_2stage.py` — IFL-GR two-stage search
+- `tools/grid_search_iflgc_cora_2stage.py` — IFL-GC two-stage search
+
+**Motivation**: Separate parameter search into two phases to drastically reduce total trials:
+- **Stage 1**: Grid search over method-specific parameters (e.g., `similarity_percentile`, `max_du_per_node`, `tau`, GCA drop rates, etc.)
+- **Stage 2**: For each top-K candidate from Stage 1, scan `learning_rate` ∈ {5e-4, 1e-3, 2e-3}
+
+**Example totalReduction for IFL-GC**:
+- Stage 1 candidates: ~360
+- Stage 2 per candidate: 3 LR values
+- If done naively in 1-stage: thousands of trials
+- **With 2-stage**: ~360 + top-3 × 3 = ~369 trials (where top-3 LR is determined in Stage 2)
+
+**Output CSV columns** (additional vs. 1-stage):
+- `stage`: "stage1_grid" (all grid results) or "topK_results" (top-K after Stage 1)
+- `base_candidate_rank`: Which Stage 1 candidate this trial belongs to (used in Stage 2 to trace back)
+- `learning_rate`: The specific LR tested in that row
+
+**Flow**:
+1. Run Stage 1 grid: all method params vs. all LR combinations? No! Skips LR in Stage 1.
+2. Rank by `robust_score`, extract top-K (e.g., top-3)
+3. Run Stage 2 for each top-K: fix all Stage-1 params, scan LR ∈ {5e-4, 1e-3, 2e-3}
+4. Output merged CSV with both stage1_grid and Stage-2 results
+
+### 4.2.1 Top Parameter Verification (Unchanged)
 
 脚本：`tools/verify_top_params.py`
 
@@ -127,25 +158,67 @@ GRACE/
 
 ## 5. 快速命令清单
 
+### 5.1 Training
+
 ```bash
-# 训练
 python train.py --dataset Cora --method grace
 python train.py --dataset Cora --method ifl-gr
 python train.py --dataset Cora --method gca
 python train.py --dataset Cora --method ifl-gc
+```
 
-# 网格搜索
+### 5.2 One-Stage Grid Search
+
+```bash
 python tools/grid_search_iflgr_cora.py --gpu_id 0 --topk 10
 python tools/grid_search_gca_cora.py --gpu_id 0 --topk 10
 python tools/grid_search_iflgc_cora.py --gpu_id 0 --topk 10
+```
 
-# 复验
+### 5.3 Two-Stage Grid Search (NEW)
+
+```bash
+# Stage 1 + Stage 2 automatically run in sequence
+python tools/grid_search_iflgr_cora_2stage.py --gpu_id 0 --topk 3 --std_weight 0.5
+python tools/grid_search_iflgc_cora_2stage.py --gpu_id 0 --topk 3 --std_weight 0.5
+
+# Output: results/grid_search_iflgr_cora_2stage_results.csv, grid_search_iflgc_cora_2stage_results.csv
+# Columns include: stage, base_candidate_rank, learning_rate, F1Mi_mean, robust_score, etc.
+```
+
+### 5.4 Top Parameter Verification
+
+```bash
 python tools/verify_top_params.py --method ifl-gr --top_params results/grid_search_iflgr_cora_results.csv --topk 3 --runs 3 --gpu_id 0
 python tools/verify_top_params.py --method gca --top_params results/grid_search_gca_cora_results.csv --topk 3 --runs 3 --gpu_id 0
 python tools/verify_top_params.py --method ifl-gc --top_params results/grid_search_iflgc_cora_results.csv --topk 3 --runs 3 --gpu_id 0
+```
 
-# 一键自动化完整流程（基线3次 + 三方法自动寻参 + Top3各3次复验）
+### 5.5 Full Automated Pipeline
+
+#### Option A: One-Stage (Original)
+```bash
+# Cora: GRACE baseline + all 3 methods (1-stage) + top verification
 python tools/run_cora_full_pipeline.py --gpu_id 0
+```
+
+#### Option B: Two-Stage (NEW, Recommended)
+```bash
+# Cora: GRACE baseline + IFL-GR (2-stage) + IFL-GC (2-stage) + top verification
+python tools/run_cora_full_pipeline_2stage.py --gpu_id 0 --topk_verify 3 --runs_per_top 3
+```
+
+Other datasets:
+```bash
+python tools/run_citeseer_full_pipeline.py --gpu_id 0
+python tools/run_pubmed_full_pipeline.py --gpu_id 0
+python tools/run_dblp_full_pipeline.py --gpu_id 0
+```
+
+### 5.6 Multi-Dataset Orchestration
+
+```bash
+python tools/run_selected_full_pipelines.py --gpu_id 0
 ```
 
 ## 6. 推荐阅读顺序

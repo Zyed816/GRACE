@@ -23,6 +23,7 @@ Method selection is supported via `--method`:
 Code navigation:
 - `CODE_STRUCTURE.md`: file-by-file responsibilities, method training/testing flow, and hyper-parameter search flow.
 - `tools/GRID_SEARCH_GUIDE.md`: practical commands for grid search and top-parameter verification.
+- `TWOSTAGE_GUIDE.md`: **new** — two-stage parameter search strategy (Stage 1: method parameters, Stage 2: learning_rate optimization; reduces total trials while maintaining robustness).
 
 Examples:
 ```
@@ -31,6 +32,32 @@ python train.py --dataset Cora --method ifl-gr
 python train.py --dataset Cora --method gca
 python train.py --dataset Cora --method ifl-gc
 ```
+
+### Automated Grid Search & Parameter Tuning
+
+**Quick start — two-stage search** (recommended for comprehensive experiments):
+```bash
+cd tools
+python run_cora_full_pipeline_2stage.py --gpu_id 0 --topk_verify 3 --runs_per_top 3
+# Output: ../results/cora_full_pipeline_2stage_results.csv
+```
+This runs:
+1. GRACE baseline (3 runs)
+2. IFL-GR two-stage search (Stage 1 grid → top-3 Stage 2 LR scan, each verified 3x)
+3. IFL-GC two-stage search (Stage 1 grid → top-3 Stage 2 LR scan, each verified 3x)
+4. Summary statistics and method comparison
+
+For full documentation, see `TWOSTAGE_GUIDE.md`.
+
+**One-stage search** (alternative, original method):
+```bash
+cd tools
+python run_cora_full_pipeline.py --gpu_id 0 --topk_verify 3 --runs_per_top 3
+# Output: ../results/cora_full_pipeline_results.csv
+```
+Covers all four methods (GRACE, IFL-GR, GCA, IFL-GC) with single-stage grid search.
+
+See `tools/GRID_SEARCH_GUIDE.md` for more detailed usage and per-method scripts.
 
 Dataset location behavior:
 - By default, datasets are cached under `GRACE/datasets/`.
