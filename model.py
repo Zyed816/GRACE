@@ -1,3 +1,4 @@
+import copy
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -49,7 +50,14 @@ class Model(torch.nn.Module):
     def __init__(self, encoder: Encoder, num_hidden: int, num_proj_hidden: int,
                  tau: float = 0.5):
         super(Model, self).__init__()
-        self.encoder: Encoder = encoder
+        # Online encoder: trainable
+        self.online_encoder: Encoder = encoder
+        # Target encoder: EMA-updated, frozen
+        self.target_encoder: Encoder = copy.deepcopy(encoder)
+        self.target_encoder.reset_parameters()
+        for param in self.target_encoder.parameters():
+            param.requires_grad = False
+        
         self.tau: float = tau
 
         self.fc1 = torch.nn.Linear(num_hidden, num_proj_hidden)
@@ -57,7 +65,25 @@ class Model(torch.nn.Module):
 
     def forward(self, x: torch.Tensor,
                 edge_index: torch.Tensor) -> torch.Tensor:
-        return self.encoder(x, edge_index)
+        return self.online_encoder(x, edge_index)
+    
+    def forward_target(self, x: torch.Tensor, edge_index: torch.Tensor) -> torch.Tensor:
+        """Forward pass using target encoder without gradient."""
+        with torch.no_grad():
+            return self.target_encoder(x, edge_index)
+    
+    def update_target_network(self, momentum: float = 0.99):
+        """Update target encoder parameters via exponential moving average.
+        
+        Args:
+            momentum: EMA momentum coefficient (typically 0.99 or 0.999).
+        """
+        assert 0.0 <= momentum <= 1.0, f"momentum must be in [0, 1], got {momentum}"
+        with torch.no_grad():
+            for param_online, param_target in zip(
+                    self.online_encoder.parameters(),
+                    self.target_encoder.parameters()):
+                param_target.data.mul_(momentum).add_(param_online.data, alpha=1.0 - momentum)
 
     def projection(self, z: torch.Tensor) -> torch.Tensor:
         z = F.elu(self.fc1(z))

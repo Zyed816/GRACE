@@ -178,10 +178,15 @@ def mine_unlabeled_positives(
         max_du_per_node,
         use_mutual_topk,
         beta,
-    mining_batch_size=0):
+        use_target_encoder_sampling=True,
+        mining_batch_size=0):
     model.eval()
     with torch.no_grad():
-        z = model(x, edge_index)
+        # Select encoder based on flag
+        if use_target_encoder_sampling:
+            z = model.forward_target(x, edge_index)
+        else:
+            z = model(x, edge_index)
         z = F.normalize(z)
         num_nodes = z.size(0)
 
@@ -515,6 +520,9 @@ if __name__ == '__main__':
     gca_drop_scheme = config.get('gca_drop_scheme', 'degree')
     gca_pr_k = config.get('gca_pr_k', 200)
     iflgc_refl_du_weight = config.get('iflgc_refl_du_weight', 0.3)
+    ema_momentum = config.get('ema_momentum', 0.99)
+    ema_start_epoch = config.get('ema_start_epoch', 0)
+    use_target_encoder_sampling = config.get('use_target_encoder_sampling', True)
 
     large_dataset = args.dataset in ['PubMed', 'DBLP']
 
@@ -629,6 +637,7 @@ if __name__ == '__main__':
                         max_du_per_node,
                         use_mutual_topk,
                         beta,
+                        use_target_encoder_sampling=use_target_encoder_sampling,
                         mining_batch_size=mining_batch_size)
                     refresh_du = True
 
@@ -678,6 +687,7 @@ if __name__ == '__main__':
                         max_du_per_node,
                         use_mutual_topk,
                         beta,
+                        use_target_encoder_sampling=use_target_encoder_sampling,
                         mining_batch_size=mining_batch_size)
                     refresh_du = True
 
@@ -715,6 +725,10 @@ if __name__ == '__main__':
                   f'mean_w={mean_weight:.4f}, '
                   f'this epoch {now - prev:.4f}, total {now - start:.4f}')
         prev = now
+        
+        # EMA update of target network
+        if epoch >= ema_start_epoch:
+            model.update_target_network(ema_momentum)
 
     print("=== Final ===")
     test(model, data.x, data.edge_index, data.y, final=True)

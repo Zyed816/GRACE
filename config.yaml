@@ -13,6 +13,9 @@ Cora:
   tau: 0.4
   num_epochs: 200
   weight_decay: 0.00001
+  ema_momentum: 0.99
+  ema_start_epoch: 0
+  use_target_encoder_sampling: true
 CiteSeer:
   seed: 38108
   learning_rate: 0.001
@@ -28,6 +31,9 @@ CiteSeer:
   tau: 0.9
   num_epochs: 200
   weight_decay: 0.00001
+  ema_momentum: 0.99
+  ema_start_epoch: 0
+  use_target_encoder_sampling: true
 PubMed:
   seed: 23344
   learning_rate: 0.001
@@ -47,6 +53,9 @@ PubMed:
   mining_batch_size: 20000
   num_epochs: 1500
   weight_decay: 0.00001
+  ema_momentum: 0.999
+  ema_start_epoch: 0
+  use_target_encoder_sampling: true
 DBLP:
   seed: 83521
   learning_rate: 0.001
@@ -66,3 +75,6 @@ DBLP:
   mining_batch_size: 12288
   num_epochs: 1000
   weight_decay: 0.00001
+  ema_momentum: 0.999
+  ema_start_epoch: 0
+  use_target_encoder_sampling: true
