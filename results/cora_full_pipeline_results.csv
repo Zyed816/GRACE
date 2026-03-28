@@ -1,2 +1,2 @@
 timestamp,stage,method,candidate_rank,run_idx,F1Mi_mean,F1Mi_std,F1Ma_mean,F1Ma_std,robust_score,delta_vs_grace,grid_csv,params_json,notes
-2026-03-22 22:53:02,baseline,grace,0,1,0.837700,0.007000,0.827100,0.005400,0.834200,0.000000,,{},baseline reference
+2026-03-28 17:52:16,baseline,grace,0,1,0.828400,0.006300,0.810700,0.010200,0.825250,0.000000,,{},baseline reference

@@ -45,6 +45,11 @@ class Encoder(torch.nn.Module):
             x = self.activation(self.conv[i](x, edge_index))
         return x
 
+    def reset_parameters(self):
+        for conv in self.conv:
+            if hasattr(conv, "reset_parameters"):
+                conv.reset_parameters()
+
 
 class Model(torch.nn.Module):
     def __init__(self, encoder: Encoder, num_hidden: int, num_proj_hidden: int,
@@ -54,7 +59,8 @@ class Model(torch.nn.Module):
         self.online_encoder: Encoder = encoder
         # Target encoder: EMA-updated, frozen
         self.target_encoder: Encoder = copy.deepcopy(encoder)
-        self.target_encoder.reset_parameters()
+        if hasattr(self.target_encoder, "reset_parameters"):
+            self.target_encoder.reset_parameters()
         for param in self.target_encoder.parameters():
             param.requires_grad = False
         

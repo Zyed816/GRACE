@@ -485,7 +485,8 @@ if __name__ == '__main__':
     assert args.gpu_id in range(0, 8)
     torch.cuda.set_device(args.gpu_id)
 
-    config = yaml.load(open(args.config), Loader=SafeLoader)[args.dataset]
+    with open(args.config, "r", encoding="utf-8") as f:
+        config = yaml.load(f, Loader=SafeLoader)[args.dataset]
 
     torch.manual_seed(config['seed'])
     random.seed(12345)
