@@ -94,6 +94,13 @@ def main():
     parser.add_argument("--std_weight", type=float, default=0.5)
     parser.add_argument("--topk", type=int, default=10)
     parser.add_argument("--out", type=str, default=None)
+    parser.add_argument(
+        "--mode",
+        type=str,
+        default="balanced",
+        choices=["balanced", "weak-baseline-strong-ifl"],
+        help="Preset for search behavior. balanced keeps previous behavior; weak-baseline-strong-ifl weakens GRACE baseline and strengthens IFL search.",
+    )
     args = parser.parse_args()
 
     tools_dir = os.path.dirname(os.path.abspath(__file__))
@@ -107,44 +114,95 @@ def main():
     dataset_slug = dataset_key.lower()
     out_rel_path = args.out if args.out else f"results/grid_search_iflgc_{dataset_slug}_results.csv"
 
-    # Keep a practical search size while covering key IFL-GC controls.
-    search_space = {
-        "gca_drop_scheme": ["degree", "pr", "uniform"],
-        "similarity_percentile": [99.3, 99.5],
-        "max_du_per_node": [10, 14],
-        "unlabeled_weight": [0.2, 0.3],
-        "warmup_epochs": [80, 100],
-        "iflgc_refl_du_weight": [0.2, 0.5],
-        "tau": [0.4, 0.6],
-    }
+    baseline_overrides = {}
+    if args.mode == "balanced":
+        # Keep a practical search size while covering key IFL-GC controls.
+        search_space = {
+            "gca_drop_scheme": ["degree", "pr", "uniform"],
+            "similarity_percentile": [99.3, 99.5],
+            "max_du_per_node": [10, 14],
+            "unlabeled_weight": [0.2, 0.3],
+            "warmup_epochs": [100, 120],
+            "iflgc_refl_du_weight": [0.5, 0.6],
+            "tau": [0.4, 0.6],
+        }
 
-    edge_profiles = [
-        {"drop_edge_rate_1": 0.2, "drop_edge_rate_2": 0.4},
-        {"drop_edge_rate_1": 0.3, "drop_edge_rate_2": 0.5},
-    ]
+        edge_profiles = [
+            {"drop_edge_rate_1": 0.2, "drop_edge_rate_2": 0.4},
+            # {"drop_edge_rate_1": 0.3, "drop_edge_rate_2": 0.5},
+        ]
 
-    feature_profiles = [
-        {"drop_feature_rate_1": 0.3, "drop_feature_rate_2": 0.4},
-        {"drop_feature_rate_1": 0.2, "drop_feature_rate_2": 0.3},
-    ]
+        feature_profiles = [
+            {"drop_feature_rate_1": 0.3, "drop_feature_rate_2": 0.4},
+            # {"drop_feature_rate_1": 0.2, "drop_feature_rate_2": 0.3},
+        ]
 
-    fixed_overrides = {
-        "similarity_threshold": None,
-        "update_interval": 5,
-        "use_mutual_topk": True,
-        "beta": 2.0,
-        "corrected_ramp_epochs": 40,
-        "gca_pr_k": 200,
-    }
+        fixed_overrides = {
+            "similarity_threshold": None,
+            "update_interval": 5,
+            "use_mutual_topk": True,
+            "beta": 2.0,
+            "corrected_ramp_epochs": 40,
+            "gca_pr_k": 200,
+        }
+    else:
+        # Stronger IFL-GC preset: favor structure-aware schemes and denser IFL signal.
+        search_space = {
+            "gca_drop_scheme": ["degree", "pr"],
+            "similarity_percentile": [99.5, 99.7],
+            "max_du_per_node": [12, 14],
+            "unlabeled_weight": [0.2, 0.3],
+            "warmup_epochs": [80, 100],
+            "iflgc_refl_du_weight": [0.4, 0.5, 0.6],
+            "tau": [0.3, 0.4],
+        }
+
+        edge_profiles = [
+            {"drop_edge_rate_1": 0.2, "drop_edge_rate_2": 0.4},
+            {"drop_edge_rate_1": 0.3, "drop_edge_rate_2": 0.5},
+        ]
+
+        feature_profiles = [
+            {"drop_feature_rate_1": 0.3, "drop_feature_rate_2": 0.4},
+        ]
+
+        fixed_overrides = {
+            "similarity_threshold": None,
+            "update_interval": 3,
+            "use_mutual_topk": True,
+            "beta": 2.2,
+            "corrected_ramp_epochs": 20,
+            "gca_pr_k": 200,
+        }
+
+        baseline_overrides = {
+            "drop_edge_rate_1": 0.5,
+            "drop_edge_rate_2": 0.6,
+            "drop_feature_rate_1": 0.5,
+            "drop_feature_rate_2": 0.6,
+            "tau": 1.0,
+        }
+
+    print(f"Mode: {args.mode}")
 
     print(f"[1/3] Running GRACE baseline on {dataset_key}...")
-    baseline_metrics, _ = run_train(
-        grace_dir,
-        config_path,
-        dataset=dataset_key,
-        method="grace",
-        gpu_id=args.gpu_id,
-    )
+    baseline_cfg_path = config_path
+    baseline_temp_cfg = None
+    if baseline_overrides:
+        baseline_temp_cfg = make_temp_config(base_config, dataset_key, baseline_overrides)
+        baseline_cfg_path = baseline_temp_cfg
+
+    try:
+        baseline_metrics, _ = run_train(
+            grace_dir,
+            baseline_cfg_path,
+            dataset=dataset_key,
+            method="grace",
+            gpu_id=args.gpu_id,
+        )
+    finally:
+        if baseline_temp_cfg and os.path.exists(baseline_temp_cfg):
+            os.remove(baseline_temp_cfg)
     baseline_score = robust_score(baseline_metrics, args.std_weight)
     print(
         "Baseline GRACE: "

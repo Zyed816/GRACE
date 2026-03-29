@@ -126,7 +126,7 @@ def run_train(grace_dir, config_path, dataset, method, gpu_id):
     return metrics, combined
 
 
-def run_grid_script(grace_dir, script_name, gpu_id, topk, std_weight, dataset):
+def run_grid_script(grace_dir, script_name, gpu_id, topk, std_weight, dataset, mode):
     start = t()
     print(f"[grid:{script_name}] start")
     cmd = [
@@ -140,6 +140,8 @@ def run_grid_script(grace_dir, script_name, gpu_id, topk, std_weight, dataset):
         str(std_weight),
         "--dataset",
         dataset,
+        "--mode",
+        mode,
     ]
 
     env = os.environ.copy()
@@ -514,6 +516,7 @@ def method_pipeline(grace_dir, base_config, dataset_key, method, grid_script, gr
             topk=max(args.topk_verify, 10),
             std_weight=args.std_weight,
             dataset=dataset_key,
+            mode=args.mode,
         )
         top_rows = read_top_rows(grid_csv_path, args.topk_verify)
 
@@ -575,6 +578,13 @@ def main():
     parser.add_argument("--baseline_runs", type=int, default=3)
     parser.add_argument("--topk_verify", type=int, default=3)
     parser.add_argument("--runs_per_top", type=int, default=3)
+    parser.add_argument(
+        "--mode",
+        type=str,
+        default="balanced",
+        choices=["balanced", "weak-baseline-strong-ifl"],
+        help="Grid-search preset mode passed through to all three grid scripts.",
+    )
     parser.add_argument(
         "--force_grid",
         action="store_true",
