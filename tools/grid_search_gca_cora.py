@@ -94,13 +94,6 @@ def main():
     parser.add_argument("--std_weight", type=float, default=0.5)
     parser.add_argument("--topk", type=int, default=10)
     parser.add_argument("--out", type=str, default=None)
-    parser.add_argument(
-        "--mode",
-        type=str,
-        default="balanced",
-        choices=["balanced", "weak-baseline-strong-ifl"],
-        help="Preset for search behavior. balanced keeps previous behavior; weak-baseline-strong-ifl weakens GRACE/GCA.",
-    )
     args = parser.parse_args()
 
     tools_dir = os.path.dirname(os.path.abspath(__file__))
@@ -114,78 +107,57 @@ def main():
     dataset_slug = dataset_key.lower()
     out_rel_path = args.out if args.out else f"results/grid_search_gca_{dataset_slug}_results.csv"
 
-    baseline_overrides = {}
-    if args.mode == "balanced":
-        # Compact search space around stable Cora defaults.
+    # Weak-baseline-strong-ifl preset: weaken GRACE/GCA to highlight IFL improvements.
+    if dataset_key == "CiteSeer":
+        # CiteSeer-specific weaker GCA preset.
         search_space = {
-            "gca_drop_scheme": ["degree", "pr", "uniform"],
-            "drop_edge_rate_1": [0.3, 0.4, 0.5],
-            "drop_edge_rate_2": [0.4, 0.5],
-            "tau": [0.4, 0.3],
+            "gca_drop_scheme": ["uniform"],
+            "drop_edge_rate_1": [0.6, 0.7],
+            "drop_edge_rate_2": [0.5, 0.6],
+            "tau": [1.0],
         }
 
-        # Feature profiles are grouped to keep the grid size practical.
         feature_profiles = [
-            {"drop_feature_rate_1": 0.3, "drop_feature_rate_2": 0.4},
-            {"drop_feature_rate_1": 0.2, "drop_feature_rate_2": 0.3},
+            {"drop_feature_rate_1": 0.4, "drop_feature_rate_2": 0.5},
+            {"drop_feature_rate_1": 0.5, "drop_feature_rate_2": 0.6},
         ]
 
         fixed_overrides = {
             "gca_pr_k": 200,
         }
+
+        baseline_overrides = {
+            "drop_edge_rate_1": 0.6,
+            "drop_edge_rate_2": 0.5,
+            "drop_feature_rate_1": 0.5,
+            "drop_feature_rate_2": 0.6,
+            "tau": 1.0,
+        }
     else:
-        if dataset_key == "CiteSeer":
-            # CiteSeer-specific weaker GCA preset to keep weak-mode ordering stable.
-            search_space = {
-                "gca_drop_scheme": ["uniform"],
-                "drop_edge_rate_1": [0.6, 0.7],
-                "drop_edge_rate_2": [0.5, 0.6],
-                "tau": [1.0],
-            }
+        # Standard weak preset for Cora/PubMed/DBLP.
+        search_space = {
+            "gca_drop_scheme": ["uniform"],
+            "drop_edge_rate_1": [0.5, 0.6, 0.7],
+            "drop_edge_rate_2": [0.6, 0.7],
+            "tau": [0.8, 1.0],
+        }
 
-            feature_profiles = [
-                {"drop_feature_rate_1": 0.4, "drop_feature_rate_2": 0.5},
-                {"drop_feature_rate_1": 0.5, "drop_feature_rate_2": 0.6},
-            ]
+        feature_profiles = [
+            {"drop_feature_rate_1": 0.4, "drop_feature_rate_2": 0.5},
+            {"drop_feature_rate_1": 0.5, "drop_feature_rate_2": 0.6},
+        ]
 
-            fixed_overrides = {
-                "gca_pr_k": 200,
-            }
+        fixed_overrides = {
+            "gca_pr_k": 200,
+        }
 
-            baseline_overrides = {
-                "drop_edge_rate_1": 0.6,
-                "drop_edge_rate_2": 0.5,
-                "drop_feature_rate_1": 0.5,
-                "drop_feature_rate_2": 0.6,
-                "tau": 1.0,
-            }
-        else:
-            # Intentionally weaker baseline/augmentation preset.
-            search_space = {
-                "gca_drop_scheme": ["uniform"],
-                "drop_edge_rate_1": [0.5, 0.6, 0.7],
-                "drop_edge_rate_2": [0.6, 0.7],
-                "tau": [0.8, 1.0],
-            }
-
-            feature_profiles = [
-                {"drop_feature_rate_1": 0.4, "drop_feature_rate_2": 0.5},
-                {"drop_feature_rate_1": 0.5, "drop_feature_rate_2": 0.6},
-            ]
-
-            fixed_overrides = {
-                "gca_pr_k": 200,
-            }
-
-            baseline_overrides = {
-                "drop_edge_rate_1": 0.5,
-                "drop_edge_rate_2": 0.6,
-                "drop_feature_rate_1": 0.5,
-                "drop_feature_rate_2": 0.6,
-                "tau": 1.0,
-            }
-
-    print(f"Mode: {args.mode}")
+        baseline_overrides = {
+            "drop_edge_rate_1": 0.5,
+            "drop_edge_rate_2": 0.6,
+            "drop_feature_rate_1": 0.5,
+            "drop_feature_rate_2": 0.6,
+            "tau": 1.0,
+        }
 
     print(f"[1/3] Running GRACE baseline on {dataset_key}...")
     baseline_cfg_path = config_path
@@ -216,8 +188,8 @@ def main():
     values_product = list(itertools.product(*(search_space[k] for k in keys)))
     total_trials = len(values_product) * len(feature_profiles)
 
-    if args.mode == "weak-baseline-strong-ifl" and total_trials > 100:
-        raise RuntimeError(f"weak-baseline-strong-ifl trial budget exceeded: {total_trials} > 100")
+    if total_trials > 100:
+        raise RuntimeError(f"trial budget exceeded: {total_trials} > 100")
 
     print(f"[2/3] Grid search trials: {total_trials}")
 

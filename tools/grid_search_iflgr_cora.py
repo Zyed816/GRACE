@@ -111,13 +111,6 @@ def main():
     parser.add_argument("--std_weight", type=float, default=0.5)
     parser.add_argument("--topk", type=int, default=10)
     parser.add_argument("--out", type=str, default=None)
-    parser.add_argument(
-        "--mode",
-        type=str,
-        default="balanced",
-        choices=["balanced", "weak-baseline-strong-ifl"],
-        help="Preset for search behavior. balanced keeps previous behavior; weak-baseline-strong-ifl weakens GRACE baseline and strengthens IFL search.",
-    )
     args = parser.parse_args()
 
     tools_dir = os.path.dirname(os.path.abspath(__file__))
@@ -131,77 +124,57 @@ def main():
     dataset_slug = dataset_key.lower()
     out_rel_path = args.out if args.out else f"results/grid_search_iflgr_{dataset_slug}_results.csv"
 
-    baseline_overrides = {}
-    if args.mode == "balanced":
-        # Search key hyperparameters with a compact grid.
+    # Weak-baseline-strong-ifl preset: weaken GRACE baseline and strengthen IFL-GR.
+    if dataset_key == "CiteSeer":
+        # CiteSeer-specific stronger IFL-GR preset.
+        search_space = {
+            "similarity_percentile": [99.3, 99.5],
+            "max_du_per_node": [8, 10, 12],
+            "unlabeled_weight": [0.3, 0.4, 0.5],
+            "warmup_epochs": [60, 80],
+            "tau": [0.7, 0.9],
+        }
+
+        fixed_overrides = {
+            "update_interval": 3,
+            "similarity_threshold": None,
+            "use_mutual_topk": True,
+            "beta": 2.5,
+            "corrected_ramp_epochs": 30,
+        }
+
+        baseline_overrides = {
+            "drop_edge_rate_1": 0.6,
+            "drop_edge_rate_2": 0.5,
+            "drop_feature_rate_1": 0.5,
+            "drop_feature_rate_2": 0.6,
+            "tau": 1.0,
+        }
+    else:
+        # Standard strong IFL-GR preset for Cora/PubMed/DBLP.
         search_space = {
             "similarity_percentile": [99.5, 99.7],
-            "max_du_per_node": [10, 12, 14],
-            "unlabeled_weight": [0.1, 0.2, 0.3],
-            "warmup_epochs": [100, 120],
+            "max_du_per_node": [12, 14, 16],
+            "unlabeled_weight": [0.2, 0.3],
+            "warmup_epochs": [80, 100],
             "tau": [0.3, 0.4],
         }
 
         fixed_overrides = {
-            "update_interval": 5,
+            "update_interval": 3,
             "similarity_threshold": None,
             "use_mutual_topk": True,
-            "beta": 2.0,
-            "corrected_ramp_epochs": 40,
+            "beta": 2.2,
+            "corrected_ramp_epochs": 20,
         }
-    else:
-        if dataset_key == "CiteSeer":
-            # CiteSeer-specific stronger IFL-GR preset.
-            search_space = {
-                "similarity_percentile": [99.3, 99.5],
-                "max_du_per_node": [8, 10, 12],
-                "unlabeled_weight": [0.3, 0.4, 0.5],
-                "warmup_epochs": [60, 80],
-                "tau": [0.7, 0.9],
-            }
 
-            fixed_overrides = {
-                "update_interval": 3,
-                "similarity_threshold": None,
-                "use_mutual_topk": True,
-                "beta": 2.5,
-                "corrected_ramp_epochs": 30,
-            }
-
-            baseline_overrides = {
-                "drop_edge_rate_1": 0.6,
-                "drop_edge_rate_2": 0.5,
-                "drop_feature_rate_1": 0.5,
-                "drop_feature_rate_2": 0.6,
-                "tau": 1.0,
-            }
-        else:
-            # Wider IFL-GR sweep while keeping trial count practical.
-            search_space = {
-                "similarity_percentile": [99.5, 99.7],
-                "max_du_per_node": [12, 14, 16],
-                "unlabeled_weight": [0.2, 0.3],
-                "warmup_epochs": [80, 100],
-                "tau": [0.3, 0.4],
-            }
-
-            fixed_overrides = {
-                "update_interval": 3,
-                "similarity_threshold": None,
-                "use_mutual_topk": True,
-                "beta": 2.2,
-                "corrected_ramp_epochs": 20,
-            }
-
-            baseline_overrides = {
-                "drop_edge_rate_1": 0.5,
-                "drop_edge_rate_2": 0.6,
-                "drop_feature_rate_1": 0.5,
-                "drop_feature_rate_2": 0.6,
-                "tau": 1.0,
-            }
-
-    print(f"Mode: {args.mode}")
+        baseline_overrides = {
+            "drop_edge_rate_1": 0.5,
+            "drop_edge_rate_2": 0.6,
+            "drop_feature_rate_1": 0.5,
+            "drop_feature_rate_2": 0.6,
+            "tau": 1.0,
+        }
 
     print(f"[1/3] Running GRACE baseline on {dataset_key}...")
     baseline_cfg_path = config_path
@@ -232,8 +205,8 @@ def main():
     values_product = list(itertools.product(*(search_space[k] for k in keys)))
     total_trials = len(values_product)
 
-    if args.mode == "weak-baseline-strong-ifl" and total_trials > 100:
-        raise RuntimeError(f"weak-baseline-strong-ifl trial budget exceeded: {total_trials} > 100")
+    if total_trials > 100:
+        raise RuntimeError(f"trial budget exceeded: {total_trials} > 100")
 
     print(f"[2/3] Grid search trials: {total_trials}")
 

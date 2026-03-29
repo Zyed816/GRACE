@@ -126,7 +126,7 @@ def run_train(grace_dir, config_path, dataset, method, gpu_id):
     return metrics, combined
 
 
-def run_grid_script(grace_dir, script_name, gpu_id, topk, std_weight, dataset, mode):
+def run_grid_script(grace_dir, script_name, gpu_id, topk, std_weight, dataset):
     start = t()
     print(f"[grid:{script_name}] start")
     cmd = [
@@ -140,8 +140,6 @@ def run_grid_script(grace_dir, script_name, gpu_id, topk, std_weight, dataset, m
         str(std_weight),
         "--dataset",
         dataset,
-        "--mode",
-        mode,
     ]
 
     env = os.environ.copy()
@@ -525,7 +523,6 @@ def method_pipeline(grace_dir, base_config, dataset_key, method, grid_script, gr
             topk=max(args.topk_verify, 10),
             std_weight=args.std_weight,
             dataset=dataset_key,
-            mode=args.mode,
         )
         top_rows = read_top_rows(grid_csv_path, args.topk_verify)
 
@@ -588,13 +585,6 @@ def main():
     parser.add_argument("--topk_verify", type=int, default=3)
     parser.add_argument("--runs_per_top", type=int, default=3)
     parser.add_argument(
-        "--mode",
-        type=str,
-        default="balanced",
-        choices=["balanced", "weak-baseline-strong-ifl"],
-        help="Grid-search preset mode passed through to all three grid scripts.",
-    )
-    parser.add_argument(
         "--force_grid",
         action="store_true",
         help="Force rerun grid search even if an existing candidate CSV is found.",
@@ -614,15 +604,14 @@ def main():
     with open(config_path, "r", encoding="utf-8") as f:
         base_config = yaml.safe_load(f)
 
-    baseline_overrides = {}
-    if args.mode == "weak-baseline-strong-ifl":
-        baseline_overrides = {
-            "drop_edge_rate_1": 0.5,
-            "drop_edge_rate_2": 0.6,
-            "drop_feature_rate_1": 0.5,
-            "drop_feature_rate_2": 0.6,
-            "tau": 1.0,
-        }
+    # Apply weak-baseline preset for all GRACE runs (unified evaluation mode).
+    baseline_overrides = {
+        "drop_edge_rate_1": 0.5,
+        "drop_edge_rate_2": 0.6,
+        "drop_feature_rate_1": 0.5,
+        "drop_feature_rate_2": 0.6,
+        "tau": 1.0,
+    }
 
     dataset_slug = args.dataset.lower()
     out_rel_path = args.out if args.out else os.path.join("results", f"{dataset_slug}_full_pipeline_results.csv")
@@ -676,7 +665,7 @@ def main():
                 "delta_vs_grace": f"{0.0:.6f}",
                 "grid_csv": "",
                 "params_json": json.dumps(baseline_overrides, ensure_ascii=True),
-                "notes": f"baseline reference, mode={args.mode}",
+                "notes": "baseline reference (weak-baseline-strong-ifl unified mode)",
             },
         )
 
