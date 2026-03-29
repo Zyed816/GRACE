@@ -146,41 +146,78 @@ def main():
             "gca_pr_k": 200,
         }
     else:
-        # Stronger IFL-GC preset: favor structure-aware schemes and denser IFL signal.
-        search_space = {
-            "gca_drop_scheme": ["degree", "pr"],
-            "similarity_percentile": [99.5, 99.7],
-            "max_du_per_node": [12, 14],
-            "unlabeled_weight": [0.2, 0.3],
-            "warmup_epochs": [80],
-            "iflgc_refl_du_weight": [0.4, 0.5, 0.6],
-            "tau": [0.3, 0.4],
-        }
+        if dataset_key == "CiteSeer":
+            # CiteSeer-specific stronger IFL-GC preset (kept <= 100 trials).
+            search_space = {
+                "gca_drop_scheme": ["degree", "pr"],
+                "similarity_percentile": [99.3, 99.5],
+                "max_du_per_node": [8, 10],
+                "unlabeled_weight": [0.3, 0.4],
+                "warmup_epochs": [80],
+                "iflgc_refl_du_weight": [0.5, 0.6],
+                "tau": [0.7, 0.9],
+            }
 
-        edge_profiles = [
-            {"drop_edge_rate_1": 0.3, "drop_edge_rate_2": 0.5},
-        ]
+            edge_profiles = [
+                {"drop_edge_rate_1": 0.2, "drop_edge_rate_2": 0.0},
+            ]
 
-        feature_profiles = [
-            {"drop_feature_rate_1": 0.3, "drop_feature_rate_2": 0.4},
-        ]
+            feature_profiles = [
+                {"drop_feature_rate_1": 0.3, "drop_feature_rate_2": 0.2},
+            ]
 
-        fixed_overrides = {
-            "similarity_threshold": None,
-            "update_interval": 3,
-            "use_mutual_topk": True,
-            "beta": 2.2,
-            "corrected_ramp_epochs": 20,
-            "gca_pr_k": 200,
-        }
+            fixed_overrides = {
+                "similarity_threshold": None,
+                "update_interval": 3,
+                "use_mutual_topk": True,
+                "beta": 2.5,
+                "corrected_ramp_epochs": 30,
+                "gca_pr_k": 200,
+            }
 
-        baseline_overrides = {
-            "drop_edge_rate_1": 0.5,
-            "drop_edge_rate_2": 0.6,
-            "drop_feature_rate_1": 0.5,
-            "drop_feature_rate_2": 0.6,
-            "tau": 1.0,
-        }
+            baseline_overrides = {
+                "drop_edge_rate_1": 0.6,
+                "drop_edge_rate_2": 0.5,
+                "drop_feature_rate_1": 0.5,
+                "drop_feature_rate_2": 0.6,
+                "tau": 1.0,
+            }
+        else:
+            # Stronger IFL-GC preset: favor structure-aware schemes and denser IFL signal.
+            search_space = {
+                "gca_drop_scheme": ["degree", "pr"],
+                "similarity_percentile": [99.5, 99.7],
+                "max_du_per_node": [12, 14],
+                "unlabeled_weight": [0.2, 0.3],
+                "warmup_epochs": [80],
+                "iflgc_refl_du_weight": [0.4, 0.5, 0.6],
+                "tau": [0.3, 0.4],
+            }
+
+            edge_profiles = [
+                {"drop_edge_rate_1": 0.3, "drop_edge_rate_2": 0.5},
+            ]
+
+            feature_profiles = [
+                {"drop_feature_rate_1": 0.3, "drop_feature_rate_2": 0.4},
+            ]
+
+            fixed_overrides = {
+                "similarity_threshold": None,
+                "update_interval": 3,
+                "use_mutual_topk": True,
+                "beta": 2.2,
+                "corrected_ramp_epochs": 20,
+                "gca_pr_k": 200,
+            }
+
+            baseline_overrides = {
+                "drop_edge_rate_1": 0.5,
+                "drop_edge_rate_2": 0.6,
+                "drop_feature_rate_1": 0.5,
+                "drop_feature_rate_2": 0.6,
+                "tau": 1.0,
+            }
 
     print(f"Mode: {args.mode}")
 

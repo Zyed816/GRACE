@@ -150,30 +150,56 @@ def main():
             "corrected_ramp_epochs": 40,
         }
     else:
-        # Wider IFL-GR sweep while keeping trial count practical.
-        search_space = {
-            "similarity_percentile": [99.5, 99.7],
-            "max_du_per_node": [12, 14, 16],
-            "unlabeled_weight": [0.2, 0.3],
-            "warmup_epochs": [80, 100],
-            "tau": [0.3, 0.4],
-        }
+        if dataset_key == "CiteSeer":
+            # CiteSeer-specific stronger IFL-GR preset.
+            search_space = {
+                "similarity_percentile": [99.3, 99.5],
+                "max_du_per_node": [8, 10, 12],
+                "unlabeled_weight": [0.3, 0.4, 0.5],
+                "warmup_epochs": [60, 80],
+                "tau": [0.7, 0.9],
+            }
 
-        fixed_overrides = {
-            "update_interval": 3,
-            "similarity_threshold": None,
-            "use_mutual_topk": True,
-            "beta": 2.2,
-            "corrected_ramp_epochs": 20,
-        }
+            fixed_overrides = {
+                "update_interval": 3,
+                "similarity_threshold": None,
+                "use_mutual_topk": True,
+                "beta": 2.5,
+                "corrected_ramp_epochs": 30,
+            }
 
-        baseline_overrides = {
-            "drop_edge_rate_1": 0.5,
-            "drop_edge_rate_2": 0.6,
-            "drop_feature_rate_1": 0.5,
-            "drop_feature_rate_2": 0.6,
-            "tau": 1.0,
-        }
+            baseline_overrides = {
+                "drop_edge_rate_1": 0.6,
+                "drop_edge_rate_2": 0.5,
+                "drop_feature_rate_1": 0.5,
+                "drop_feature_rate_2": 0.6,
+                "tau": 1.0,
+            }
+        else:
+            # Wider IFL-GR sweep while keeping trial count practical.
+            search_space = {
+                "similarity_percentile": [99.5, 99.7],
+                "max_du_per_node": [12, 14, 16],
+                "unlabeled_weight": [0.2, 0.3],
+                "warmup_epochs": [80, 100],
+                "tau": [0.3, 0.4],
+            }
+
+            fixed_overrides = {
+                "update_interval": 3,
+                "similarity_threshold": None,
+                "use_mutual_topk": True,
+                "beta": 2.2,
+                "corrected_ramp_epochs": 20,
+            }
+
+            baseline_overrides = {
+                "drop_edge_rate_1": 0.5,
+                "drop_edge_rate_2": 0.6,
+                "drop_feature_rate_1": 0.5,
+                "drop_feature_rate_2": 0.6,
+                "tau": 1.0,
+            }
 
     print(f"Mode: {args.mode}")
 

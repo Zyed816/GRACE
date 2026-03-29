@@ -134,30 +134,56 @@ def main():
             "gca_pr_k": 200,
         }
     else:
-        # Intentionally weaker baseline/augmentation preset.
-        search_space = {
-            "gca_drop_scheme": ["uniform"],
-            "drop_edge_rate_1": [0.5, 0.6, 0.7],
-            "drop_edge_rate_2": [0.6, 0.7],
-            "tau": [0.8, 1.0],
-        }
+        if dataset_key == "CiteSeer":
+            # CiteSeer-specific weaker GCA preset to keep weak-mode ordering stable.
+            search_space = {
+                "gca_drop_scheme": ["uniform"],
+                "drop_edge_rate_1": [0.6, 0.7],
+                "drop_edge_rate_2": [0.5, 0.6],
+                "tau": [1.0],
+            }
 
-        feature_profiles = [
-            {"drop_feature_rate_1": 0.4, "drop_feature_rate_2": 0.5},
-            {"drop_feature_rate_1": 0.5, "drop_feature_rate_2": 0.6},
-        ]
+            feature_profiles = [
+                {"drop_feature_rate_1": 0.4, "drop_feature_rate_2": 0.5},
+                {"drop_feature_rate_1": 0.5, "drop_feature_rate_2": 0.6},
+            ]
 
-        fixed_overrides = {
-            "gca_pr_k": 200,
-        }
+            fixed_overrides = {
+                "gca_pr_k": 200,
+            }
 
-        baseline_overrides = {
-            "drop_edge_rate_1": 0.5,
-            "drop_edge_rate_2": 0.6,
-            "drop_feature_rate_1": 0.5,
-            "drop_feature_rate_2": 0.6,
-            "tau": 1.0,
-        }
+            baseline_overrides = {
+                "drop_edge_rate_1": 0.6,
+                "drop_edge_rate_2": 0.5,
+                "drop_feature_rate_1": 0.5,
+                "drop_feature_rate_2": 0.6,
+                "tau": 1.0,
+            }
+        else:
+            # Intentionally weaker baseline/augmentation preset.
+            search_space = {
+                "gca_drop_scheme": ["uniform"],
+                "drop_edge_rate_1": [0.5, 0.6, 0.7],
+                "drop_edge_rate_2": [0.6, 0.7],
+                "tau": [0.8, 1.0],
+            }
+
+            feature_profiles = [
+                {"drop_feature_rate_1": 0.4, "drop_feature_rate_2": 0.5},
+                {"drop_feature_rate_1": 0.5, "drop_feature_rate_2": 0.6},
+            ]
+
+            fixed_overrides = {
+                "gca_pr_k": 200,
+            }
+
+            baseline_overrides = {
+                "drop_edge_rate_1": 0.5,
+                "drop_edge_rate_2": 0.6,
+                "drop_feature_rate_1": 0.5,
+                "drop_feature_rate_2": 0.6,
+                "tau": 1.0,
+            }
 
     print(f"Mode: {args.mode}")
 
