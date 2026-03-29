@@ -6,11 +6,11 @@ Cora:
   activation: 'relu'
   base_model: 'GCNConv'
   num_layers: 2
-  drop_edge_rate_1: 0.2
-  drop_edge_rate_2: 0.4
-  drop_feature_rate_1: 0.3
-  drop_feature_rate_2: 0.4
-  tau: 0.4
+  drop_edge_rate_1: 0.5
+  drop_edge_rate_2: 0.6
+  drop_feature_rate_1: 0.5
+  drop_feature_rate_2: 0.6
+  tau: 0.8
   num_epochs: 200
   weight_decay: 0.00001
 CiteSeer:
@@ -21,10 +21,10 @@ CiteSeer:
   activation: 'prelu'
   base_model: 'GCNConv'
   num_layers: 2
-  drop_edge_rate_1: 0.2
-  drop_edge_rate_2: 0.0
-  drop_feature_rate_1: 0.3
-  drop_feature_rate_2: 0.2
+  drop_edge_rate_1: 0.6
+  drop_edge_rate_2: 0.5
+  drop_feature_rate_1: 0.5
+  drop_feature_rate_2: 0.6
   tau: 0.9
   num_epochs: 200
   weight_decay: 0.00001
@@ -36,11 +36,11 @@ PubMed:
   activation: 'relu'
   base_model: 'GCNConv'
   num_layers: 2
-  drop_edge_rate_1: 0.4
-  drop_edge_rate_2: 0.1
-  drop_feature_rate_1: 0.0
-  drop_feature_rate_2: 0.2
-  tau: 0.7
+  drop_edge_rate_1: 0.5
+  drop_edge_rate_2: 0.6
+  drop_feature_rate_1: 0.5
+  drop_feature_rate_2: 0.6
+  tau: 0.8
   # 防止 OOM 错误，调整批量大小
   contrastive_batch_size: 20000
   corrected_batch_size: 20000
@@ -55,11 +55,11 @@ DBLP:
   activation: 'relu'
   base_model: 'GCNConv'
   num_layers: 2
-  drop_edge_rate_1: 0.1
-  drop_edge_rate_2: 0.4
-  drop_feature_rate_1: 0.1
-  drop_feature_rate_2: 0.0
-  tau: 0.7
+  drop_edge_rate_1: 0.5
+  drop_edge_rate_2: 0.6
+  drop_feature_rate_1: 0.5
+  drop_feature_rate_2: 0.6
+  tau: 0.8
   # Lower OOM risk on large dataset by enabling chunked computation.
   contrastive_batch_size: 12288
   corrected_batch_size: 12288

@@ -604,13 +604,13 @@ def main():
     with open(config_path, "r", encoding="utf-8") as f:
         base_config = yaml.safe_load(f)
 
-    # Apply weak-baseline preset for all GRACE runs (unified evaluation mode).
+    dataset_cfg = base_config.get(args.dataset, {})
     baseline_overrides = {
-        "drop_edge_rate_1": 0.5,
-        "drop_edge_rate_2": 0.6,
-        "drop_feature_rate_1": 0.5,
-        "drop_feature_rate_2": 0.6,
-        "tau": 1.0,
+        "drop_edge_rate_1": float(dataset_cfg["drop_edge_rate_1"]),
+        "drop_edge_rate_2": float(dataset_cfg["drop_edge_rate_2"]),
+        "drop_feature_rate_1": float(dataset_cfg["drop_feature_rate_1"]),
+        "drop_feature_rate_2": float(dataset_cfg["drop_feature_rate_2"]),
+        "tau": float(dataset_cfg["tau"]),
     }
 
     dataset_slug = args.dataset.lower()

@@ -124,6 +124,15 @@ def main():
     dataset_slug = dataset_key.lower()
     out_rel_path = args.out if args.out else f"results/grid_search_iflgr_{dataset_slug}_results.csv"
 
+    dataset_cfg = base_config.get(dataset_key, {})
+    baseline_overrides = {
+        "drop_edge_rate_1": float(dataset_cfg["drop_edge_rate_1"]),
+        "drop_edge_rate_2": float(dataset_cfg["drop_edge_rate_2"]),
+        "drop_feature_rate_1": float(dataset_cfg["drop_feature_rate_1"]),
+        "drop_feature_rate_2": float(dataset_cfg["drop_feature_rate_2"]),
+        "tau": float(dataset_cfg["tau"]),
+    }
+
     # Weak-baseline-strong-ifl preset: weaken GRACE baseline and strengthen IFL-GR.
     if dataset_key == "CiteSeer":
         # CiteSeer-specific stronger IFL-GR preset.
@@ -143,13 +152,6 @@ def main():
             "corrected_ramp_epochs": 30,
         }
 
-        baseline_overrides = {
-            "drop_edge_rate_1": 0.6,
-            "drop_edge_rate_2": 0.5,
-            "drop_feature_rate_1": 0.5,
-            "drop_feature_rate_2": 0.6,
-            "tau": 1.0,
-        }
     else:
         # Standard strong IFL-GR preset for Cora/PubMed/DBLP.
         search_space = {
@@ -166,14 +168,6 @@ def main():
             "use_mutual_topk": True,
             "beta": 2.2,
             "corrected_ramp_epochs": 20,
-        }
-
-        baseline_overrides = {
-            "drop_edge_rate_1": 0.5,
-            "drop_edge_rate_2": 0.6,
-            "drop_feature_rate_1": 0.5,
-            "drop_feature_rate_2": 0.6,
-            "tau": 1.0,
         }
 
     print(f"[1/3] Running GRACE baseline on {dataset_key}...")
