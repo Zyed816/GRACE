@@ -190,6 +190,9 @@ def main():
     values_product = list(itertools.product(*(search_space[k] for k in keys)))
     total_trials = len(values_product) * len(feature_profiles)
 
+    if args.mode == "weak-baseline-strong-ifl" and total_trials > 100:
+        raise RuntimeError(f"weak-baseline-strong-ifl trial budget exceeded: {total_trials} > 100")
+
     print(f"[2/3] Grid search trials: {total_trials}")
 
     results = []

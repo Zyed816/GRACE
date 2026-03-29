@@ -152,11 +152,11 @@ def main():
     else:
         # Wider IFL-GR sweep while keeping trial count practical.
         search_space = {
-            "similarity_percentile": [99.5, 99.7, 99.8],
+            "similarity_percentile": [99.5, 99.7],
             "max_du_per_node": [12, 14, 16],
-            "unlabeled_weight": [0.2, 0.3, 0.4],
-            "warmup_epochs": [80, 100, 120],
-            "tau": [0.3, 0.4, 0.5],
+            "unlabeled_weight": [0.2, 0.3],
+            "warmup_epochs": [80, 100],
+            "tau": [0.3, 0.4],
         }
 
         fixed_overrides = {
@@ -205,6 +205,9 @@ def main():
     keys = list(search_space.keys())
     values_product = list(itertools.product(*(search_space[k] for k in keys)))
     total_trials = len(values_product)
+
+    if args.mode == "weak-baseline-strong-ifl" and total_trials > 100:
+        raise RuntimeError(f"weak-baseline-strong-ifl trial budget exceeded: {total_trials} > 100")
 
     print(f"[2/3] Grid search trials: {total_trials}")
 

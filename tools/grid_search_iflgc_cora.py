@@ -152,13 +152,12 @@ def main():
             "similarity_percentile": [99.5, 99.7],
             "max_du_per_node": [12, 14],
             "unlabeled_weight": [0.2, 0.3],
-            "warmup_epochs": [80, 100],
+            "warmup_epochs": [80],
             "iflgc_refl_du_weight": [0.4, 0.5, 0.6],
             "tau": [0.3, 0.4],
         }
 
         edge_profiles = [
-            {"drop_edge_rate_1": 0.2, "drop_edge_rate_2": 0.4},
             {"drop_edge_rate_1": 0.3, "drop_edge_rate_2": 0.5},
         ]
 
@@ -213,6 +212,9 @@ def main():
     keys = list(search_space.keys())
     values_product = list(itertools.product(*(search_space[k] for k in keys)))
     total_trials = len(values_product) * len(edge_profiles) * len(feature_profiles)
+
+    if args.mode == "weak-baseline-strong-ifl" and total_trials > 100:
+        raise RuntimeError(f"weak-baseline-strong-ifl trial budget exceeded: {total_trials} > 100")
 
     print(f"[2/3] Grid search trials: {total_trials}")
 
