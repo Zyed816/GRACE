@@ -152,6 +152,24 @@ def main():
             "corrected_ramp_epochs": 30,
         }
 
+    elif dataset_key in {"PubMed", "DBLP"}:
+        # Large datasets: compact strong IFL-GR sweep to reduce runtime.
+        search_space = {
+            "similarity_percentile": [99.5, 99.7],
+            "max_du_per_node": [12, 14],
+            "unlabeled_weight": [0.2],
+            "warmup_epochs": [80, 100],
+            "tau": [0.3, 0.4],
+        }
+
+        fixed_overrides = {
+            "update_interval": 3,
+            "similarity_threshold": None,
+            "use_mutual_topk": True,
+            "beta": 2.2,
+            "corrected_ramp_epochs": 20,
+        }
+
     else:
         # Standard strong IFL-GR preset for Cora/PubMed/DBLP.
         search_space = {

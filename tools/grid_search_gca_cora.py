@@ -120,7 +120,7 @@ def main():
     if dataset_key == "CiteSeer":
         # CiteSeer-specific weaker GCA preset.
         search_space = {
-            "gca_drop_scheme": ["uniform"],
+            "gca_drop_scheme": ["uniform", "degree", "pr"],
             "drop_edge_rate_1": [0.6, 0.7],
             "drop_edge_rate_2": [0.5, 0.6],
             "tau": [1.0],
@@ -135,10 +135,28 @@ def main():
             "gca_pr_k": 200,
         }
 
+    elif dataset_key in {"PubMed", "DBLP"}:
+        # Large datasets: compact weak GCA sweep to reduce runtime.
+        search_space = {
+            "gca_drop_scheme": ["uniform", "degree", "pr"],
+            "drop_edge_rate_1": [0.5, 0.6],
+            "drop_edge_rate_2": [0.6],
+            "tau": [0.8, 1.0],
+        }
+
+        feature_profiles = [
+            {"drop_feature_rate_1": 0.4, "drop_feature_rate_2": 0.5},
+            {"drop_feature_rate_1": 0.5, "drop_feature_rate_2": 0.6},
+        ]
+
+        fixed_overrides = {
+            "gca_pr_k": 200,
+        }
+
     else:
         # Standard weak preset for Cora/PubMed/DBLP.
         search_space = {
-            "gca_drop_scheme": ["uniform"],
+            "gca_drop_scheme": ["uniform", "degree", "pr"],
             "drop_edge_rate_1": [0.5, 0.6, 0.7],
             "drop_edge_rate_2": [0.6, 0.7],
             "tau": [0.8, 1.0],
