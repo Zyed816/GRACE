@@ -8,6 +8,8 @@ import statistics
 import subprocess
 import sys
 import tempfile
+import threading
+import queue
 from datetime import datetime
 from time import perf_counter as t
 import time
@@ -55,68 +57,74 @@ def run_train(grace_dir, config_path, dataset, method, gpu_id):
         str(gpu_id),
     ]
 
+    proc = subprocess.Popen(
+        cmd,
+        cwd=grace_dir,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        bufsize=1,
+    )
+
+    output_lines = []
+
     if dataset in {"PubMed", "DBLP"}:
         print(
             f"[train:{method}] {dataset} detected; first output may take longer. "
             "Will print heartbeat every 30s."
         )
-        with tempfile.NamedTemporaryFile("w+", suffix="_pubmed_train.log", delete=False, encoding="utf-8") as lf:
-            log_path = lf.name
 
-        try:
-            with open(log_path, "w", encoding="utf-8") as logf:
-                proc = subprocess.Popen(
-                    cmd,
-                    cwd=grace_dir,
-                    text=True,
-                    stdout=logf,
-                    stderr=subprocess.STDOUT,
+        line_queue = queue.Queue()
+
+        def _reader():
+            assert proc.stdout is not None
+            for line in proc.stdout:
+                line_queue.put(line)
+
+        reader_thread = threading.Thread(target=_reader, daemon=True)
+        reader_thread.start()
+
+        last_heartbeat = t()
+        while proc.poll() is None or not line_queue.empty():
+            had_output = False
+            while True:
+                try:
+                    line = line_queue.get_nowait()
+                except queue.Empty:
+                    break
+                had_output = True
+                output_lines.append(line)
+                print(f"[train:{method}] {line.rstrip()}")
+
+            now = t()
+            if now - last_heartbeat >= 30.0:
+                elapsed = int(now - start)
+                print(
+                    f"[train:{method}] {dataset} still running... "
+                    f"elapsed={elapsed}s"
                 )
+                last_heartbeat = now
 
-                last_heartbeat = t()
-                while proc.poll() is None:
-                    now = t()
-                    if now - last_heartbeat >= 30.0:
-                        elapsed = int(now - start)
-                        print(
-                            f"[train:{method}] {dataset} still running... "
-                            f"elapsed={elapsed}s"
-                        )
-                        last_heartbeat = now
-                    time.sleep(2.0)
+            if not had_output:
+                time.sleep(0.2)
 
-            with open(log_path, "r", encoding="utf-8") as logf:
-                combined = logf.read()
-
-            if proc.returncode != 0:
-                raise RuntimeError(
-                    "Training failed.\n"
-                    f"Command: {' '.join(cmd)}\n"
-                    f"Return code: {proc.returncode}\n"
-                    f"OUTPUT:\n{combined}"
-                )
-        finally:
-            if os.path.exists(log_path):
-                os.remove(log_path)
+        reader_thread.join(timeout=1.0)
     else:
-        proc = subprocess.run(
-            cmd,
-            cwd=grace_dir,
-            text=True,
-            capture_output=True,
-            check=False,
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            output_lines.append(line)
+            print(f"[train:{method}] {line.rstrip()}")
+        proc.wait()
+
+    combined = "".join(output_lines)
+
+    if proc.returncode != 0:
+        raise RuntimeError(
+            "Training failed.\n"
+            f"Command: {' '.join(cmd)}\n"
+            f"Return code: {proc.returncode}\n"
+            f"OUTPUT:\n{combined}"
         )
-
-        if proc.returncode != 0:
-            raise RuntimeError(
-                "Training failed.\n"
-                f"Command: {' '.join(cmd)}\n"
-                f"Return code: {proc.returncode}\n"
-                f"STDOUT:\n{proc.stdout}\n"
-                f"STDERR:\n{proc.stderr}"
-            )
-
-        combined = proc.stdout + "\n" + proc.stderr
 
     metrics = parse_metrics(combined)
     print(
@@ -150,37 +158,53 @@ def run_grid_script(grace_dir, script_name, gpu_id, topk, std_weight, dataset):
             f"[grid:{script_name}] {dataset} detected; per-trial output may be sparse. "
             "Will print heartbeat every 30s."
         )
-        with tempfile.NamedTemporaryFile("w+", suffix="_pubmed_grid.log", delete=False, encoding="utf-8") as lf:
-            log_path = lf.name
+        proc = subprocess.Popen(
+            cmd,
+            cwd=grace_dir,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            env=env,
+            bufsize=1,
+        )
 
-        try:
-            with open(log_path, "w", encoding="utf-8") as logf:
-                proc = subprocess.Popen(
-                    cmd,
-                    cwd=grace_dir,
-                    text=True,
-                    stdout=logf,
-                    stderr=subprocess.STDOUT,
-                    env=env,
+        output_lines = []
+        line_queue = queue.Queue()
+
+        def _reader():
+            assert proc.stdout is not None
+            for line in proc.stdout:
+                line_queue.put(line)
+
+        reader_thread = threading.Thread(target=_reader, daemon=True)
+        reader_thread.start()
+
+        last_heartbeat = t()
+        while proc.poll() is None or not line_queue.empty():
+            had_output = False
+            while True:
+                try:
+                    line = line_queue.get_nowait()
+                except queue.Empty:
+                    break
+                had_output = True
+                output_lines.append(line)
+                print(f"[grid:{script_name}] {line.rstrip()}")
+
+            now = t()
+            if now - last_heartbeat >= 30.0:
+                elapsed = int(now - start)
+                print(
+                    f"[grid:{script_name}] {dataset} grid search still running... "
+                    f"elapsed={elapsed}s"
                 )
+                last_heartbeat = now
 
-                last_heartbeat = t()
-                while proc.poll() is None:
-                    now = t()
-                    if now - last_heartbeat >= 30.0:
-                        elapsed = int(now - start)
-                        print(
-                            f"[grid:{script_name}] {dataset} grid search still running... "
-                            f"elapsed={elapsed}s"
-                        )
-                        last_heartbeat = now
-                    time.sleep(2.0)
+            if not had_output:
+                time.sleep(0.2)
 
-            with open(log_path, "r", encoding="utf-8") as logf:
-                combined_output = logf.read()
-        finally:
-            if os.path.exists(log_path):
-                os.remove(log_path)
+        reader_thread.join(timeout=1.0)
+        combined_output = "".join(output_lines)
     else:
         proc = subprocess.Popen(
             cmd,
