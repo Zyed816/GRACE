@@ -259,6 +259,15 @@ def try_read_top_rows(csv_path, topk):
     return rows
 
 
+def make_temp_config(base_config, dataset_key, dataset_updates):
+    cfg = copy.deepcopy(base_config)
+    cfg[dataset_key].update(dataset_updates)
+
+    with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False, encoding="utf-8") as f:
+        yaml.safe_dump(cfg, f, sort_keys=False)
+        return f.name
+
+
 def make_temp_config_for_method(base_config, dataset_key, csv_row, method):
     cfg = copy.deepcopy(base_config)
 
@@ -615,6 +624,15 @@ def main():
     with open(config_path, "r", encoding="utf-8") as f:
         base_config = yaml.safe_load(f)
 
+    dataset_cfg = base_config.get(args.dataset, {})
+    baseline_overrides = {
+        "drop_edge_rate_1": float(dataset_cfg["drop_edge_rate_1"]),
+        "drop_edge_rate_2": float(dataset_cfg["drop_edge_rate_2"]),
+        "drop_feature_rate_1": float(dataset_cfg["drop_feature_rate_1"]),
+        "drop_feature_rate_2": float(dataset_cfg["drop_feature_rate_2"]),
+        "tau": float(dataset_cfg["tau"]),
+    }
+
     dataset_slug = args.dataset.lower()
     out_rel_path = args.out if args.out else os.path.join("results", f"{dataset_slug}_full_pipeline_results.csv")
     out_path = os.path.join(grace_dir, out_rel_path)
@@ -631,13 +649,23 @@ def main():
     print("=== [grace] baseline runs ===")
     baseline_scores = []
     for run_idx in range(1, args.baseline_runs + 1):
-        metrics, _ = run_train(
-            grace_dir,
-            config_path,
-            dataset=args.dataset,
-            method="grace",
-            gpu_id=args.gpu_id,
-        )
+        baseline_cfg_path = config_path
+        baseline_temp_cfg = None
+        if baseline_overrides:
+            baseline_temp_cfg = make_temp_config(base_config, args.dataset, baseline_overrides)
+            baseline_cfg_path = baseline_temp_cfg
+
+        try:
+            metrics, _ = run_train(
+                grace_dir,
+                baseline_cfg_path,
+                dataset=args.dataset,
+                method="grace",
+                gpu_id=args.gpu_id,
+            )
+        finally:
+            if baseline_temp_cfg and os.path.exists(baseline_temp_cfg):
+                os.remove(baseline_temp_cfg)
         score = robust_score(metrics, args.std_weight)
         baseline_scores.append(score)
 
@@ -656,8 +684,8 @@ def main():
                 "robust_score": f"{score:.6f}",
                 "delta_vs_grace": f"{0.0:.6f}",
                 "grid_csv": "",
-                "params_json": "{}",
-                "notes": "baseline reference",
+                "params_json": json.dumps(baseline_overrides, ensure_ascii=True),
+                "notes": "baseline reference (weak-baseline-strong-ifl unified mode)",
             },
         )
 

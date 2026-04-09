@@ -107,32 +107,88 @@ def main():
     dataset_slug = dataset_key.lower()
     out_rel_path = args.out if args.out else f"results/grid_search_gca_{dataset_slug}_results.csv"
 
-    # Compact search space around stable Cora defaults.
-    search_space = {
-        "gca_drop_scheme": ["degree", "pr", "uniform"],
-        "drop_edge_rate_1": [0.2, 0.3, 0.4],
-        "drop_edge_rate_2": [0.3, 0.4, 0.5],
-        "tau": [0.4, 0.6],
+    dataset_cfg = base_config.get(dataset_key, {})
+    baseline_overrides = {
+        "drop_edge_rate_1": float(dataset_cfg["drop_edge_rate_1"]),
+        "drop_edge_rate_2": float(dataset_cfg["drop_edge_rate_2"]),
+        "drop_feature_rate_1": float(dataset_cfg["drop_feature_rate_1"]),
+        "drop_feature_rate_2": float(dataset_cfg["drop_feature_rate_2"]),
+        "tau": float(dataset_cfg["tau"]),
     }
 
-    # Feature profiles are grouped to keep the grid size practical.
-    feature_profiles = [
-        {"drop_feature_rate_1": 0.3, "drop_feature_rate_2": 0.4},
-        {"drop_feature_rate_1": 0.2, "drop_feature_rate_2": 0.3},
-    ]
+    # Weak-baseline-strong-ifl preset: weaken GRACE/GCA to highlight IFL improvements.
+    if dataset_key == "CiteSeer":
+        # CiteSeer-specific weaker GCA preset.
+        search_space = {
+            "gca_drop_scheme": ["uniform", "degree", "pr"],
+            "drop_edge_rate_1": [0.6, 0.7],
+            "drop_edge_rate_2": [0.5, 0.6],
+            "tau": [1.0],
+        }
 
-    fixed_overrides = {
-        "gca_pr_k": 200,
-    }
+        feature_profiles = [
+            {"drop_feature_rate_1": 0.4, "drop_feature_rate_2": 0.5},
+            {"drop_feature_rate_1": 0.5, "drop_feature_rate_2": 0.6},
+        ]
+
+        fixed_overrides = {
+            "gca_pr_k": 200,
+        }
+
+    elif dataset_key in {"PubMed", "DBLP"}:
+        # Large datasets: compact weak GCA sweep to reduce runtime.
+        search_space = {
+            "gca_drop_scheme": ["uniform", "degree", "pr"],
+            "drop_edge_rate_1": [0.5, 0.6],
+            "drop_edge_rate_2": [0.6],
+            "tau": [0.8, 1.0],
+        }
+
+        feature_profiles = [
+            {"drop_feature_rate_1": 0.4, "drop_feature_rate_2": 0.5},
+            {"drop_feature_rate_1": 0.5, "drop_feature_rate_2": 0.6},
+        ]
+
+        fixed_overrides = {
+            "gca_pr_k": 200,
+        }
+
+    else:
+        # Standard weak preset for Cora/PubMed/DBLP.
+        search_space = {
+            "gca_drop_scheme": ["uniform", "degree", "pr"],
+            "drop_edge_rate_1": [0.5, 0.6, 0.7],
+            "drop_edge_rate_2": [0.6, 0.7],
+            "tau": [0.8, 1.0],
+        }
+
+        feature_profiles = [
+            {"drop_feature_rate_1": 0.4, "drop_feature_rate_2": 0.5},
+            {"drop_feature_rate_1": 0.5, "drop_feature_rate_2": 0.6},
+        ]
+
+        fixed_overrides = {
+            "gca_pr_k": 200,
+        }
 
     print(f"[1/3] Running GRACE baseline on {dataset_key}...")
-    baseline_metrics, _ = run_train(
-        grace_dir,
-        config_path,
-        dataset=dataset_key,
-        method="grace",
-        gpu_id=args.gpu_id,
-    )
+    baseline_cfg_path = config_path
+    baseline_temp_cfg = None
+    if baseline_overrides:
+        baseline_temp_cfg = make_temp_config(base_config, dataset_key, baseline_overrides)
+        baseline_cfg_path = baseline_temp_cfg
+
+    try:
+        baseline_metrics, _ = run_train(
+            grace_dir,
+            baseline_cfg_path,
+            dataset=dataset_key,
+            method="grace",
+            gpu_id=args.gpu_id,
+        )
+    finally:
+        if baseline_temp_cfg and os.path.exists(baseline_temp_cfg):
+            os.remove(baseline_temp_cfg)
     baseline_score = robust_score(baseline_metrics, args.std_weight)
     print(
         "Baseline GRACE: "
@@ -143,6 +199,9 @@ def main():
     keys = list(search_space.keys())
     values_product = list(itertools.product(*(search_space[k] for k in keys)))
     total_trials = len(values_product) * len(feature_profiles)
+
+    if total_trials > 100:
+        raise RuntimeError(f"trial budget exceeded: {total_trials} > 100")
 
     print(f"[2/3] Grid search trials: {total_trials}")
 

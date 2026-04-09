@@ -124,31 +124,88 @@ def main():
     dataset_slug = dataset_key.lower()
     out_rel_path = args.out if args.out else f"results/grid_search_iflgr_{dataset_slug}_results.csv"
 
-    # Search key hyperparameters with a compact grid.
-    search_space = {
-        "similarity_percentile": [99.3, 99.5, 99.7],
-        "max_du_per_node": [6, 10, 14],
-        "unlabeled_weight": [0.1, 0.2, 0.3],
-        "warmup_epochs": [100, 120],
-        "tau": [0.4, 0.6],
+    dataset_cfg = base_config.get(dataset_key, {})
+    baseline_overrides = {
+        "drop_edge_rate_1": float(dataset_cfg["drop_edge_rate_1"]),
+        "drop_edge_rate_2": float(dataset_cfg["drop_edge_rate_2"]),
+        "drop_feature_rate_1": float(dataset_cfg["drop_feature_rate_1"]),
+        "drop_feature_rate_2": float(dataset_cfg["drop_feature_rate_2"]),
+        "tau": float(dataset_cfg["tau"]),
     }
 
-    fixed_overrides = {
-        "update_interval": 5,
-        "similarity_threshold": None,
-        "use_mutual_topk": True,
-        "beta": 2.0,
-        "corrected_ramp_epochs": 40,
-    }
+    # Weak-baseline-strong-ifl preset: weaken GRACE baseline and strengthen IFL-GR.
+    if dataset_key == "CiteSeer":
+        # CiteSeer-specific stronger IFL-GR preset.
+        search_space = {
+            "similarity_percentile": [99.3, 99.5],
+            "max_du_per_node": [8, 10, 12],
+            "unlabeled_weight": [0.3, 0.4, 0.5],
+            "warmup_epochs": [60, 80],
+            "tau": [0.7, 0.9],
+        }
+
+        fixed_overrides = {
+            "update_interval": 3,
+            "similarity_threshold": None,
+            "use_mutual_topk": True,
+            "beta": 2.5,
+            "corrected_ramp_epochs": 30,
+        }
+
+    elif dataset_key in {"PubMed", "DBLP"}:
+        # Large datasets: compact strong IFL-GR sweep to reduce runtime.
+        search_space = {
+            "similarity_percentile": [99.5, 99.7],
+            "max_du_per_node": [12, 14],
+            "unlabeled_weight": [0.2],
+            "warmup_epochs": [80, 100],
+            "tau": [0.3, 0.4],
+        }
+
+        fixed_overrides = {
+            "update_interval": 3,
+            "similarity_threshold": None,
+            "use_mutual_topk": True,
+            "beta": 2.2,
+            "corrected_ramp_epochs": 20,
+        }
+
+    else:
+        # Standard strong IFL-GR preset for Cora/PubMed/DBLP.
+        search_space = {
+            "similarity_percentile": [99.5, 99.7],
+            "max_du_per_node": [12, 14, 16],
+            "unlabeled_weight": [0.2, 0.3],
+            "warmup_epochs": [80, 100],
+            "tau": [0.3, 0.4],
+        }
+
+        fixed_overrides = {
+            "update_interval": 3,
+            "similarity_threshold": None,
+            "use_mutual_topk": True,
+            "beta": 2.2,
+            "corrected_ramp_epochs": 20,
+        }
 
     print(f"[1/3] Running GRACE baseline on {dataset_key}...")
-    baseline_metrics, _ = run_train(
-        grace_dir,
-        config_path,
-        dataset=dataset_key,
-        method="grace",
-        gpu_id=args.gpu_id,
-    )
+    baseline_cfg_path = config_path
+    baseline_temp_cfg = None
+    if baseline_overrides:
+        baseline_temp_cfg = make_temp_config(base_config, dataset_key, baseline_overrides)
+        baseline_cfg_path = baseline_temp_cfg
+
+    try:
+        baseline_metrics, _ = run_train(
+            grace_dir,
+            baseline_cfg_path,
+            dataset=dataset_key,
+            method="grace",
+            gpu_id=args.gpu_id,
+        )
+    finally:
+        if baseline_temp_cfg and os.path.exists(baseline_temp_cfg):
+            os.remove(baseline_temp_cfg)
     baseline_score = robust_score(baseline_metrics, args.std_weight)
     print(
         "Baseline GRACE: "
@@ -159,6 +216,9 @@ def main():
     keys = list(search_space.keys())
     values_product = list(itertools.product(*(search_space[k] for k in keys)))
     total_trials = len(values_product)
+
+    if total_trials > 100:
+        raise RuntimeError(f"trial budget exceeded: {total_trials} > 100")
 
     print(f"[2/3] Grid search trials: {total_trials}")
 
