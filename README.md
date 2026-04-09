@@ -182,6 +182,12 @@ Continue even if one dataset fails:
 python tools/run_selected_full_pipelines.py --datasets Cora CiteSeer PubMed DBLP --gpu_id 0 --continue_on_error
 ```
 
+If you want to run only PubMed and DBLP:
+
+```bash
+python tools/run_selected_full_pipelines.py --datasets PubMed DBLP --gpu_id 0
+```
+
 ### Full Pipeline Output | 完整流水线输出
 
 By default:
@@ -246,6 +252,7 @@ Success signals:
   - `contrastive_batch_size`
   - `corrected_batch_size`
   - `mining_batch_size`
+- PubMed/DBLP now use the same live terminal output style as Cora/CiteSeer, and still keep 30-second heartbeat messages during long baseline or grid-search steps
 
 PubMed/DBLP 训练耗时更长，建议优先在 Cora/CiteSeer 验证流程后再跑全量实验。
 
