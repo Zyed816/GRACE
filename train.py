@@ -11,7 +11,7 @@ import torch_geometric.transforms as T
 import torch.nn.functional as F
 import torch.nn as nn
 from torch_geometric.datasets import Planetoid, CitationFull
-from torch_geometric.utils import dropout_adj, degree, to_undirected
+from torch_geometric.utils import dropout_adj, degree, to_undirected, subgraph
 from torch_geometric.nn import GCNConv
 
 from model import Encoder, Model, drop_feature
@@ -102,6 +102,197 @@ def percentile_threshold(values: torch.Tensor, percentile: float) -> torch.Tenso
     sorted_vals = torch.sort(values).values
     idx = int((percentile / 100.0) * (sorted_vals.numel() - 1))
     return sorted_vals[idx]
+
+
+def _stratified_sample_indices(labels: torch.Tensor, target_size: int, seed: int) -> torch.Tensor:
+    labels = labels.view(-1).cpu()
+    num_nodes = int(labels.numel())
+    target_size = int(max(1, min(target_size, num_nodes)))
+
+    classes, counts = torch.unique(labels, sorted=True, return_counts=True)
+    num_classes = int(classes.numel())
+    if target_size < num_classes:
+        raise ValueError(
+            f"subset_num_nodes={target_size} is smaller than number of classes={num_classes}; "
+            "cannot keep stratified coverage for all classes."
+        )
+
+    # Base allocation from class proportions.
+    counts_f = counts.to(torch.float32)
+    expected = counts_f / float(num_nodes) * float(target_size)
+    alloc = torch.floor(expected).to(torch.long)
+
+    # Keep at least one node for each class.
+    alloc = torch.clamp(alloc, min=1)
+    alloc = torch.minimum(alloc, counts)
+
+    used = int(alloc.sum().item())
+    remain = target_size - used
+
+    if remain > 0:
+        frac = expected - torch.floor(expected)
+        order = torch.argsort(frac, descending=True)
+        for idx in order.tolist():
+            if remain <= 0:
+                break
+            room = int(counts[idx].item() - alloc[idx].item())
+            if room <= 0:
+                continue
+            take = min(room, remain)
+            alloc[idx] += take
+            remain -= take
+
+    if remain < 0:
+        # Trim from largest allocations while keeping one sample per class.
+        order = torch.argsort(alloc, descending=True)
+        to_trim = -remain
+        for idx in order.tolist():
+            if to_trim <= 0:
+                break
+            room = int(alloc[idx].item() - 1)
+            if room <= 0:
+                continue
+            cut = min(room, to_trim)
+            alloc[idx] -= cut
+            to_trim -= cut
+
+    gen = torch.Generator()
+    gen.manual_seed(int(seed))
+
+    sampled = []
+    for cls, n_pick in zip(classes.tolist(), alloc.tolist()):
+        cls_idx = torch.nonzero(labels == cls, as_tuple=False).view(-1)
+        perm = torch.randperm(cls_idx.numel(), generator=gen)
+        sampled.append(cls_idx[perm[:n_pick]])
+
+    subset_idx = torch.cat(sampled, dim=0)
+    shuffle = torch.randperm(subset_idx.numel(), generator=gen)
+    return subset_idx[shuffle]
+
+
+def _build_stratified_masks(labels: torch.Tensor, train_ratio: float, val_ratio: float, seed: int):
+    labels = labels.view(-1).cpu()
+    n = int(labels.numel())
+
+    train_ratio = float(max(0.0, min(train_ratio, 1.0)))
+    val_ratio = float(max(0.0, min(val_ratio, 1.0)))
+    if train_ratio + val_ratio >= 1.0:
+        raise ValueError("subset_train_ratio + subset_val_ratio must be < 1.0")
+
+    train_mask = torch.zeros(n, dtype=torch.bool)
+    val_mask = torch.zeros(n, dtype=torch.bool)
+    test_mask = torch.zeros(n, dtype=torch.bool)
+
+    classes = torch.unique(labels, sorted=True)
+    gen = torch.Generator()
+    gen.manual_seed(int(seed))
+
+    for cls in classes.tolist():
+        idx = torch.nonzero(labels == cls, as_tuple=False).view(-1)
+        cnt = int(idx.numel())
+        perm = idx[torch.randperm(cnt, generator=gen)]
+
+        if cnt == 1:
+            train_n, val_n = 1, 0
+        elif cnt == 2:
+            train_n, val_n = 1, 0
+        else:
+            train_n = max(1, int(round(cnt * train_ratio)))
+            val_n = max(1, int(round(cnt * val_ratio)))
+            if train_n + val_n >= cnt:
+                val_n = max(1, cnt - train_n - 1)
+                if train_n + val_n >= cnt:
+                    train_n = max(1, cnt - val_n - 1)
+
+        train_mask[perm[:train_n]] = True
+        val_mask[perm[train_n:train_n + val_n]] = True
+        test_mask[perm[train_n + val_n:]] = True
+
+    # Safety fallback for pathological tiny subsets.
+    if not bool(test_mask.any()):
+        remaining = ~(train_mask | val_mask)
+        if bool(remaining.any()):
+            test_mask[remaining] = True
+        else:
+            test_mask[0] = True
+            train_mask[0] = False
+            val_mask[0] = False
+
+    return train_mask, val_mask, test_mask
+
+
+def maybe_build_subset_graph(
+        data,
+        dataset_name: str,
+        use_subset: bool,
+        subset_num_nodes: int,
+        subset_split_seed: int,
+        subset_train_ratio: float,
+        subset_val_ratio: float):
+    if not use_subset or dataset_name not in ['PubMed', 'DBLP']:
+        return data
+
+    orig_nodes = int(data.num_nodes)
+    target = int(subset_num_nodes)
+    if target <= 0 or target >= orig_nodes:
+        print(
+            f"(I) | subset disabled for {dataset_name}: "
+            f"requested subset_num_nodes={target}, original_nodes={orig_nodes}"
+        )
+        return data
+
+    subset_idx = _stratified_sample_indices(data.y, target, subset_split_seed)
+    subset_idx = subset_idx.to(data.edge_index.device)
+
+    if getattr(data, 'edge_attr', None) is not None:
+        sub_edge_index, sub_edge_attr = subgraph(
+            subset_idx,
+            data.edge_index,
+            edge_attr=data.edge_attr,
+            relabel_nodes=True,
+            num_nodes=data.num_nodes,
+        )
+    else:
+        sub_edge_index, _ = subgraph(
+            subset_idx,
+            data.edge_index,
+            edge_attr=None,
+            relabel_nodes=True,
+            num_nodes=data.num_nodes,
+        )
+        sub_edge_attr = None
+
+    sub_data = data.clone()
+    sub_data.x = data.x[subset_idx]
+    sub_data.y = data.y[subset_idx]
+    sub_data.edge_index = sub_edge_index
+    if sub_edge_attr is not None:
+        sub_data.edge_attr = sub_edge_attr
+    elif hasattr(sub_data, 'edge_attr'):
+        sub_data.edge_attr = None
+    sub_data.num_nodes = int(sub_data.x.size(0))
+
+    train_mask, val_mask, test_mask = _build_stratified_masks(
+        sub_data.y,
+        subset_train_ratio,
+        subset_val_ratio,
+        subset_split_seed + 1,
+    )
+    sub_data.train_mask = train_mask
+    sub_data.val_mask = val_mask
+    sub_data.test_mask = test_mask
+
+    unique_cls, cls_counts = torch.unique(sub_data.y.view(-1).cpu(), sorted=True, return_counts=True)
+    cls_desc = ", ".join([f"{int(c)}:{int(n)}" for c, n in zip(unique_cls.tolist(), cls_counts.tolist())])
+    print(
+        f"(I) | subset enabled for {dataset_name}: "
+        f"nodes {orig_nodes}->{sub_data.num_nodes}, "
+        f"edges {int(data.edge_index.size(1))}->{int(sub_data.edge_index.size(1))}, "
+        f"split(train/val/test)={int(train_mask.sum())}/{int(val_mask.sum())}/{int(test_mask.sum())}"
+    )
+    print(f"(I) | subset class counts: {cls_desc}")
+
+    return sub_data
 
 
 def _build_csr_from_row_lists(row_cols, row_weights, num_nodes, device):
@@ -480,7 +671,8 @@ if __name__ == '__main__':
     assert args.gpu_id in range(0, 8)
     torch.cuda.set_device(args.gpu_id)
 
-    config = yaml.load(open(args.config), Loader=SafeLoader)[args.dataset]
+    with open(args.config, "r", encoding="utf-8") as f:
+        config = yaml.load(f, Loader=SafeLoader)[args.dataset]
 
     torch.manual_seed(config['seed'])
     random.seed(12345)
@@ -515,6 +707,11 @@ if __name__ == '__main__':
     gca_drop_scheme = config.get('gca_drop_scheme', 'degree')
     gca_pr_k = config.get('gca_pr_k', 200)
     iflgc_refl_du_weight = config.get('iflgc_refl_du_weight', 0.3)
+    use_subset = bool(config.get('use_subset', False))
+    subset_num_nodes = int(config.get('subset_num_nodes', 0))
+    subset_split_seed = int(config.get('subset_split_seed', config.get('seed', 0)))
+    subset_train_ratio = float(config.get('subset_train_ratio', 0.1))
+    subset_val_ratio = float(config.get('subset_val_ratio', 0.1))
 
     large_dataset = args.dataset in ['PubMed', 'DBLP']
 
@@ -548,6 +745,15 @@ if __name__ == '__main__':
     path = dataset_root
     dataset = get_dataset(path, args.dataset)
     data = dataset[0]
+    data = maybe_build_subset_graph(
+        data,
+        dataset_name=args.dataset,
+        use_subset=use_subset,
+        subset_num_nodes=subset_num_nodes,
+        subset_split_seed=subset_split_seed,
+        subset_train_ratio=subset_train_ratio,
+        subset_val_ratio=subset_val_ratio,
+    )
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     data = data.to(device)

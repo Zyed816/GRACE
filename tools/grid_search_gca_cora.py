@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 from datetime import datetime
+from time import perf_counter as t
 
 import yaml
 
@@ -135,8 +136,42 @@ def main():
             "gca_pr_k": 200,
         }
 
+    elif dataset_key == "PubMed":
+        # PubMed-specific tighter GCA preset: fewer trials, keep the weaker baseline behavior.
+        search_space = {
+            "gca_drop_scheme": ["uniform"],
+            "drop_edge_rate_1": [0.5, 0.6, 0.7],
+            "drop_edge_rate_2": [0.6, 0.7],
+            "tau": [0.8],
+        }
+
+        feature_profiles = [
+            {"drop_feature_rate_1": 0.5, "drop_feature_rate_2": 0.6},
+        ]
+
+        fixed_overrides = {
+            "gca_pr_k": 200,
+        }
+
+    elif dataset_key == "DBLP":
+        # DBLP-specific tighter GCA preset: keep a smaller edge sweep than PubMed.
+        search_space = {
+            "gca_drop_scheme": ["uniform"],
+            "drop_edge_rate_1": [0.5, 0.6],
+            "drop_edge_rate_2": [0.6, 0.7],
+            "tau": [0.8],
+        }
+
+        feature_profiles = [
+            {"drop_feature_rate_1": 0.5, "drop_feature_rate_2": 0.6},
+        ]
+
+        fixed_overrides = {
+            "gca_pr_k": 200,
+        }
+
     else:
-        # Standard weak preset for Cora/PubMed/DBLP.
+        # Standard weak preset for Cora.
         search_space = {
             "gca_drop_scheme": ["uniform"],
             "drop_edge_rate_1": [0.5, 0.6, 0.7],
@@ -185,7 +220,7 @@ def main():
     if total_trials > 100:
         raise RuntimeError(f"trial budget exceeded: {total_trials} > 100")
 
-    print(f"[2/3] Grid search trials: {total_trials}")
+    print(f"[2/3] Grid search trials: {total_trials}", flush=True)
 
     results = []
     trial_idx = 0
@@ -195,6 +230,17 @@ def main():
             trial_params = dict(zip(keys, values))
             trial_params.update(fp)
             trial_params.update(fixed_overrides)
+
+            params_str = (
+                f"scheme={trial_params['gca_drop_scheme']}, "
+                f"de1={trial_params['drop_edge_rate_1']}, "
+                f"de2={trial_params['drop_edge_rate_2']}, "
+                f"df1={trial_params['drop_feature_rate_1']}, "
+                f"df2={trial_params['drop_feature_rate_2']}, "
+                f"tau={trial_params['tau']}"
+            )
+            print(f"Trial {trial_idx:03d}/{total_trials} start | {params_str}", flush=True)
+            trial_start = t()
 
             temp_cfg = make_temp_config(base_config, dataset_key, trial_params)
 
@@ -217,22 +263,18 @@ def main():
                 }
                 results.append(row)
 
-                params_str = (
-                    f"scheme={trial_params['gca_drop_scheme']}, "
-                    f"de1={trial_params['drop_edge_rate_1']}, "
-                    f"de2={trial_params['drop_edge_rate_2']}, "
-                    f"df1={trial_params['drop_feature_rate_1']}, "
-                    f"df2={trial_params['drop_feature_rate_2']}, "
-                    f"tau={trial_params['tau']}"
-                )
                 print(
                     f"Trial {trial_idx:03d}/{total_trials}: "
                     f"F1Mi={metrics['F1Mi_mean']:.4f}+-{metrics['F1Mi_std']:.4f}, "
                     f"robust={score:.4f}, delta={delta:+.4f} | "
-                    f"{params_str}"
+                    f"{params_str} | elapsed={t() - trial_start:.1f}s"
                 )
             except Exception as exc:
-                print(f"Trial {trial_idx:03d}/{total_trials} failed: {exc}")
+                print(
+                    f"Trial {trial_idx:03d}/{total_trials} failed: {exc} | "
+                    f"{params_str} | elapsed={t() - trial_start:.1f}s",
+                    flush=True,
+                )
             finally:
                 if os.path.exists(temp_cfg):
                     os.remove(temp_cfg)

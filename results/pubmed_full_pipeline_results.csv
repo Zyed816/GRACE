@@ -1,1 +1,2 @@
 timestamp,stage,method,candidate_rank,run_idx,F1Mi_mean,F1Mi_std,F1Ma_mean,F1Ma_std,robust_score,delta_vs_grace,grid_csv,params_json,notes
+2026-04-10 18:06:09,baseline,grace,0,1,0.806700,0.004200,0.807200,0.003900,0.804600,0.000000,,"{""drop_edge_rate_1"": 0.5, ""drop_edge_rate_2"": 0.6, ""drop_feature_rate_1"": 0.5, ""drop_feature_rate_2"": 0.6, ""tau"": 0.8}",baseline reference (weak-baseline-strong-ifl unified mode)

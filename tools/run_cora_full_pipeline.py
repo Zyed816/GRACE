@@ -164,8 +164,25 @@ def run_grid_script(grace_dir, script_name, gpu_id, topk, std_weight, dataset):
                     env=env,
                 )
 
+            output_lines = []
+            pending = ""
+            with open(log_path, "r", encoding="utf-8") as logr:
                 last_heartbeat = t()
                 while proc.poll() is None:
+                    chunk = logr.read()
+                    if chunk:
+                        pending += chunk
+                        parts = pending.splitlines(keepends=True)
+                        pending = ""
+                        for part in parts:
+                            if part.endswith("\n") or part.endswith("\r"):
+                                line = part.rstrip("\r\n")
+                                output_lines.append(line)
+                                if line:
+                                    print(f"[grid:{script_name}] {line}")
+                            else:
+                                pending = part
+
                     now = t()
                     if now - last_heartbeat >= 30.0:
                         elapsed = int(now - start)
@@ -176,8 +193,18 @@ def run_grid_script(grace_dir, script_name, gpu_id, topk, std_weight, dataset):
                         last_heartbeat = now
                     time.sleep(2.0)
 
-            with open(log_path, "r", encoding="utf-8") as logf:
-                combined_output = logf.read()
+                # Drain remaining output after process exit.
+                remainder = logr.read()
+                if remainder:
+                    pending += remainder
+
+            if pending:
+                tail_line = pending.rstrip("\r\n")
+                if tail_line:
+                    output_lines.append(tail_line)
+                    print(f"[grid:{script_name}] {tail_line}")
+
+            combined_output = "\n".join(output_lines)
         finally:
             if os.path.exists(log_path):
                 os.remove(log_path)

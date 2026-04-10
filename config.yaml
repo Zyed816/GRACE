@@ -42,9 +42,15 @@ PubMed:
   drop_feature_rate_2: 0.6
   tau: 0.8
   # 防止 OOM 错误，调整批量大小
-  contrastive_batch_size: 20000
-  corrected_batch_size: 20000
-  mining_batch_size: 20000
+  contrastive_batch_size: 2048
+  corrected_batch_size: 2048
+  mining_batch_size: 2048
+  # Subgraph experiment settings for faster runs on large datasets.
+  use_subset: true
+  subset_num_nodes: 5000
+  subset_split_seed: 23344
+  subset_train_ratio: 0.1
+  subset_val_ratio: 0.1
   num_epochs: 500
   weight_decay: 0.00001
 DBLP:
@@ -61,8 +67,14 @@ DBLP:
   drop_feature_rate_2: 0.6
   tau: 0.8
   # Lower OOM risk on large dataset by enabling chunked computation.
-  contrastive_batch_size: 12288
-  corrected_batch_size: 12288
-  mining_batch_size: 12288
+  contrastive_batch_size: 2048
+  corrected_batch_size: 2048
+  mining_batch_size: 2048
+  # Subgraph experiment settings for faster runs on large datasets.
+  use_subset: true
+  subset_num_nodes: 5000
+  subset_split_seed: 83521
+  subset_train_ratio: 0.1
+  subset_val_ratio: 0.1
   num_epochs: 500
   weight_decay: 0.00001
