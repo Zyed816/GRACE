@@ -172,13 +172,14 @@ def main():
         }
 
     elif dataset_key == "DBLP":
-        # DBLP-specific tighter IFL-GR preset: smallest practical sweep for the large graph.
+        # DBLP-specific compact IFL-GR preset:
+        # follow Cora/PubMed style ranges with a lighter unlabeled-weight sweep.
         search_space = {
             "similarity_percentile": [99.5, 99.7],
             "max_du_per_node": [12, 14],
-            "unlabeled_weight": [0.2],
+            "unlabeled_weight": [0.2, 0.3],
             "warmup_epochs": [100],
-            "tau": [0.3],
+            "tau": [0.7, 0.8],
         }
 
         fixed_overrides = {

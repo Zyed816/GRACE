@@ -157,9 +157,9 @@ def main():
         # DBLP-specific tighter GCA preset: keep a smaller edge sweep than PubMed.
         search_space = {
             "gca_drop_scheme": ["uniform"],
-            "drop_edge_rate_1": [0.5, 0.6],
-            "drop_edge_rate_2": [0.6, 0.7],
-            "tau": [0.8],
+            "drop_edge_rate_1": [0.6, 0.7],
+            "drop_edge_rate_2": [0.7, 0.8],
+            "tau": [0.3],
         }
 
         feature_profiles = [

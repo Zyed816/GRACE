@@ -177,15 +177,16 @@ def main():
         }
 
     elif dataset_key == "DBLP":
-        # DBLP-specific tighter IFL-GC preset: the smallest practical sweep for the largest graph.
+        # DBLP-specific compact IFL-GC preset:
+        # keep GCA-strong augmentations and apply lighter semantic correction.
         search_space = {
             "gca_drop_scheme": ["degree"],
-            "similarity_percentile": [99.5, 99.7],
+            "similarity_percentile": [99.5],
             "max_du_per_node": [12],
             "unlabeled_weight": [0.2, 0.3],
             "warmup_epochs": [100],
             "iflgc_refl_du_weight": [0.4, 0.5],
-            "tau": [0.3],
+            "tau": [0.7, 0.8],
         }
 
         edge_profiles = [
@@ -201,7 +202,7 @@ def main():
             "update_interval": 3,
             "use_mutual_topk": True,
             "beta": 2.2,
-            "corrected_ramp_epochs": 20,
+            "corrected_ramp_epochs": 40,
             "gca_pr_k": 200,
         }
 
