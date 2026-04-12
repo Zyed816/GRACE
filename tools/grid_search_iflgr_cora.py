@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 from datetime import datetime
+from time import perf_counter as t
 
 import yaml
 
@@ -152,14 +153,33 @@ def main():
             "corrected_ramp_epochs": 30,
         }
 
-    elif dataset_key in {"PubMed", "DBLP"}:
-        # Large datasets: compact strong IFL-GR sweep to reduce runtime.
+    elif dataset_key == "PubMed":
+        # PubMed-specific tighter IFL-GR preset: fewer trials, retain the strong margins.
         search_space = {
             "similarity_percentile": [99.5, 99.7],
             "max_du_per_node": [12, 14],
-            "unlabeled_weight": [0.2],
-            "warmup_epochs": [80, 100],
-            "tau": [0.3, 0.4],
+            "unlabeled_weight": [0.2, 0.3],
+            "warmup_epochs": [100],
+            "tau": [0.3],
+        }
+
+        fixed_overrides = {
+            "update_interval": 3,
+            "similarity_threshold": None,
+            "use_mutual_topk": True,
+            "beta": 2.2,
+            "corrected_ramp_epochs": 20,
+        }
+
+    elif dataset_key == "DBLP":
+        # DBLP-specific compact IFL-GR preset:
+        # follow Cora/PubMed style ranges with a lighter unlabeled-weight sweep.
+        search_space = {
+            "similarity_percentile": [99.5, 99.7],
+            "max_du_per_node": [12, 14],
+            "unlabeled_weight": [0.2, 0.3],
+            "warmup_epochs": [100],
+            "tau": [0.7, 0.8],
         }
 
         fixed_overrides = {
@@ -171,7 +191,7 @@ def main():
         }
 
     else:
-        # Standard strong IFL-GR preset for Cora/PubMed/DBLP.
+        # Standard strong IFL-GR preset for Cora.
         search_space = {
             "similarity_percentile": [99.5, 99.7],
             "max_du_per_node": [12, 14, 16],
@@ -220,7 +240,7 @@ def main():
     if total_trials > 100:
         raise RuntimeError(f"trial budget exceeded: {total_trials} > 100")
 
-    print(f"[2/3] Grid search trials: {total_trials}")
+    print(f"[2/3] Grid search trials: {total_trials}", flush=True)
 
     results = []
     for trial_idx, values in enumerate(values_product, start=1):
@@ -230,6 +250,16 @@ def main():
         # Keep warm-up valid under current dataset epochs.
         num_epochs = base_config[dataset_key]["num_epochs"]
         trial_params["warmup_epochs"] = min(trial_params["warmup_epochs"], num_epochs - 10)
+
+        params_str = (
+            f"sim_p={trial_params['similarity_percentile']}, "
+            f"max_du={trial_params['max_du_per_node']}, "
+            f"lambda_u={trial_params['unlabeled_weight']}, "
+            f"warmup={trial_params['warmup_epochs']}, "
+            f"tau={trial_params['tau']}"
+        )
+        print(f"Trial {trial_idx:02d}/{total_trials} start | {params_str}", flush=True)
+        trial_start = t()
 
         temp_cfg = make_temp_config(base_config, dataset_key, trial_params)
         ensure_seed_consistency(base_config, dataset_key)
@@ -253,21 +283,18 @@ def main():
             }
             results.append(row)
 
-            params_str = (
-                f"sim_p={trial_params['similarity_percentile']}, "
-                f"max_du={trial_params['max_du_per_node']}, "
-                f"lambda_u={trial_params['unlabeled_weight']}, "
-                f"warmup={trial_params['warmup_epochs']}, "
-                f"tau={trial_params['tau']}"
-            )
             print(
                 f"Trial {trial_idx:02d}/{total_trials}: "
                 f"F1Mi={metrics['F1Mi_mean']:.4f}+-{metrics['F1Mi_std']:.4f}, "
                 f"robust={score:.4f}, delta={delta:+.4f} | "
-                f"{params_str}"
+                f"{params_str} | elapsed={t() - trial_start:.1f}s"
             )
         except Exception as exc:
-            print(f"Trial {trial_idx:02d}/{total_trials} failed: {exc}")
+            print(
+                f"Trial {trial_idx:02d}/{total_trials} failed: {exc} | "
+                f"{params_str} | elapsed={t() - trial_start:.1f}s",
+                flush=True,
+            )
         finally:
             if os.path.exists(temp_cfg):
                 os.remove(temp_cfg)

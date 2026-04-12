@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 from datetime import datetime
+from time import perf_counter as t
 
 import yaml
 
@@ -146,16 +147,16 @@ def main():
             "gca_pr_k": 200,
         }
 
-    elif dataset_key in {"PubMed", "DBLP"}:
-        # Large datasets: compact strong IFL-GC sweep to reduce runtime.
+    elif dataset_key == "PubMed":
+        # PubMed-specific tighter IFL-GC preset: drop the expensive PR branch and keep a small sweep.
         search_space = {
-            "gca_drop_scheme": ["uniform", "degree", "pr"],
+            "gca_drop_scheme": ["degree"],
             "similarity_percentile": [99.5, 99.7],
-            "max_du_per_node": [12],
-            "unlabeled_weight": [0.2],
-            "warmup_epochs": [80],
-            "iflgc_refl_du_weight": [0.5, 0.6],
-            "tau": [0.3, 0.4],
+            "max_du_per_node": [12, 14],
+            "unlabeled_weight": [0.2, 0.3],
+            "warmup_epochs": [100],
+            "iflgc_refl_du_weight": [0.4, 0.5],
+            "tau": [0.3],
         }
 
         edge_profiles = [
@@ -175,8 +176,38 @@ def main():
             "gca_pr_k": 200,
         }
 
+    elif dataset_key == "DBLP":
+        # DBLP-specific compact IFL-GC preset:
+        # keep GCA-strong augmentations and apply lighter semantic correction.
+        search_space = {
+            "gca_drop_scheme": ["degree"],
+            "similarity_percentile": [99.5],
+            "max_du_per_node": [12],
+            "unlabeled_weight": [0.2, 0.3],
+            "warmup_epochs": [100],
+            "iflgc_refl_du_weight": [0.4, 0.5],
+            "tau": [0.7, 0.8],
+        }
+
+        edge_profiles = [
+            {"drop_edge_rate_1": 0.3, "drop_edge_rate_2": 0.5},
+        ]
+
+        feature_profiles = [
+            {"drop_feature_rate_1": 0.3, "drop_feature_rate_2": 0.4},
+        ]
+
+        fixed_overrides = {
+            "similarity_threshold": None,
+            "update_interval": 3,
+            "use_mutual_topk": True,
+            "beta": 2.2,
+            "corrected_ramp_epochs": 40,
+            "gca_pr_k": 200,
+        }
+
     else:
-        # Standard strong IFL-GC preset for Cora/PubMed/DBLP.
+        # Standard strong IFL-GC preset for Cora.
         search_space = {
             "gca_drop_scheme": ["uniform", "degree", "pr"],
             "similarity_percentile": [99.5, 99.7],
@@ -236,7 +267,7 @@ def main():
     if total_trials > 100:
         raise RuntimeError(f"trial budget exceeded: {total_trials} > 100")
 
-    print(f"[2/3] Grid search trials: {total_trials}")
+    print(f"[2/3] Grid search trials: {total_trials}", flush=True)
 
     results = []
     trial_idx = 0
@@ -251,6 +282,19 @@ def main():
 
                 num_epochs = base_config[dataset_key]["num_epochs"]
                 trial_params["warmup_epochs"] = min(int(trial_params["warmup_epochs"]), num_epochs - 10)
+
+                params_str = (
+                    f"scheme={trial_params['gca_drop_scheme']}, "
+                    f"sim_p={trial_params['similarity_percentile']}, "
+                    f"max_du={trial_params['max_du_per_node']}, "
+                    f"lambda_u={trial_params['unlabeled_weight']}, "
+                    f"alpha_refl={trial_params['iflgc_refl_du_weight']}, "
+                    f"tau={trial_params['tau']}, "
+                    f"de=({trial_params['drop_edge_rate_1']},{trial_params['drop_edge_rate_2']}), "
+                    f"df=({trial_params['drop_feature_rate_1']},{trial_params['drop_feature_rate_2']})"
+                )
+                print(f"Trial {trial_idx:03d}/{total_trials} start | {params_str}", flush=True)
+                trial_start = t()
 
                 temp_cfg = make_temp_config(base_config, dataset_key, trial_params)
 
@@ -273,24 +317,18 @@ def main():
                     }
                     results.append(row)
 
-                    params_str = (
-                        f"scheme={trial_params['gca_drop_scheme']}, "
-                        f"sim_p={trial_params['similarity_percentile']}, "
-                        f"max_du={trial_params['max_du_per_node']}, "
-                        f"lambda_u={trial_params['unlabeled_weight']}, "
-                        f"alpha_refl={trial_params['iflgc_refl_du_weight']}, "
-                        f"tau={trial_params['tau']}, "
-                        f"de=({trial_params['drop_edge_rate_1']},{trial_params['drop_edge_rate_2']}), "
-                        f"df=({trial_params['drop_feature_rate_1']},{trial_params['drop_feature_rate_2']})"
-                    )
                     print(
                         f"Trial {trial_idx:03d}/{total_trials}: "
                         f"F1Mi={metrics['F1Mi_mean']:.4f}+-{metrics['F1Mi_std']:.4f}, "
                         f"robust={score:.4f}, delta={delta:+.4f} | "
-                        f"{params_str}"
+                        f"{params_str} | elapsed={t() - trial_start:.1f}s"
                     )
                 except Exception as exc:
-                    print(f"Trial {trial_idx:03d}/{total_trials} failed: {exc}")
+                    print(
+                        f"Trial {trial_idx:03d}/{total_trials} failed: {exc} | "
+                        f"{params_str} | elapsed={t() - trial_start:.1f}s",
+                        flush=True,
+                    )
                 finally:
                     if os.path.exists(temp_cfg):
                         os.remove(temp_cfg)

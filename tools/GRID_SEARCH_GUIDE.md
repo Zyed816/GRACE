@@ -172,6 +172,13 @@ python tools/run_citeseer_full_pipeline.py --gpu_id 0 --baseline_runs 3 --topk_v
 
 ## PubMed 对应流程（与 Cora / CiteSeer 同命名规范）
 
+PubMed 当前使用独立收缩后的搜索空间，和 Cora/CiteSeer 的脚本分支分开维护，不会修改前两个数据集的参数。
+
+- IFL-GR：8 个 trial
+- GCA：6 个 trial
+- IFL-GC：16 个 trial
+- 合计：30 个 trial
+
 你现在可以直接使用 PubMed 对应入口脚本，结果会写入 `results/` 下同风格命名的 CSV。
 
 ### 1) GRACE 基线（3 次）
@@ -213,6 +220,13 @@ python tools/run_pubmed_full_pipeline.py --gpu_id 0 --baseline_runs 3 --topk_ver
 ```
 
 ## DBLP 对应流程（与 Cora / CiteSeer / PubMed 同命名规范）
+
+DBLP 的搜索空间比 PubMed 更紧，目的是进一步缩短单次实验时间，同时保留目标排序。
+
+- IFL-GR：4 个 trial
+- GCA：4 个 trial
+- IFL-GC：8 个 trial
+- 合计：16 个 trial
 
 你现在可以直接使用 DBLP 对应入口脚本，结果会写入 `results/` 下同风格命名的 CSV。
 
