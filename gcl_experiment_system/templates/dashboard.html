@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<div class="row g-3">
+  <div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted">Methods</div><div class="display-6">{{ method_count }}</div></div></div></div>
+  <div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted">Datasets</div><div class="display-6">{{ dataset_count }}</div></div></div></div>
+  <div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted">Experiments</div><div class="display-6">{{ experiment_count }}</div></div></div></div>
+  <div class="col-md-3"><div class="card shadow-sm"><div class="card-body"><div class="text-muted">Latest Success</div><div class="display-6">{% if latest_success %}{{ latest_success.final_accuracy|default:"-" }}{% else %}-{% endif %}</div></div></div></div>
+</div>
+<div class="row mt-4">
+  <div class="col-lg-8">
+    <div class="card shadow-sm">
+      <div class="card-header">Recent Experiments</div>
+      <div class="card-body">
+        <table class="table table-sm">
+          <thead><tr><th>ID</th><th>Dataset</th><th>Method</th><th>Status</th><th>Accuracy</th><th>Created</th></tr></thead>
+          <tbody>
+          {% for exp in recent_experiments %}
+            <tr>
+              <td><a href="/experiments/{{ exp.pk }}/">{{ exp.pk }}</a></td>
+              <td>{{ exp.dataset }}</td>
+              <td>{{ exp.model_name }}</td>
+              <td>{{ exp.status }}</td>
+              <td>{{ exp.final_accuracy|default:"-" }}</td>
+              <td>{{ exp.created_time }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6">No experiments yet.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-4">
+    <div class="card shadow-sm">
+      <div class="card-header">Quick Actions</div>
+      <div class="card-body d-grid gap-2">
+        <a class="btn btn-primary" href="/experiments/new/">Run Experiment</a>
+        <a class="btn btn-outline-secondary" href="/results/">View Results</a>
+        <a class="btn btn-outline-secondary" href="/datasets/">Browse Datasets</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Models{% endblock %}
+{% block content %}
+<div class="row g-3">
+{% for method in methods %}
+  <div class="col-md-6 col-lg-3">
+    <div class="card h-100 shadow-sm">
+      <div class="card-body">
+        <h5>{{ method.display_name }}</h5>
+        <p class="small text-muted">{{ method.description }}</p>
+        <a href="/models/{{ method.key }}/" class="btn btn-sm btn-outline-primary">Details</a>
+      </div>
+    </div>
+  </div>
+{% endfor %}
+</div>
+{% endblock %}

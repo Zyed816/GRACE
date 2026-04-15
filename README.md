@@ -340,6 +340,68 @@ PubMed/DBLP 训练耗时更长，建议优先在 Cora/CiteSeer 验证流程后�
 - `CODE_STRUCTURE.md`: architecture and call flow details
 - `tools/GRID_SEARCH_GUIDE.md`: practical search and verification guide
 
+## Django Web Experiment System | Django 实验管理与可视化系统
+
+项目已新增 Django 系统目录：
+
+- `gcl_experiment_system/`
+
+该系统在不修改核心算法实现（`train.py` / `model.py` / `eval.py`）的前提下，提供：
+
+- Dashboard（方法数、数据集数、实验数、最近实验）
+- Datasets 页面（Cora/CiteSeer/PubMed/DBLP 统计与简介）
+- Models 页面（GRACE/GCA/IFL-GR/IFL-GC 说明）
+- Run Experiment（参数配置 + 异步启动）
+- Training Monitor（Loss/Accuracy 曲线，ECharts）
+- Results（数据集-方法对比柱状图 + 历史 CSV 汇总）
+- Experiment History（实验历史与详情）
+
+### 1) 进入 Django 项目目录
+
+```bash
+cd gcl_experiment_system
+```
+
+### 2) 初始化数据库
+
+```bash
+python manage.py migrate
+```
+
+### 3) 启动 Web 服务
+
+```bash
+python manage.py runserver 0.0.0.0:8000
+```
+
+浏览器访问：
+
+- `http://127.0.0.1:8000/`
+
+### 4) 启动实验后台处理（可选但推荐）
+
+当你在页面上创建实验但不立即运行，或希望统一队列执行时：
+
+```bash
+python manage.py process_experiments --poll-interval 5
+```
+
+单次处理一个 pending 实验：
+
+```bash
+python manage.py process_experiments --once
+```
+
+### 5) 命令行实验封装（可选）
+
+提供了一个 Django 外围脚本来调用现有训练入口：
+
+```bash
+python scripts/run_experiment.py --dataset Cora --model grace --epochs 200
+```
+
+它会临时覆盖 `config.yaml` 对应数据集参数并调用 `train.py`。
+
 ## Requirements | 依赖
 
 - torch 1.4.0

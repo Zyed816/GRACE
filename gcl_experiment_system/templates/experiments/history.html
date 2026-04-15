@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}History{% endblock %}
+{% block content %}
+<div class="card shadow-sm">
+  <div class="card-body">
+    <h3>Experiment History</h3>
+    <table class="table table-hover table-sm">
+      <thead><tr><th>ID</th><th>Dataset</th><th>Method</th><th>Status</th><th>Accuracy</th><th>Created</th></tr></thead>
+      <tbody>
+      {% for exp in experiments %}
+        <tr>
+          <td><a href="/experiments/{{ exp.pk }}/">{{ exp.pk }}</a></td>
+          <td>{{ exp.dataset }}</td>
+          <td>{{ exp.model_name }}</td>
+          <td>{{ exp.status }}</td>
+          <td>{{ exp.final_accuracy|default:"-" }}</td>
+          <td>{{ exp.created_time }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="6">No records yet.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

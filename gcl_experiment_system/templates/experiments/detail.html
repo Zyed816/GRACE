@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Experiment {{ experiment.pk }}{% endblock %}
+{% block content %}
+<div class="row g-3">
+  <div class="col-lg-4">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h4>Experiment #{{ experiment.pk }}</h4>
+        <div>Dataset: {{ experiment.dataset }}</div>
+        <div>Method: {{ experiment.model_name }}</div>
+        <div>Status: <span id="experiment-status">{{ experiment.status }}</span></div>
+        <div>Final Accuracy: {{ experiment.final_accuracy|default:"-" }}</div>
+        <div>F1Mi: {{ experiment.final_f1mi|default:"-" }}</div>
+        <div>F1Ma: {{ experiment.final_f1ma|default:"-" }}</div>
+        <div>Run Seconds: {{ experiment.run_seconds|default:"-" }}</div>
+        {% if experiment.status == "pending" %}
+          <a class="btn btn-primary mt-3" href="/experiments/{{ experiment.pk }}/start/">Start Now</a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-8">
+    <div class="card shadow-sm mb-3">
+      <div class="card-header">Training Logs</div>
+      <div class="card-body">
+        <table class="table table-sm">
+          <thead><tr><th>Epoch</th><th>Loss</th><th>Accuracy</th></tr></thead>
+          <tbody>
+          {% for item in logs %}
+            <tr><td>{{ item.epoch }}</td><td>{{ item.loss }}</td><td>{{ item.accuracy|default:"-" }}</td></tr>
+          {% empty %}
+            <tr><td colspan="3">No epoch logs yet.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card shadow-sm">
+      <div class="card-header">Monitor</div>
+      <div class="card-body">
+        <div id="monitor-chart" style="height: 320px;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  window.__MONITOR_ENDPOINT__ = "/api/experiments/{{ experiment.pk }}/";
+</script>
+{% endblock %}

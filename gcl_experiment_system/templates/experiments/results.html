@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% load grace_extras %}
+{% block title %}Results{% endblock %}
+{% block content %}
+<div class="row g-3">
+  <div class="col-lg-6">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h3>Results by Dataset and Method</h3>
+        <div id="result-chart" style="height: 360px;"></div>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h3>Pivot Table</h3>
+        <table class="table table-sm">
+          <thead>
+            <tr>
+              <th>Dataset</th>
+              {% for method in methods %}
+              <th>{{ method.display_name }}</th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+          {% for row in pivot %}
+            <tr>
+              <td>{{ row.dataset }}</td>
+              {% for method in methods %}
+                <td>{{ row|get_item:method.display_name|default:"-" }}</td>
+              {% endfor %}
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="row g-3 mt-1">
+  <div class="col-12">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h3>Imported Pipeline Rows</h3>
+        <div class="table-responsive" style="max-height: 420px; overflow-y: auto;">
+          <table class="table table-sm table-striped">
+            <thead>
+              <tr>
+                <th>timestamp</th>
+                <th>stage</th>
+                <th>method</th>
+                <th>candidate_rank</th>
+                <th>run_idx</th>
+                <th>F1Mi_mean</th>
+                <th>F1Ma_mean</th>
+                <th>robust_score</th>
+                <th>delta_vs_grace</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in csv_rows %}
+              <tr>
+                <td>{{ row.timestamp|default:"-" }}</td>
+                <td>{{ row.stage|default:"-" }}</td>
+                <td>{{ row.method|default:"-" }}</td>
+                <td>{{ row.candidate_rank|default:"-" }}</td>
+                <td>{{ row.run_idx|default:"-" }}</td>
+                <td>{{ row.F1Mi_mean|default:"-" }}</td>
+                <td>{{ row.F1Ma_mean|default:"-" }}</td>
+                <td>{{ row.robust_score|default:"-" }}</td>
+                <td>{{ row.delta_vs_grace|default:"-" }}</td>
+              </tr>
+              {% empty %}
+              <tr>
+                <td colspan="9">No full pipeline CSV rows found in results directory.</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  window.__RESULT_PAYLOAD__ = {{ chart_option_json|safe }};
+</script>
+{% endblock %}
