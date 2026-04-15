@@ -1,4 +1,5 @@
 import argparse
+import csv
 import os
 import os.path as osp
 import random
@@ -22,7 +23,6 @@ from eval import label_classification
 # - ifl-gr  : GRACE augment + semantically guided corrected InfoNCE
 # - gca     : GCA structure-aware augment + InfoNCE
 # - ifl-gc  : GCA augment + semantically guided corrected InfoNCE
-
 
 def compute_pr(edge_index: torch.Tensor, damp: float = 0.85, k: int = 10):
     num_nodes = int(edge_index.max().item()) + 1
@@ -344,6 +344,38 @@ def _transpose_row_lists(row_cols, row_weights, num_nodes):
     return out_cols, out_ws
 
 
+def experiment1_metrics(z1: torch.Tensor, z2: torch.Tensor):
+    with torch.no_grad():
+        z1n = F.normalize(z1, dim=1)
+        z2n = F.normalize(z2, dim=1)
+        sim = torch.mm(z1n, z2n.t())
+
+        pos_sim = sim.diag()
+        num_nodes = sim.size(0)
+        if num_nodes <= 1:
+            return {
+                'violation_rate': 0.0,
+                'mean_margin': 0.0,
+                'p10_margin': 0.0,
+                'mean_pos_sim': pos_sim.mean().item() if num_nodes == 1 else 0.0,
+                'mean_max_neg_sim': 0.0,
+            }
+
+        neg_mask = torch.eye(num_nodes, device=sim.device, dtype=torch.bool)
+        max_neg_sim = sim.masked_fill(neg_mask, float('-inf')).max(dim=1).values
+
+        margins = pos_sim - max_neg_sim
+        violation_rate = (max_neg_sim > pos_sim).float().mean().item()
+
+        return {
+            'violation_rate': violation_rate,
+            'mean_margin': margins.mean().item(),
+            'p10_margin': torch.quantile(margins, 0.1).item(),
+            'mean_pos_sim': pos_sim.mean().item(),
+            'mean_max_neg_sim': max_neg_sim.mean().item(),
+        }
+
+
 def train_grace(model: Model, x, edge_index, contrastive_batch_size=0):
     model.train()
     optimizer.zero_grad()
@@ -353,12 +385,12 @@ def train_grace(model: Model, x, edge_index, contrastive_batch_size=0):
     x_2 = drop_feature(x, drop_feature_rate_2)
     z1 = model(x_1, edge_index_1)
     z2 = model(x_2, edge_index_2)
+    exp1_stats = experiment1_metrics(z1.detach(), z2.detach())
 
     loss = model.loss(z1, z2, batch_size=contrastive_batch_size)
     loss.backward()
     optimizer.step()
-    return loss.item()
-
+    return loss.item(), exp1_stats
 
 def mine_unlabeled_positives(
         model: Model,
@@ -547,6 +579,7 @@ def train_iflgr(model: Model, x, edge_index, du_pos_mask, du_pos_weight, unlabel
     x_2 = drop_feature(x, drop_feature_rate_2)
     z1 = model(x_1, edge_index_1)
     z2 = model(x_2, edge_index_2)
+    exp1_stats = experiment1_metrics(z1.detach(), z2.detach())
 
     loss = model.loss(
         z1,
@@ -561,7 +594,7 @@ def train_iflgr(model: Model, x, edge_index, du_pos_mask, du_pos_weight, unlabel
 
     loss.backward()
     optimizer.step()
-    return loss.item()
+    return loss.item(), exp1_stats
 
 
 def train_iflgc(
@@ -601,6 +634,7 @@ def train_iflgc(
 
     z1 = model(x_1, edge_index_1)
     z2 = model(x_2, edge_index_2)
+    exp1_stats = experiment1_metrics(z1.detach(), z2.detach())
 
     loss = model.loss(
         z1,
@@ -617,7 +651,7 @@ def train_iflgc(
 
     loss.backward()
     optimizer.step()
-    return loss.item()
+    return loss.item(), exp1_stats
 
 
 def train_gca(model: Model, x, edge_index, drop_scheme, drop_weights, feature_weights, contrastive_batch_size=0):
@@ -643,11 +677,12 @@ def train_gca(model: Model, x, edge_index, drop_scheme, drop_weights, feature_we
 
     z1 = model(x_1, edge_index_1)
     z2 = model(x_2, edge_index_2)
+    exp1_stats = experiment1_metrics(z1.detach(), z2.detach())
 
     loss = model.loss(z1, z2, batch_size=contrastive_batch_size)
     loss.backward()
     optimizer.step()
-    return loss.item()
+    return loss.item(), exp1_stats
 
 
 def test(model: Model, x, edge_index, y, final=False):
@@ -666,6 +701,7 @@ if __name__ == '__main__':
     parser.add_argument('--dataset_root', type=str, default=None,
                         help='Dataset cache root. Defaults to GRACE/datasets')
     parser.add_argument('--method', type=str, default='grace', choices=['grace', 'ifl-gr', 'gca', 'ifl-gc'])
+    parser.add_argument('--exp1_log_csv', type=str, default='')
     args = parser.parse_args()
 
     assert args.gpu_id in range(0, 8)
@@ -764,6 +800,25 @@ if __name__ == '__main__':
     optimizer = torch.optim.Adam(
         model.parameters(), lr=learning_rate, weight_decay=weight_decay)
 
+    csv_writer = None
+    csv_fp = None
+    if args.exp1_log_csv:
+        csv_path = args.exp1_log_csv
+        csv_dir = osp.dirname(csv_path)
+        if csv_dir:
+            os.makedirs(csv_dir, exist_ok=True)
+        csv_fp = open(csv_path, mode='w', newline='', encoding='utf-8')
+        csv_writer = csv.DictWriter(csv_fp, fieldnames=[
+            'epoch',
+            'loss',
+            'violation_rate',
+            'mean_margin',
+            'p10_margin',
+            'mean_pos_sim',
+            'mean_max_neg_sim',
+        ])
+        csv_writer.writeheader()
+
     start = t()
     prev = start
     du_cache = None
@@ -793,14 +848,25 @@ if __name__ == '__main__':
         mean_pairs_per_node = 0.0
         active_threshold = 0.0
         current_unlabeled_weight = 0.0
+        exp1_stats = {
+            'violation_rate': 0.0,
+            'mean_margin': 0.0,
+            'p10_margin': 0.0,
+            'mean_pos_sim': 0.0,
+            'mean_max_neg_sim': 0.0,
+        }
 
         if args.method == 'grace':
             # Baseline branch: pure GRACE.
-            loss = train_grace(model, data.x, data.edge_index, contrastive_batch_size=contrastive_batch_size)
+            loss, exp1_stats = train_grace(
+                model,
+                data.x,
+                data.edge_index,
+                contrastive_batch_size=contrastive_batch_size)
             phase = 'grace'
         elif args.method == 'gca':
             # GCA branch: structure-aware augmentation only.
-            loss = train_gca(
+            loss, exp1_stats = train_gca(
                 model,
                 data.x,
                 data.edge_index,
@@ -815,7 +881,7 @@ if __name__ == '__main__':
             # 2) periodically mine D_U^+
             # 3) optimize corrected InfoNCE (cross-view + same-view semantic terms)
             if epoch <= warmup_epochs:
-                loss = train_gca(
+                loss, exp1_stats = train_gca(
                     model,
                     data.x,
                     data.edge_index,
@@ -846,7 +912,7 @@ if __name__ == '__main__':
                 progress = max(epoch - warmup_epochs, 0) / max(corrected_ramp_epochs, 1)
                 current_unlabeled_weight = unlabeled_weight * min(progress, 1.0)
 
-                loss = train_iflgc(
+                loss, exp1_stats = train_iflgc(
                     model,
                     data.x,
                     data.edge_index,
@@ -867,7 +933,7 @@ if __name__ == '__main__':
             # 2) periodically mine D_U^+
             # 3) optimize corrected InfoNCE (cross-view semantic term)
             if epoch <= warmup_epochs:
-                loss = train_grace(
+                loss, exp1_stats = train_grace(
                     model,
                     data.x,
                     data.edge_index,
@@ -895,7 +961,7 @@ if __name__ == '__main__':
                 progress = max(epoch - warmup_epochs, 0) / max(corrected_ramp_epochs, 1)
                 current_unlabeled_weight = unlabeled_weight * min(progress, 1.0)
 
-                loss = train_iflgr(
+                loss, exp1_stats = train_iflgr(
                     model,
                     data.x,
                     data.edge_index,
@@ -910,17 +976,38 @@ if __name__ == '__main__':
         now = t()
         if args.method in ['grace', 'gca'] or phase in ['warmup', 'warmup-gca']:
             print(f'(T) | Epoch={epoch:03d}, phase={phase}, loss={loss:.4f}, '
+                  f'v_rate={exp1_stats["violation_rate"]:.4f}, '
+                  f'm_margin={exp1_stats["mean_margin"]:.4f}, '
+                  f'p10={exp1_stats["p10_margin"]:.4f}, '
                   f'this epoch {now - prev:.4f}, total {now - start:.4f}')
         else:
             print(f'(T) | Epoch={epoch:03d}, loss={loss:.4f}, '
                   f'phase={phase}, refresh_du={int(refresh_du)}, '
                   f'lambda_u={current_unlabeled_weight:.4f}, '
                   f'ts={active_threshold:.4f}, '
+                  f'v_rate={exp1_stats["violation_rate"]:.4f}, '
+                  f'm_margin={exp1_stats["mean_margin"]:.4f}, '
+                  f'p10={exp1_stats["p10_margin"]:.4f}, '
                   f'mined_pairs={mined_pairs}, '
                   f'avg_pairs_per_node={mean_pairs_per_node:.2f}, '
                   f'mean_w={mean_weight:.4f}, '
                   f'this epoch {now - prev:.4f}, total {now - start:.4f}')
+
+        if csv_writer is not None and csv_fp is not None:
+            csv_writer.writerow({
+                'epoch': epoch,
+                'loss': loss,
+                'violation_rate': exp1_stats['violation_rate'],
+                'mean_margin': exp1_stats['mean_margin'],
+                'p10_margin': exp1_stats['p10_margin'],
+                'mean_pos_sim': exp1_stats['mean_pos_sim'],
+                'mean_max_neg_sim': exp1_stats['mean_max_neg_sim'],
+            })
+            csv_fp.flush()
         prev = now
+
+    if csv_fp is not None:
+        csv_fp.close()
 
     print("=== Final ===")
     test(model, data.x, data.edge_index, data.y, final=True)

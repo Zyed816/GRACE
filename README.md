@@ -93,6 +93,85 @@ python train.py --dataset Cora --method ifl-gc
 
 默认数据根目录是 `GRACE/datasets/`；若已存在则直接读取，不存在则自动下载并处理。
 
+## Sampling-Bias Validation | 采样偏差验证
+
+可以。当前项目已经支持采样偏差验证，核心是记录每个 epoch 的对比学习偏差指标：
+
+- `violation_rate`
+- `mean_margin`
+- `p10_margin`
+
+这些指标由 `train.py` 的 `--exp1_log_csv` 输出为 CSV。
+
+### 1) 单次验证（单数据集 + 单方法）
+
+以 Cora + GRACE 为例：
+
+```bash
+python train.py --dataset Cora --method grace --gpu_id 0 --exp1_log_csv logs/exp1_cora_grace.csv
+```
+
+绘制曲线图：
+
+```bash
+python tools/plot_exp1_curves.py --csv logs/exp1_cora_grace.csv --out logs/exp1_cora_grace_curves.png --title "Cora GRACE: Sampling Bias Curves"
+```
+
+### 2) 同一数据集比较不同方法的采样偏差
+
+```bash
+python train.py --dataset Cora --method grace  --gpu_id 0 --exp1_log_csv logs/exp1_cora_grace.csv
+python train.py --dataset Cora --method gca    --gpu_id 0 --exp1_log_csv logs/exp1_cora_gca.csv
+python train.py --dataset Cora --method ifl-gr --gpu_id 0 --exp1_log_csv logs/exp1_cora_iflgr.csv
+python train.py --dataset Cora --method ifl-gc --gpu_id 0 --exp1_log_csv logs/exp1_cora_iflgc.csv
+```
+
+然后分别画图：
+
+```bash
+python tools/plot_exp1_curves.py --csv logs/exp1_cora_gca.csv --out logs/exp1_cora_gca_curves.png --title "Cora GCA: Sampling Bias Curves"
+python tools/plot_exp1_curves.py --csv logs/exp1_cora_iflgr.csv --out logs/exp1_cora_iflgr_curves.png --title "Cora IFL-GR: Sampling Bias Curves"
+python tools/plot_exp1_curves.py --csv logs/exp1_cora_iflgc.csv --out logs/exp1_cora_iflgc_curves.png --title "Cora IFL-GC: Sampling Bias Curves"
+```
+
+## Method Comparison Across Datasets | 各数据集上不同方法比较
+
+可以。项目已经提供 baseline + grid search + top-k verify + summary 的统一对比流水线。
+
+### 1) 单数据集完整比较
+
+```bash
+python tools/run_cora_full_pipeline.py --dataset Cora --gpu_id 0
+python tools/run_citeseer_full_pipeline.py --gpu_id 0
+python tools/run_pubmed_full_pipeline.py --gpu_id 0
+python tools/run_dblp_full_pipeline.py --gpu_id 0
+```
+
+输出示例：
+
+- `results/cora_full_pipeline_results.csv`
+- `results/citeseer_full_pipeline_results.csv`
+- `results/pubmed_full_pipeline_results.csv`
+- `results/dblp_full_pipeline_results.csv`
+
+### 2) 多数据集批量比较（推荐）
+
+```bash
+python tools/run_selected_full_pipelines.py --datasets Cora CiteSeer PubMed DBLP --gpu_id 0
+```
+
+失败后继续跑后续数据集：
+
+```bash
+python tools/run_selected_full_pipelines.py --datasets Cora CiteSeer PubMed DBLP --gpu_id 0 --continue_on_error
+```
+
+只跑大图数据集：
+
+```bash
+python tools/run_selected_full_pipelines.py --datasets PubMed DBLP --gpu_id 0
+```
+
 ## Automatic Hyper-Parameter Search (1-Stage) | 自动参数搜索（一阶段）
 
 ### Script Matrix | 脚本矩阵
