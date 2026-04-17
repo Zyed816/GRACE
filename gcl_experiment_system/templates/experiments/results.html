@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 {% load grace_extras %}
-{% block title %}Results{% endblock %}
+{% block title %}结果展示{% endblock %}
 {% block content %}
 <div class="row g-3">
   <div class="col-lg-6">
     <div class="card shadow-sm">
       <div class="card-body">
-        <h3>Results by Dataset and Method</h3>
+        <h3>数据集与方法结果概览</h3>
         <div id="result-chart" style="height: 360px;"></div>
       </div>
     </div>
@@ -14,11 +14,11 @@
   <div class="col-lg-6">
     <div class="card shadow-sm">
       <div class="card-body">
-        <h3>Pivot Table</h3>
+        <h3>结果透视表</h3>
         <table class="table table-sm">
           <thead>
             <tr>
-              <th>Dataset</th>
+              <th>数据集</th>
               {% for method in methods %}
               <th>{{ method.display_name }}</th>
               {% endfor %}
@@ -39,46 +39,213 @@
     </div>
   </div>
 </div>
+
 <div class="row g-3 mt-1">
   <div class="col-12">
     <div class="card shadow-sm">
       <div class="card-body">
-        <h3>Imported Pipeline Rows</h3>
+        <h3>已导入的流水线结果</h3>
         <div class="table-responsive" style="max-height: 420px; overflow-y: auto;">
           <table class="table table-sm table-striped">
             <thead>
               <tr>
-                <th>timestamp</th>
-                <th>stage</th>
-                <th>method</th>
-                <th>candidate_rank</th>
-                <th>run_idx</th>
+                <th>导入时间</th>
+                <th>数据集</th>
+                <th>方法</th>
+                <th>阶段</th>
+                <th>候选排名</th>
+                <th>运行编号</th>
                 <th>F1Mi_mean</th>
+                <th>F1Mi_std</th>
                 <th>F1Ma_mean</th>
-                <th>robust_score</th>
-                <th>delta_vs_grace</th>
+                <th>F1Ma_std</th>
+                <th>稳健分数</th>
+                <th>相对 GRACE 增益</th>
               </tr>
             </thead>
             <tbody>
               {% for row in csv_rows %}
               <tr>
-                <td>{{ row.timestamp|default:"-" }}</td>
-                <td>{{ row.stage|default:"-" }}</td>
-                <td>{{ row.method|default:"-" }}</td>
+                <td>{{ row.created_time|default:"-" }}</td>
+                <td>{{ row.dataset|default:"-" }}</td>
+                <td>{{ row.method_name|default:row.method_key|default:"-" }}</td>
+                <td>{{ row.get_stage_display|default:"-" }}</td>
                 <td>{{ row.candidate_rank|default:"-" }}</td>
                 <td>{{ row.run_idx|default:"-" }}</td>
                 <td>{{ row.F1Mi_mean|default:"-" }}</td>
+                <td>{{ row.F1Mi_std|default:"-" }}</td>
                 <td>{{ row.F1Ma_mean|default:"-" }}</td>
+                <td>{{ row.F1Ma_std|default:"-" }}</td>
                 <td>{{ row.robust_score|default:"-" }}</td>
                 <td>{{ row.delta_vs_grace|default:"-" }}</td>
               </tr>
               {% empty %}
               <tr>
-                <td colspan="9">No full pipeline CSV rows found in results directory.</td>
+                <td colspan="12">`results/` 目录中暂无全流程 CSV 结果。</td>
               </tr>
               {% endfor %}
             </tbody>
           </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mt-1">
+  <div class="col-12">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h3>`logs/` 中的采样偏差结果</h3>
+        <div class="row g-3">
+          {% for asset in sampling_bias_assets %}
+          <div class="col-12">
+            <div class="artifact-card">
+              <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+                <div>
+                  <div class="fw-semibold">{{ asset.name }}</div>
+                  <div class="small text-muted">{{ asset.size_label }} | {{ asset.modified_time }}</div>
+                </div>
+                <a class="btn btn-sm btn-outline-secondary" href="{{ asset.url }}" target="_blank">打开 CSV</a>
+              </div>
+
+              {% if asset.curve_asset %}
+              <div class="mt-3">
+                <div class="small text-muted mb-2">曲线图片</div>
+                <a href="{{ asset.curve_asset.url }}" target="_blank">
+                  <img class="artifact-image" src="{{ asset.curve_asset.url }}" alt="{{ asset.curve_asset.name }}">
+                </a>
+              </div>
+              {% endif %}
+
+              {% if asset.preview_rows %}
+              <div class="mt-3 table-responsive">
+                <table class="table table-sm align-middle mb-0">
+                  <thead>
+                    <tr>
+                      {% for header in asset.preview_headers %}
+                      <th>{{ header }}</th>
+                      {% endfor %}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for row in asset.preview_rows %}
+                    <tr>
+                      {% for header in asset.preview_headers %}
+                      <td>{{ row|get_item:header }}</td>
+                      {% endfor %}
+                    </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+                <div class="small text-muted mt-2">当前预览前 {{ asset.preview_rows|length }} 行，共 {{ asset.preview_total_rows }} 行。</div>
+              </div>
+              {% endif %}
+            </div>
+          </div>
+          {% empty %}
+          <div class="col-12 text-muted">`logs/` 中暂无采样偏差 CSV 文件。</div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mt-1">
+  <div class="col-12">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h3>`results/` 中的参数搜索结果</h3>
+        <div class="row g-3">
+          {% for asset in grid_search_assets %}
+          <div class="col-12 col-xl-6">
+            <div class="artifact-card h-100">
+              <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+                <div>
+                  <div class="fw-semibold">{{ asset.name }}</div>
+                  <div class="small text-muted">{{ asset.size_label }} | {{ asset.modified_time }}</div>
+                </div>
+                <a class="btn btn-sm btn-outline-secondary" href="{{ asset.url }}" target="_blank">打开 CSV</a>
+              </div>
+              {% if asset.preview_rows %}
+              <div class="mt-3 table-responsive">
+                <table class="table table-sm align-middle mb-0">
+                  <thead>
+                    <tr>
+                      {% for header in asset.preview_headers %}
+                      <th>{{ header }}</th>
+                      {% endfor %}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for row in asset.preview_rows %}
+                    <tr>
+                      {% for header in asset.preview_headers %}
+                      <td>{{ row|get_item:header }}</td>
+                      {% endfor %}
+                    </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+                <div class="small text-muted mt-2">当前预览前 {{ asset.preview_rows|length }} 行，共 {{ asset.preview_total_rows }} 行。</div>
+              </div>
+              {% endif %}
+            </div>
+          </div>
+          {% empty %}
+          <div class="col-12 text-muted">`results/` 中暂无参数搜索 CSV 文件。</div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mt-1">
+  <div class="col-12">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h3>`results/` 中的全流程结果文件</h3>
+        <div class="row g-3">
+          {% for asset in pipeline_assets %}
+          <div class="col-12">
+            <div class="artifact-card">
+              <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+                <div>
+                  <div class="fw-semibold">{{ asset.name }}</div>
+                  <div class="small text-muted">{{ asset.size_label }} | {{ asset.modified_time }}</div>
+                </div>
+                <a class="btn btn-sm btn-outline-secondary" href="{{ asset.url }}" target="_blank">打开 CSV</a>
+              </div>
+              {% if asset.preview_rows %}
+              <div class="mt-3 table-responsive">
+                <table class="table table-sm align-middle mb-0">
+                  <thead>
+                    <tr>
+                      {% for header in asset.preview_headers %}
+                      <th>{{ header }}</th>
+                      {% endfor %}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for row in asset.preview_rows %}
+                    <tr>
+                      {% for header in asset.preview_headers %}
+                      <td>{{ row|get_item:header }}</td>
+                      {% endfor %}
+                    </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+                <div class="small text-muted mt-2">当前预览前 {{ asset.preview_rows|length }} 行，共 {{ asset.preview_total_rows }} 行。</div>
+              </div>
+              {% endif %}
+            </div>
+          </div>
+          {% empty %}
+          <div class="col-12 text-muted">`results/` 中暂无全流程 CSV 文件。</div>
+          {% endfor %}
         </div>
       </div>
     </div>

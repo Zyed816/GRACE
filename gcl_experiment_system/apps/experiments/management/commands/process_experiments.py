@@ -20,7 +20,7 @@ class Command(BaseCommand):
 
         while True:
             close_old_connections()
-            experiment = Experiment.objects.filter(status=Experiment.STATUS_PENDING).first()
+            experiment = Experiment.objects.filter(status=Experiment.STATUS_PENDING).order_by("created_time").first()
             if experiment:
                 self.stdout.write(self.style.NOTICE(f"Running experiment {experiment.pk}..."))
                 run_experiment(experiment)

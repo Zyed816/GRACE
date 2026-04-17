@@ -1,45 +1,165 @@
 {% extends "base.html" %}
-{% block title %}Run Experiment{% endblock %}
+{% block title %}新建任务{% endblock %}
 {% block content %}
 <div class="card shadow-sm">
   <div class="card-body">
-    <h3 class="mb-3">Run Experiment</h3>
-    <form method="post">
+    <h3 class="mb-3">新建实验任务</h3>
+    <p class="text-muted mb-4">在同一页面中配置训练、参数搜索、最优参数验证以及全流程任务。</p>
+
+    <form method="post" id="task-form">
       {% csrf_token %}
-      <div class="row g-3">
-        {% for field in form.visible_fields %}
-          {% if field.name != "extra_params_text" %}
-          <div class="col-md-6">
-            <label class="form-label">{{ field.label }}</label>
-            {{ field }}
-            {% for error in field.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
-            {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
-          </div>
-          {% endif %}
+      {{ form.task_type }}
+
+      <ul class="nav nav-tabs mb-3" id="task-tabs" role="tablist">
+        {% for value, label in task_choices %}
+        <li class="nav-item" role="presentation">
+          <button class="nav-link {% if forloop.first %}active{% endif %}" type="button" data-task-tab="{{ value }}">{{ label }}</button>
+        </li>
         {% endfor %}
-      </div>
-      <div class="accordion mt-3" id="advancedAccordion">
-        <div class="accordion-item">
-          <h2 class="accordion-header">
-            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#advancedParams">
-              高级参数（可选）
-            </button>
-          </h2>
-          <div id="advancedParams" class="accordion-collapse collapse" data-bs-parent="#advancedAccordion">
-            <div class="accordion-body">
-              <label class="form-label">{{ form.extra_params_text.label }}</label>
-              {{ form.extra_params_text }}
-              {% for error in form.extra_params_text.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
-              {% if form.extra_params_text.help_text %}<div class="form-text">{{ form.extra_params_text.help_text }}</div>{% endif %}
-            </div>
+      </ul>
+
+      <div class="row g-3">
+        <div class="col-12">
+          <div class="form-check">
+            {{ form.run_now }}
+            <label class="form-check-label" for="{{ form.run_now.id_for_label }}">{{ form.run_now.label }}</label>
           </div>
         </div>
       </div>
-      <div class="mt-3 d-flex gap-2">
-        <button class="btn btn-primary" type="submit">Submit</button>
-        <a class="btn btn-outline-secondary" href="/history/">History</a>
+
+      <div class="task-panel mt-3" data-task-panel="train">
+        <h5>训练任务</h5>
+        <div class="row g-3">
+          <div class="col-md-4"><label class="form-label">数据集</label>{{ form.dataset }}</div>
+          <div class="col-md-4"><label class="form-label">方法</label>{{ form.model_name }}</div>
+          <div class="col-md-4"><label class="form-label">训练轮数</label>{{ form.epochs }}</div>
+          <div class="col-md-4"><label class="form-label">学习率</label>{{ form.learning_rate }}</div>
+          <div class="col-md-4"><label class="form-label">隐藏维度</label>{{ form.hidden_dim }}</div>
+          <div class="col-md-4"><label class="form-label">温度系数</label>{{ form.temperature }}</div>
+          <div class="col-md-6"><label class="form-label">边丢弃率</label>{{ form.drop_edge_rate }}</div>
+          <div class="col-md-6"><label class="form-label">特征丢弃率</label>{{ form.drop_feature_rate }}</div>
+          <div class="col-12">
+            <label class="form-label">{{ form.extra_params_text.label }}</label>
+            {{ form.extra_params_text }}
+            <div class="form-text">{{ form.extra_params_text.help_text }}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="task-panel mt-3 d-none" data-task-panel="grid_search">
+        <h5>参数搜索</h5>
+        <div class="row g-3">
+          <div class="col-md-4"><label class="form-label">方法族</label>{{ form.grid_method }}</div>
+          <div class="col-md-4"><label class="form-label">数据集</label>{{ form.grid_dataset }}</div>
+          <div class="col-md-4"><label class="form-label">Top-K</label>{{ form.grid_topk }}</div>
+          <div class="col-md-6"><label class="form-label">标准差权重</label>{{ form.grid_std_weight }}</div>
+          <div class="col-md-6"><label class="form-label">输出 CSV（可选）</label>{{ form.grid_out }}</div>
+        </div>
+      </div>
+
+      <div class="task-panel mt-3 d-none" data-task-panel="top_verify">
+        <h5>最优参数验证</h5>
+        <div class="row g-3">
+          <div class="col-md-4"><label class="form-label">数据集</label>{{ form.verify_dataset }}</div>
+          <div class="col-md-4"><label class="form-label">方法</label>{{ form.verify_method }}</div>
+          <div class="col-md-4"><label class="form-label">Top-K</label>{{ form.verify_topk }}</div>
+          <div class="col-md-6"><label class="form-label">每组参数运行次数</label>{{ form.verify_runs }}</div>
+          <div class="col-md-6"><label class="form-label">最优参数 CSV</label>{{ form.verify_top_params }}</div>
+        </div>
+      </div>
+
+      <div class="task-panel mt-3 d-none" data-task-panel="full_pipeline_single">
+        <h5>单数据集全流程</h5>
+        <div class="row g-3">
+          <div class="col-md-4"><label class="form-label">数据集</label>{{ form.pipeline_dataset }}</div>
+          <div class="col-md-4"><label class="form-label">基线运行次数</label>{{ form.pipeline_baseline_runs }}</div>
+          <div class="col-md-4"><label class="form-label">Top-K 验证数</label>{{ form.pipeline_topk_verify }}</div>
+          <div class="col-md-4"><label class="form-label">每个候选运行次数</label>{{ form.pipeline_runs_per_top }}</div>
+          <div class="col-md-4">
+            <div class="form-check mt-4">
+              {{ form.pipeline_force_grid }}
+              <label class="form-check-label" for="{{ form.pipeline_force_grid.id_for_label }}">强制重新参数搜索</label>
+            </div>
+          </div>
+          <div class="col-md-8"><label class="form-label">输出 CSV（可选）</label>{{ form.pipeline_out }}</div>
+        </div>
+      </div>
+
+      <div class="task-panel mt-3 d-none" data-task-panel="full_pipeline_multi">
+        <h5>多数据集全流程</h5>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label">数据集</label>
+            {{ form.multi_datasets }}
+          </div>
+          <div class="col-md-6">
+            <div class="form-check mt-4">
+              {{ form.multi_continue_on_error }}
+              <label class="form-check-label" for="{{ form.multi_continue_on_error.id_for_label }}">遇错继续执行</label>
+            </div>
+            <div class="form-check mt-2">
+              {{ form.multi_force_grid }}
+              <label class="form-check-label" for="{{ form.multi_force_grid.id_for_label }}">强制重新参数搜索</label>
+            </div>
+          </div>
+          <div class="col-md-4"><label class="form-label">基线运行次数</label>{{ form.multi_baseline_runs }}</div>
+          <div class="col-md-4"><label class="form-label">Top-K 验证数</label>{{ form.multi_topk_verify }}</div>
+          <div class="col-md-4"><label class="form-label">每个候选运行次数</label>{{ form.multi_runs_per_top }}</div>
+        </div>
+      </div>
+
+      <div class="mt-4">
+        <label class="form-label">{{ form.extra_cli_args_text.label }}</label>
+        {{ form.extra_cli_args_text }}
+        <div class="form-text">{{ form.extra_cli_args_text.help_text }}</div>
+      </div>
+
+      {% if form.errors %}
+      <div class="alert alert-danger mt-3 mb-0">
+        <div class="fw-semibold">请先修正以下问题：</div>
+        <ul class="mb-0">
+          {% for field in form %}
+            {% for err in field.errors %}
+            <li>{{ field.label }}：{{ err }}</li>
+            {% endfor %}
+          {% endfor %}
+          {% for err in form.non_field_errors %}
+          <li>{{ err }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+
+      <div class="mt-4 d-flex gap-2">
+        <button class="btn btn-primary" type="submit">提交任务</button>
+        <a class="btn btn-outline-secondary" href="/history/">查看历史</a>
       </div>
     </form>
   </div>
 </div>
+
+<script>
+  (function () {
+    const hiddenInput = document.getElementById("id_task_type");
+    if (!hiddenInput) return;
+    const tabs = document.querySelectorAll("[data-task-tab]");
+    const panels = document.querySelectorAll("[data-task-panel]");
+
+    const activate = (taskType) => {
+      hiddenInput.value = taskType;
+      tabs.forEach((tab) => {
+        tab.classList.toggle("active", tab.getAttribute("data-task-tab") === taskType);
+      });
+      panels.forEach((panel) => {
+        panel.classList.toggle("d-none", panel.getAttribute("data-task-panel") !== taskType);
+      });
+    };
+
+    tabs.forEach((tab) => {
+      tab.addEventListener("click", () => activate(tab.getAttribute("data-task-tab")));
+    });
+
+    activate(hiddenInput.value || "train");
+  })();
+</script>
 {% endblock %}

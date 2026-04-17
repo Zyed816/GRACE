@@ -1,13 +1,16 @@
 {% extends "base.html" %}
-{% block title %}Model {{ method.display_name }}{% endblock %}
+{% block title %}方法 {{ method.display_name }}{% endblock %}
 {% block content %}
 <div class="card shadow-sm">
   <div class="card-body">
     <h3>{{ method.display_name }}</h3>
     <p>{{ method.description }}</p>
-    <h5>Architecture</h5>
+    <p class="text-muted">{{ method.pipeline_role }}</p>
+    <h5>模型结构</h5>
     <p>{{ method.architecture }}</p>
-    <h5>Key Parameters</h5>
+    <h5>损失类型</h5>
+    <p>{{ method.loss_type }}</p>
+    <h5>关键参数</h5>
     <div class="d-flex flex-wrap gap-2">
       {% for param in method.key_parameters %}
         <span class="badge text-bg-secondary">{{ param }}</span>
