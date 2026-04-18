@@ -22,7 +22,7 @@
           <div class="col-6"><div class="metric-card"><div class="metric-label">运行秒数</div><div class="metric-value" data-metric="run_seconds">{{ experiment.run_seconds|default:"-" }}</div></div></div>
         </div>
 
-        <div class="mt-3 d-flex gap-2">
+        <div class="mt-3 d-flex gap-2 flex-wrap">
           {% if experiment.status != "running" %}
           <a class="btn btn-primary" href="/experiments/{{ experiment.pk }}/start/">开始任务</a>
           {% endif %}
@@ -30,6 +30,12 @@
           <form method="post" action="/experiments/{{ experiment.pk }}/stop/" class="d-inline">
             {% csrf_token %}
             <button id="stop-task-btn" class="btn btn-outline-danger" type="submit">停止任务</button>
+          </form>
+          {% else %}
+          <form method="post" action="/experiments/{{ experiment.pk }}/delete/" class="d-inline js-delete-experiment-form" data-confirm="确认删除该任务，并同步删除关联日志与结果文件吗？">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="/history/">
+            <button class="btn btn-outline-danger" type="submit">删除任务</button>
           </form>
           {% endif %}
         </div>
@@ -69,18 +75,9 @@
   <div class="col-lg-8">
     {% if is_train_task %}
     <div class="card shadow-sm mb-3">
-      <div class="card-header">训练损失与偏差指标</div>
+      <div class="card-header">训练损失</div>
       <div class="card-body">
         <div id="monitor-chart" style="height: 340px;"></div>
-      </div>
-    </div>
-    <div class="card shadow-sm mb-3">
-      <div class="card-header">语义对齐与采样偏差</div>
-      <div class="card-body">
-        <div class="small text-muted mb-2">
-          正样本平均相似度越高，说明语义对齐越强。
-        </div>
-        <div id="semantic-chart" style="height: 320px;"></div>
       </div>
     </div>
     {% endif %}

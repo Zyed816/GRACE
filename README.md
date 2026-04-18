@@ -352,8 +352,8 @@ PubMed/DBLP 训练耗时更长，建议优先在 Cora/CiteSeer 验证流程后�
 - Datasets 页面（Cora/CiteSeer/PubMed/DBLP 统计与简介）
 - Models 页面（GRACE/GCA/IFL-GR/IFL-GC 说明）
 - Run Experiment（参数配置 + 异步启动）
-- Training Monitor（Loss/Accuracy 曲线，ECharts）
-- Results（数据集-方法对比柱状图 + 历史 CSV 汇总）
+- Training Monitor（Loss + 采样偏差 + 语义相似度曲线，ECharts 实时轮询）
+- Results（数据集-方法对比柱状图 + 历史 CSV 汇总，主指标为 F1Mi/F1Ma）
 - Experiment History（实验历史与详情）
 
 ### 1) 进入 Django 项目目录
@@ -392,7 +392,15 @@ python manage.py process_experiments --poll-interval 5
 python manage.py process_experiments --once
 ```
 
-### 5) 命令行实验封装（可选）
+### 5) 同步已有结果 CSV（可选）
+
+如果你已经有 `results/` 目录里的历史 CSV，可以先同步进数据库：
+
+```bash
+python manage.py sync_pipeline_results
+```
+
+### 6) 命令行实验封装（可选）
 
 提供了一个 Django 外围脚本来调用现有训练入口：
 
@@ -426,3 +434,31 @@ Please cite our paper if you use this code:
   url = {http://arxiv.org/abs/2006.04131}
 }
 ```
+
+## Django Task System v2
+
+The Django UI now supports one unified task queue for:
+
+- `train.py` single training runs
+- `grid_search_*` scripts
+- `verify_top_params.py`
+- `run_*_full_pipeline.py`
+- `run_selected_full_pipelines.py`
+
+### Worker model
+
+Web only creates tasks in DB; a single worker process executes pending tasks sequentially:
+
+```bash
+cd gcl_experiment_system
+python manage.py process_experiments --poll-interval 1
+```
+
+### New UI behaviors
+
+- Task form is tab-based (`Train`, `Grid Search`, `Top Verify`, `Full Pipeline Single`, `Full Pipeline Multi`)
+- All tasks support JSON-array passthrough CLI args
+- Task detail page shows live terminal output (HTTP polling)
+- `Stop Task` supports:
+  - `pending -> cancelled` immediately
+  - `running -> cancel_requested -> cancelled` via cooperative process termination

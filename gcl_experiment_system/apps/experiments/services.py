@@ -10,10 +10,12 @@ import threading
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Set
 
 import yaml
 from django.conf import settings
+from django.db import transaction
+from django.db import connection
 from django.utils import timezone
 
 from .models import Experiment, ExperimentLog, ExperimentMetric, PipelineResult
@@ -259,6 +261,105 @@ def _resolve_output_path(path_value: str) -> str:
     if path.is_absolute():
         return str(path)
     return str((Path(settings.GRACE_PROJECT_ROOT) / path).resolve())
+
+
+def _resolve_saved_path(path_value: str):
+    candidate = (path_value or "").strip()
+    if not candidate:
+        return None
+    path = Path(candidate)
+    if path.is_absolute():
+        return path.resolve()
+    return (Path(settings.GRACE_PROJECT_ROOT) / path).resolve()
+
+
+def _managed_artifact_roots() -> List[Path]:
+    return [Path(settings.GRACE_LOGS_DIR).resolve(), Path(settings.GRACE_RESULTS_DIR).resolve()]
+
+
+def _is_managed_artifact_path(path: Path) -> bool:
+    resolved = path.resolve()
+    for root in _managed_artifact_roots():
+        try:
+            resolved.relative_to(root)
+            return True
+        except ValueError:
+            continue
+    return False
+
+
+def _primary_artifact_paths(experiment: Experiment) -> List[Path]:
+    artifacts = experiment.artifacts or {}
+    raw_paths: List[str] = []
+
+    if experiment.task_type == Experiment.TASK_TRAIN:
+        raw_paths.extend([experiment.exp1_log_path, artifacts.get("exp1_log_csv", "")])
+    elif experiment.task_type in [Experiment.TASK_GRID_SEARCH, Experiment.TASK_FULL_PIPELINE_SINGLE]:
+        raw_paths.append(artifacts.get("result_csv", ""))
+    elif experiment.task_type == Experiment.TASK_FULL_PIPELINE_MULTI:
+        raw_paths.extend(_ensure_list(artifacts.get("result_csvs", [])))
+    elif experiment.task_type == Experiment.TASK_TOP_VERIFY:
+        raw_paths.append(experiment.stdout_path)
+
+    if not any((item or "").strip() for item in raw_paths):
+        raw_paths.append(experiment.stdout_path)
+
+    paths = []
+    seen = set()
+    for item in raw_paths:
+        resolved = _resolve_saved_path(item)
+        if not resolved:
+            continue
+        key = str(resolved)
+        if key in seen:
+            continue
+        seen.add(key)
+        paths.append(resolved)
+    return paths
+
+
+def _deletion_candidate_paths(experiment: Experiment) -> List[Path]:
+    artifacts = experiment.artifacts or {}
+    raw_paths = [
+        experiment.stdout_path,
+        experiment.exp1_log_path,
+        artifacts.get("stdout_log", ""),
+        artifacts.get("exp1_log_csv", ""),
+        artifacts.get("result_csv", ""),
+    ]
+    raw_paths.extend(_ensure_list(artifacts.get("result_csvs", [])))
+
+    paths = []
+    seen = set()
+    for item in raw_paths:
+        resolved = _resolve_saved_path(item)
+        if not resolved or not _is_managed_artifact_path(resolved):
+            continue
+        key = str(resolved)
+        if key in seen:
+            continue
+        seen.add(key)
+        paths.append(resolved)
+        if resolved.suffix.lower() == ".csv":
+            curve_path = resolved.with_name(f"{resolved.stem}_curves.png").resolve()
+            if curve_path.exists() and _is_managed_artifact_path(curve_path):
+                curve_key = str(curve_path)
+                if curve_key not in seen:
+                    seen.add(curve_key)
+                    paths.append(curve_path)
+    return paths
+
+
+def _shared_artifact_refs(experiment: Experiment) -> Set[str]:
+    current_refs = {str(path) for path in _deletion_candidate_paths(experiment)}
+    if not current_refs:
+        return set()
+
+    shared = set()
+    for other in Experiment.objects.exclude(pk=experiment.pk):
+        other_refs = {str(path) for path in _deletion_candidate_paths(other)}
+        shared.update(current_refs & other_refs)
+    return shared
 
 
 def _build_command_for_experiment(experiment: Experiment, config_path: str, exp1_path: str):
@@ -670,6 +771,108 @@ def read_terminal_tail(stdout_path: str, max_lines: int = 200) -> dict:
         "terminal_tail": "".join(tail_lines),
         "terminal_total_lines": len(lines),
         "terminal_updated_at": updated_at,
+    }
+
+
+def cleanup_missing_output_records() -> dict:
+    deleted_experiments = []
+    experiments = list(Experiment.objects.filter(status__in=DONE_STATES))
+    for experiment in experiments:
+        paths = _primary_artifact_paths(experiment)
+        if not paths:
+            continue
+        if all(not path.exists() for path in paths):
+            deleted_experiments.append(experiment.pk)
+            experiment.delete()
+
+    stale_sources = []
+    for source_csv in PipelineResult.objects.exclude(source_csv="").values_list("source_csv", flat=True).distinct():
+        resolved = _resolve_saved_path(source_csv)
+        if resolved and not resolved.exists():
+            stale_sources.append(source_csv)
+
+    deleted_pipeline_rows = 0
+    if stale_sources:
+        queryset = PipelineResult.objects.filter(source_csv__in=stale_sources)
+        deleted_pipeline_rows = queryset.count()
+        queryset.delete()
+
+    reset_experiment_sequences_if_empty()
+
+    return {
+        "deleted_experiment_ids": deleted_experiments,
+        "deleted_pipeline_rows": deleted_pipeline_rows,
+    }
+
+
+def reset_experiment_sequences_if_empty() -> bool:
+    if Experiment.objects.exists():
+        return False
+
+    models = [Experiment, ExperimentLog, ExperimentMetric]
+    vendor = connection.vendor
+    with connection.cursor() as cursor:
+        if vendor == "sqlite":
+            for model in models:
+                cursor.execute("DELETE FROM sqlite_sequence WHERE name = %s", [model._meta.db_table])
+        elif vendor == "postgresql":
+            for model in models:
+                cursor.execute(
+                    "SELECT setval(pg_get_serial_sequence(%s, 'id'), 1, false)",
+                    [model._meta.db_table],
+                )
+        elif vendor in ["mysql", "mariadb"]:
+            for model in models:
+                table_name = connection.ops.quote_name(model._meta.db_table)
+                cursor.execute(f"ALTER TABLE {table_name} AUTO_INCREMENT = 1")
+        else:
+            return False
+    return True
+
+
+def delete_experiment_with_artifacts(experiment: Experiment) -> dict:
+    experiment.refresh_from_db()
+    if experiment.status in [Experiment.STATUS_PENDING, Experiment.STATUS_RUNNING]:
+        raise ValueError("运行中的任务请先停止，再执行删除。")
+
+    candidate_paths = _deletion_candidate_paths(experiment)
+    shared_refs = _shared_artifact_refs(experiment)
+
+    csv_source_paths = []
+    removable_paths = []
+    skipped_paths = []
+    for path in candidate_paths:
+        key = str(path)
+        if key in shared_refs:
+            skipped_paths.append(key)
+            continue
+        removable_paths.append(path)
+        if path.suffix.lower() == ".csv":
+            csv_source_paths.append(key)
+
+    with transaction.atomic():
+        if csv_source_paths:
+            PipelineResult.objects.filter(source_csv__in=csv_source_paths).delete()
+        experiment_id = experiment.pk
+        experiment.delete()
+
+    reset_experiment_sequences_if_empty()
+
+    deleted_files = []
+    file_delete_errors = []
+    for path in removable_paths:
+        try:
+            path.unlink(missing_ok=True)
+            if not path.exists():
+                deleted_files.append(str(path))
+        except OSError:
+            file_delete_errors.append(str(path))
+
+    return {
+        "deleted_experiment_id": experiment_id,
+        "deleted_files": deleted_files,
+        "skipped_files": skipped_paths,
+        "file_delete_errors": file_delete_errors,
     }
 
 

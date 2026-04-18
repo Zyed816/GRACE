@@ -59,57 +59,20 @@ function renderTrainCharts(payload) {
   const monitorEl = document.getElementById("monitor-chart");
   if (!monitorEl || !window.echarts) return;
 
-  const semanticEl = document.getElementById("semantic-chart");
   const lossChart = echarts.getInstanceByDom(monitorEl) || echarts.init(monitorEl);
-  const semanticChart = semanticEl ? (echarts.getInstanceByDom(semanticEl) || echarts.init(semanticEl)) : null;
 
   const epochs = payload.logs.map((item) => item.epoch);
   const loss = payload.logs.map((item) => item.loss);
-  const violationRate = payload.logs.map((item) => {
-    const p = item.payload || {};
-    const v = Number(p.violation_rate);
-    return Number.isFinite(v) ? v : null;
-  });
-  const meanMargin = payload.logs.map((item) => {
-    const p = item.payload || {};
-    const v = Number(p.mean_margin);
-    return Number.isFinite(v) ? v : null;
-  });
-  const meanPosSim = payload.logs.map((item) => {
-    const p = item.payload || {};
-    const v = Number(p.mean_pos_sim);
-    return Number.isFinite(v) ? v : null;
-  });
-  const meanMaxNegSim = payload.logs.map((item) => {
-    const p = item.payload || {};
-    const v = Number(p.mean_max_neg_sim);
-    return Number.isFinite(v) ? v : null;
-  });
 
   lossChart.setOption({
     tooltip: { trigger: "axis" },
-    legend: { data: ["训练损失", "违反率", "平均间隔"] },
+    legend: { data: ["训练损失"] },
     xAxis: { type: "category", data: epochs },
-    yAxis: [{ type: "value" }, { type: "value" }],
+    yAxis: [{ type: "value", name: "Loss" }],
     series: [
-      { name: "训练损失", type: "line", data: loss, smooth: true, yAxisIndex: 0 },
-      { name: "违反率", type: "line", data: violationRate, smooth: true, yAxisIndex: 1 },
-      { name: "平均间隔", type: "line", data: meanMargin, smooth: true, yAxisIndex: 1 },
+      { name: "训练损失", type: "line", data: loss, smooth: true },
     ],
   });
-
-  if (semanticChart) {
-    semanticChart.setOption({
-      tooltip: { trigger: "axis" },
-      legend: { data: ["正样本相似度", "最大负样本相似度"] },
-      xAxis: { type: "category", data: epochs },
-      yAxis: [{ type: "value", name: "相似度" }],
-      series: [
-        { name: "正样本相似度", type: "line", data: meanPosSim, smooth: true },
-        { name: "最大负样本相似度", type: "line", data: meanMaxNegSim, smooth: true },
-      ],
-    });
-  }
 }
 
 function setupStopButton() {
@@ -139,8 +102,27 @@ function getCsrfToken() {
   return el ? el.value : "";
 }
 
+function setupDeleteExperimentForms() {
+  const forms = document.querySelectorAll(".js-delete-experiment-form");
+  forms.forEach((form) => {
+    form.addEventListener("submit", (event) => {
+      const message = form.getAttribute("data-confirm") || "确认删除该任务吗？";
+      if (!window.confirm(message)) {
+        event.preventDefault();
+        return;
+      }
+      const btn = form.querySelector("button[type=submit]");
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = "删除中...";
+      }
+    });
+  });
+}
+
 document.addEventListener("DOMContentLoaded", function () {
   const statusEl = document.getElementById("experiment-status");
+  setupDeleteExperimentForms();
 
   if (window.__MONITOR_ENDPOINT__) {
     setupStopButton();

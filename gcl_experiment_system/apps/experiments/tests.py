@@ -2,8 +2,15 @@ from pathlib import Path
 
 from django.test import Client, TestCase, override_settings
 
-from .models import Experiment
-from .services import _build_command_for_experiment, read_terminal_tail, request_stop
+from .models import Experiment, PipelineResult
+from .services import (
+    _build_command_for_experiment,
+    cleanup_missing_output_records,
+    delete_experiment_with_artifacts,
+    read_terminal_tail,
+    reset_experiment_sequences_if_empty,
+    request_stop,
+)
 
 
 class ExperimentCommandBuilderTests(TestCase):
@@ -140,3 +147,169 @@ class ArtifactViewTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "全流程结果文件")
         self.assertContains(resp, "test_full_pipeline_results.csv")
+
+
+class CleanupMissingOutputTests(TestCase):
+    @override_settings(ROOT_URLCONF="gcl_system.urls")
+    def test_history_request_prunes_completed_train_experiment_with_missing_exp1_csv(self):
+        missing_csv = Path("d:/dissertation/openSourceCode/GRACE/logs/missing_train_exp1.csv")
+        missing_csv.unlink(missing_ok=True)
+
+        experiment = Experiment.objects.create(
+            task_type=Experiment.TASK_TRAIN,
+            dataset="Cora",
+            model_name="grace",
+            status=Experiment.STATUS_SUCCEEDED,
+            exp1_log_path=str(missing_csv),
+            artifacts={"exp1_log_csv": str(missing_csv)},
+        )
+
+        c = Client()
+        resp = c.get("/history/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotContains(resp, f"/experiments/{experiment.pk}/")
+        self.assertFalse(Experiment.objects.filter(pk=experiment.pk).exists())
+
+    def test_cleanup_missing_output_records_prunes_stale_pipeline_rows(self):
+        missing_csv = Path("d:/dissertation/openSourceCode/GRACE/results/missing_pipeline.csv")
+        missing_csv.unlink(missing_ok=True)
+
+        PipelineResult.objects.create(
+            dataset="Cora",
+            method_key="grace",
+            method_name="GRACE",
+            stage=PipelineResult.STAGE_SUMMARY,
+            F1Mi_mean=0.81,
+            source_csv=str(missing_csv),
+        )
+
+        result = cleanup_missing_output_records()
+        self.assertEqual(result["deleted_pipeline_rows"], 1)
+        self.assertEqual(PipelineResult.objects.count(), 0)
+
+
+class DeleteExperimentTests(TestCase):
+    @override_settings(ROOT_URLCONF="gcl_system.urls")
+    def test_delete_view_removes_experiment_and_owned_artifacts(self):
+        stdout_log = Path("d:/dissertation/openSourceCode/GRACE/logs/delete_task_stdout.log")
+        exp1_csv = Path("d:/dissertation/openSourceCode/GRACE/logs/delete_task_exp1.csv")
+        curve_png = Path("d:/dissertation/openSourceCode/GRACE/logs/delete_task_exp1_curves.png")
+        for path, content in [
+            (stdout_log, "stdout\n"),
+            (exp1_csv, "epoch,loss\n1,0.5\n"),
+            (curve_png, "png"),
+        ]:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8")
+            self.addCleanup(lambda p=path: p.unlink(missing_ok=True))
+
+        experiment = Experiment.objects.create(
+            task_type=Experiment.TASK_TRAIN,
+            dataset="Cora",
+            model_name="grace",
+            status=Experiment.STATUS_SUCCEEDED,
+            stdout_path=str(stdout_log),
+            exp1_log_path=str(exp1_csv),
+            artifacts={"stdout_log": str(stdout_log), "exp1_log_csv": str(exp1_csv)},
+        )
+
+        c = Client()
+        resp = c.post(f"/experiments/{experiment.pk}/delete/", {"next": "/history/"})
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp.headers["Location"], "/history/")
+        self.assertFalse(Experiment.objects.filter(pk=experiment.pk).exists())
+        self.assertFalse(stdout_log.exists())
+        self.assertFalse(exp1_csv.exists())
+        self.assertFalse(curve_png.exists())
+        recreated = Experiment.objects.create(
+            task_type=Experiment.TASK_TRAIN,
+            dataset="Cora",
+            model_name="grace",
+            status=Experiment.STATUS_PENDING,
+        )
+        self.assertEqual(recreated.pk, 1)
+
+    def test_delete_service_removes_pipeline_rows_for_deleted_result_csv(self):
+        result_csv = Path("d:/dissertation/openSourceCode/GRACE/results/delete_me_full_pipeline_results.csv")
+        result_csv.parent.mkdir(parents=True, exist_ok=True)
+        result_csv.write_text("dataset,method,stage\nCora,grace,summary\n", encoding="utf-8")
+        self.addCleanup(lambda: result_csv.unlink(missing_ok=True))
+
+        experiment = Experiment.objects.create(
+            task_type=Experiment.TASK_FULL_PIPELINE_SINGLE,
+            dataset="Cora",
+            model_name="pipeline",
+            status=Experiment.STATUS_SUCCEEDED,
+            artifacts={"result_csv": str(result_csv)},
+        )
+        PipelineResult.objects.create(
+            dataset="Cora",
+            method_key="grace",
+            method_name="GRACE",
+            stage=PipelineResult.STAGE_SUMMARY,
+            F1Mi_mean=0.81,
+            source_csv=str(result_csv),
+        )
+
+        result = delete_experiment_with_artifacts(experiment)
+        self.assertEqual(result["deleted_experiment_id"], experiment.pk)
+        self.assertFalse(result_csv.exists())
+        self.assertEqual(PipelineResult.objects.count(), 0)
+
+    def test_delete_service_keeps_shared_result_file(self):
+        result_csv = Path("d:/dissertation/openSourceCode/GRACE/results/shared_grid_search_results.csv")
+        result_csv.parent.mkdir(parents=True, exist_ok=True)
+        result_csv.write_text("dataset,method\nCora,ifl-gr\n", encoding="utf-8")
+        self.addCleanup(lambda: result_csv.unlink(missing_ok=True))
+
+        exp_a = Experiment.objects.create(
+            task_type=Experiment.TASK_GRID_SEARCH,
+            dataset="Cora",
+            model_name="ifl-gr",
+            status=Experiment.STATUS_SUCCEEDED,
+            artifacts={"result_csv": str(result_csv)},
+        )
+        exp_b = Experiment.objects.create(
+            task_type=Experiment.TASK_GRID_SEARCH,
+            dataset="Cora",
+            model_name="ifl-gr",
+            status=Experiment.STATUS_SUCCEEDED,
+            artifacts={"result_csv": str(result_csv)},
+        )
+
+        result = delete_experiment_with_artifacts(exp_a)
+        self.assertFalse(Experiment.objects.filter(pk=exp_a.pk).exists())
+        self.assertTrue(Experiment.objects.filter(pk=exp_b.pk).exists())
+        self.assertTrue(result_csv.exists())
+        self.assertIn(str(result_csv.resolve()), result["skipped_files"])
+
+    def test_delete_service_rejects_running_task(self):
+        experiment = Experiment.objects.create(
+            task_type=Experiment.TASK_TRAIN,
+            dataset="Cora",
+            model_name="grace",
+            status=Experiment.STATUS_RUNNING,
+        )
+
+        with self.assertRaises(ValueError):
+            delete_experiment_with_artifacts(experiment)
+
+    def test_reset_sequence_helper_resets_advanced_empty_table(self):
+        experiment = Experiment.objects.create(
+            task_type=Experiment.TASK_TRAIN,
+            dataset="Cora",
+            model_name="grace",
+            status=Experiment.STATUS_PENDING,
+        )
+        experiment.delete()
+
+        self.assertFalse(Experiment.objects.exists())
+        self.assertTrue(reset_experiment_sequences_if_empty())
+
+        recreated = Experiment.objects.create(
+            task_type=Experiment.TASK_TRAIN,
+            dataset="Cora",
+            model_name="grace",
+            status=Experiment.STATUS_PENDING,
+        )
+        self.assertEqual(recreated.pk, 1)

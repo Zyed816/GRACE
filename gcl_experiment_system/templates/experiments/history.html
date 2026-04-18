@@ -15,6 +15,7 @@
           <th>运行秒数</th>
           <th>产物</th>
           <th>创建时间</th>
+          <th>操作</th>
         </tr>
       </thead>
       <tbody>
@@ -28,9 +29,21 @@
           <td>{{ exp.run_seconds|default:"-" }}</td>
           <td class="small">{{ exp.artifacts|default:"-" }}</td>
           <td>{{ exp.created_time }}</td>
+          <td>
+            <div class="d-flex gap-2 flex-wrap">
+              <a class="btn btn-sm btn-outline-secondary" href="/experiments/{{ exp.pk }}/">查看</a>
+              {% if exp.status != "running" and exp.status != "pending" %}
+              <form method="post" action="/experiments/{{ exp.pk }}/delete/" class="d-inline js-delete-experiment-form" data-confirm="确认删除该任务，并同步删除关联日志与结果文件吗？">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="/history/">
+                <button class="btn btn-sm btn-outline-danger" type="submit">删除</button>
+              </form>
+              {% endif %}
+            </div>
+          </td>
         </tr>
       {% empty %}
-        <tr><td colspan="8">暂无历史记录。</td></tr>
+        <tr><td colspan="9">暂无历史记录。</td></tr>
       {% endfor %}
       </tbody>
     </table>

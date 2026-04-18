@@ -16,7 +16,15 @@ from apps.models.catalog import METHOD_CATALOG
 
 from .forms import ExperimentTaskForm
 from .models import Experiment, ExperimentLog, ExperimentMetric, PipelineResult
-from .services import enqueue_experiment, read_terminal_tail, request_stop, sync_result_csv
+from .services import (
+    cleanup_missing_output_records,
+    delete_experiment_with_artifacts,
+    enqueue_experiment,
+    read_terminal_tail,
+    reset_experiment_sequences_if_empty,
+    request_stop,
+    sync_result_csv,
+)
 
 
 PROJECT_OVERVIEW = [
@@ -188,6 +196,7 @@ def _collect_experiment_asset_entries(experiment: Experiment):
 
 
 def dashboard(request):
+    cleanup_missing_output_records()
     recent_experiments = Experiment.objects.all()[:5]
     results_dir = Path(settings.GRACE_RESULTS_DIR)
     for csv_path in sorted(results_dir.glob("*_full_pipeline_results.csv")):
@@ -218,6 +227,7 @@ def experiment_create(request):
     if request.method == "POST":
         form = ExperimentTaskForm(request.POST)
         if form.is_valid():
+            reset_experiment_sequences_if_empty()
             payload = form.build_experiment_payload()
             run_now = form.cleaned_data.get("run_now", True)
             if not run_now:
@@ -234,6 +244,7 @@ def experiment_create(request):
 
 
 def experiment_detail(request, pk):
+    cleanup_missing_output_records()
     experiment = get_object_or_404(Experiment, pk=pk)
     logs = list(ExperimentLog.objects.filter(experiment=experiment))
     metrics = list(ExperimentMetric.objects.filter(experiment=experiment))
@@ -258,11 +269,13 @@ def experiment_detail(request, pk):
 
 
 def experiment_history(request):
+    cleanup_missing_output_records()
     experiments = Experiment.objects.all()
     return render(request, "experiments/history.html", {"experiments": experiments})
 
 
 def experiment_monitor(request, pk):
+    cleanup_missing_output_records()
     experiment = get_object_or_404(Experiment, pk=pk)
     logs = list(ExperimentLog.objects.filter(experiment=experiment).order_by("epoch").values("epoch", "loss", "accuracy", "payload"))
     terminal = read_terminal_tail(experiment.stdout_path, max_lines=120)
@@ -282,6 +295,7 @@ def experiment_monitor(request, pk):
 
 
 def results_overview(request):
+    cleanup_missing_output_records()
     method_entries = list(METHOD_CATALOG.values())
     datasets = list(DATASET_CATALOG.keys())
     series_map = {method["display_name"]: [] for method in method_entries}
@@ -337,6 +351,7 @@ def results_overview(request):
 
 
 def api_monitor(request, pk):
+    cleanup_missing_output_records()
     experiment = get_object_or_404(Experiment, pk=pk)
     logs = list(ExperimentLog.objects.filter(experiment=experiment).order_by("epoch").values("epoch", "loss", "accuracy", "payload")[:500])
     terminal = read_terminal_tail(experiment.stdout_path, max_lines=200)
@@ -363,6 +378,7 @@ def api_monitor(request, pk):
 
 
 def experiment_start(request, pk):
+    cleanup_missing_output_records()
     experiment = get_object_or_404(Experiment, pk=pk)
     enqueue_experiment(experiment.pk)
     return redirect("experiment-detail", pk=experiment.pk)
@@ -370,6 +386,7 @@ def experiment_start(request, pk):
 
 @require_POST
 def experiment_stop(request, pk):
+    cleanup_missing_output_records()
     experiment = get_object_or_404(Experiment, pk=pk)
     action = request_stop(experiment)
     if request.headers.get("x-requested-with") == "XMLHttpRequest":
@@ -379,9 +396,30 @@ def experiment_stop(request, pk):
 
 @require_POST
 def api_experiment_stop(request, pk):
+    cleanup_missing_output_records()
     experiment = get_object_or_404(Experiment, pk=pk)
     action = request_stop(experiment)
     return JsonResponse({"id": experiment.pk, "action": action, "status": experiment.status})
+
+
+@require_POST
+def experiment_delete(request, pk):
+    cleanup_missing_output_records()
+    experiment = get_object_or_404(Experiment, pk=pk)
+    next_url = (request.POST.get("next") or reverse("experiment-history")).strip()
+    if not next_url.startswith("/"):
+        next_url = reverse("experiment-history")
+
+    try:
+        result = delete_experiment_with_artifacts(experiment)
+    except ValueError as exc:
+        if request.headers.get("x-requested-with") == "XMLHttpRequest":
+            return JsonResponse({"ok": False, "error": str(exc)}, status=400)
+        return HttpResponseBadRequest(str(exc))
+
+    if request.headers.get("x-requested-with") == "XMLHttpRequest":
+        return JsonResponse({"ok": True, "redirect_to": next_url, **result})
+    return redirect(next_url)
 
 
 def api_experiment_create(request):
@@ -390,6 +428,7 @@ def api_experiment_create(request):
     form = ExperimentTaskForm(request.POST)
     if not form.is_valid():
         return JsonResponse({"ok": False, "errors": form.errors}, status=400)
+    reset_experiment_sequences_if_empty()
     payload = form.build_experiment_payload()
     experiment = Experiment.objects.create(**payload)
     enqueue_experiment(experiment.pk)

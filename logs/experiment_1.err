@@ -1,2 +1,0 @@
-D:\SoftWare\anaconda\envs\GCL\lib\site-packages\torch_geometric\deprecation.py:26: UserWarning: 'dropout_adj' is deprecated, use 'dropout_edge' instead
-  warnings.warn(out)
