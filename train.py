@@ -1,4 +1,5 @@
 import argparse
+import csv
 import os
 import os.path as osp
 import random
@@ -23,6 +24,46 @@ from eval import label_classification
 # - gca     : GCA structure-aware augment + InfoNCE
 # - ifl-gc  : GCA augment + semantically guided corrected InfoNCE
 
+def experiment1_metrics(z1: torch.Tensor, z2: torch.Tensor, batch_size: int = 0):
+    with torch.no_grad():
+        z1n = F.normalize(z1, dim=1)
+        z2n = F.normalize(z2, dim=1)
+
+        num_nodes = z1n.size(0)
+        pos_sim = (z1n * z2n).sum(dim=1)
+        if num_nodes <= 1:
+            return {
+                'violation_rate': 0.0,
+                'mean_margin': 0.0,
+                'p10_margin': 0.0,
+                'mean_pos_sim': pos_sim.mean().item() if num_nodes == 1 else 0.0,
+                'mean_max_neg_sim': 0.0,
+            }
+
+        if batch_size > 0 and batch_size < num_nodes:
+            indices = torch.arange(num_nodes, device=z1n.device)
+            max_neg_parts = []
+            for start in range(0, num_nodes, batch_size):
+                rows = indices[start:start + batch_size]
+                sim_chunk = torch.mm(z1n[rows], z2n.t())
+                sim_chunk[torch.arange(rows.numel(), device=z1n.device), rows] = float('-inf')
+                max_neg_parts.append(sim_chunk.max(dim=1).values)
+            max_neg_sim = torch.cat(max_neg_parts, dim=0)
+        else:
+            sim = torch.mm(z1n, z2n.t())
+            neg_mask = torch.eye(num_nodes, device=sim.device, dtype=torch.bool)
+            max_neg_sim = sim.masked_fill(neg_mask, float('-inf')).max(dim=1).values
+
+        margins = pos_sim - max_neg_sim
+        violation_rate = (max_neg_sim > pos_sim).float().mean().item()
+
+        return {
+            'violation_rate': violation_rate,
+            'mean_margin': margins.mean().item(),
+            'p10_margin': torch.quantile(margins, 0.1).item(),
+            'mean_pos_sim': pos_sim.mean().item(),
+            'mean_max_neg_sim': max_neg_sim.mean().item(),
+        }
 
 def compute_pr(edge_index: torch.Tensor, damp: float = 0.85, k: int = 10):
     num_nodes = int(edge_index.max().item()) + 1
@@ -344,7 +385,8 @@ def _transpose_row_lists(row_cols, row_weights, num_nodes):
     return out_cols, out_ws
 
 
-def train_grace(model: Model, x, edge_index, contrastive_batch_size=0):
+def train_grace(model: Model, x, edge_index, contrastive_batch_size=0,
+                return_exp1_stats=False, exp1_batch_size=0):
     model.train()
     optimizer.zero_grad()
     edge_index_1 = dropout_adj(edge_index, p=drop_edge_rate_1)[0]
@@ -353,12 +395,14 @@ def train_grace(model: Model, x, edge_index, contrastive_batch_size=0):
     x_2 = drop_feature(x, drop_feature_rate_2)
     z1 = model(x_1, edge_index_1)
     z2 = model(x_2, edge_index_2)
+    exp1_stats = None
+    if return_exp1_stats:
+        exp1_stats = experiment1_metrics(z1.detach(), z2.detach(), batch_size=exp1_batch_size)
 
     loss = model.loss(z1, z2, batch_size=contrastive_batch_size)
     loss.backward()
     optimizer.step()
-    return loss.item()
-
+    return loss.item(), exp1_stats
 
 def mine_unlabeled_positives(
         model: Model,
@@ -538,7 +582,7 @@ def mine_unlabeled_positives(
 
 
 def train_iflgr(model: Model, x, edge_index, du_pos_mask, du_pos_weight, unlabeled_weight, corrected_batch_size=0,
-                du_pos_csr=None, du_pos_csr_t=None):
+                du_pos_csr=None, du_pos_csr_t=None, return_exp1_stats=False, exp1_batch_size=0):
     model.train()
     optimizer.zero_grad()
     edge_index_1 = dropout_adj(edge_index, p=drop_edge_rate_1)[0]
@@ -547,6 +591,9 @@ def train_iflgr(model: Model, x, edge_index, du_pos_mask, du_pos_weight, unlabel
     x_2 = drop_feature(x, drop_feature_rate_2)
     z1 = model(x_1, edge_index_1)
     z2 = model(x_2, edge_index_2)
+    exp1_stats = None
+    if return_exp1_stats:
+        exp1_stats = experiment1_metrics(z1.detach(), z2.detach(), batch_size=exp1_batch_size)
 
     loss = model.loss(
         z1,
@@ -561,7 +608,7 @@ def train_iflgr(model: Model, x, edge_index, du_pos_mask, du_pos_weight, unlabel
 
     loss.backward()
     optimizer.step()
-    return loss.item()
+    return loss.item(), exp1_stats
 
 
 def train_iflgc(
@@ -577,7 +624,9 @@ def train_iflgc(
         refl_du_weight,
         corrected_batch_size=0,
         du_pos_csr=None,
-        du_pos_csr_t=None):
+        du_pos_csr_t=None,
+        return_exp1_stats=False,
+        exp1_batch_size=0):
     model.train()
     optimizer.zero_grad()
 
@@ -601,6 +650,9 @@ def train_iflgc(
 
     z1 = model(x_1, edge_index_1)
     z2 = model(x_2, edge_index_2)
+    exp1_stats = None
+    if return_exp1_stats:
+        exp1_stats = experiment1_metrics(z1.detach(), z2.detach(), batch_size=exp1_batch_size)
 
     loss = model.loss(
         z1,
@@ -617,10 +669,11 @@ def train_iflgc(
 
     loss.backward()
     optimizer.step()
-    return loss.item()
+    return loss.item(), exp1_stats
 
 
-def train_gca(model: Model, x, edge_index, drop_scheme, drop_weights, feature_weights, contrastive_batch_size=0):
+def train_gca(model: Model, x, edge_index, drop_scheme, drop_weights, feature_weights, contrastive_batch_size=0,
+              return_exp1_stats=False, exp1_batch_size=0):
     model.train()
     optimizer.zero_grad()
 
@@ -643,11 +696,14 @@ def train_gca(model: Model, x, edge_index, drop_scheme, drop_weights, feature_we
 
     z1 = model(x_1, edge_index_1)
     z2 = model(x_2, edge_index_2)
+    exp1_stats = None
+    if return_exp1_stats:
+        exp1_stats = experiment1_metrics(z1.detach(), z2.detach(), batch_size=exp1_batch_size)
 
     loss = model.loss(z1, z2, batch_size=contrastive_batch_size)
     loss.backward()
     optimizer.step()
-    return loss.item()
+    return loss.item(), exp1_stats
 
 
 def test(model: Model, x, edge_index, y, final=False):
@@ -666,6 +722,9 @@ if __name__ == '__main__':
     parser.add_argument('--dataset_root', type=str, default=None,
                         help='Dataset cache root. Defaults to GRACE/datasets')
     parser.add_argument('--method', type=str, default='grace', choices=['grace', 'ifl-gr', 'gca', 'ifl-gc'])
+    parser.add_argument('--exp1_metrics', action='store_true',
+                        help='Compute sampling-bias validation metrics for the current run.')
+    parser.add_argument('--exp1_log_csv', type=str, default='')
     args = parser.parse_args()
 
     assert args.gpu_id in range(0, 8)
@@ -764,6 +823,28 @@ if __name__ == '__main__':
     optimizer = torch.optim.Adam(
         model.parameters(), lr=learning_rate, weight_decay=weight_decay)
 
+    csv_writer = None
+    csv_fp = None
+    if args.exp1_log_csv:
+        csv_path = args.exp1_log_csv
+        csv_dir = osp.dirname(csv_path)
+        if csv_dir:
+            os.makedirs(csv_dir, exist_ok=True)
+        csv_fp = open(csv_path, mode='w', newline='', encoding='utf-8')
+        csv_writer = csv.DictWriter(csv_fp, fieldnames=[
+            'epoch',
+            'loss',
+            'violation_rate',
+            'mean_margin',
+            'p10_margin',
+            'mean_pos_sim',
+            'mean_max_neg_sim',
+        ])
+        csv_writer.writeheader()
+
+    exp1_metrics_enabled = bool(args.exp1_metrics or args.exp1_log_csv)
+    exp1_metrics_batch_size = contrastive_batch_size if contrastive_batch_size > 0 else corrected_batch_size
+
     start = t()
     prev = start
     du_cache = None
@@ -793,21 +874,30 @@ if __name__ == '__main__':
         mean_pairs_per_node = 0.0
         active_threshold = 0.0
         current_unlabeled_weight = 0.0
+        exp1_stats = None
 
         if args.method == 'grace':
             # Baseline branch: pure GRACE.
-            loss = train_grace(model, data.x, data.edge_index, contrastive_batch_size=contrastive_batch_size)
+            loss, exp1_stats = train_grace(
+                model,
+                data.x,
+                data.edge_index,
+                contrastive_batch_size=contrastive_batch_size,
+                return_exp1_stats=exp1_metrics_enabled,
+                exp1_batch_size=exp1_metrics_batch_size)
             phase = 'grace'
         elif args.method == 'gca':
             # GCA branch: structure-aware augmentation only.
-            loss = train_gca(
+            loss, exp1_stats = train_gca(
                 model,
                 data.x,
                 data.edge_index,
                 gca_drop_scheme,
                 gca_drop_weights,
                 gca_feature_weights,
-                contrastive_batch_size=contrastive_batch_size)
+                contrastive_batch_size=contrastive_batch_size,
+                return_exp1_stats=exp1_metrics_enabled,
+                exp1_batch_size=exp1_metrics_batch_size)
             phase = 'gca'
         elif args.method == 'ifl-gc':
             # IFL-GC branch:
@@ -815,14 +905,16 @@ if __name__ == '__main__':
             # 2) periodically mine D_U^+
             # 3) optimize corrected InfoNCE (cross-view + same-view semantic terms)
             if epoch <= warmup_epochs:
-                loss = train_gca(
+                loss, exp1_stats = train_gca(
                     model,
                     data.x,
                     data.edge_index,
                     gca_drop_scheme,
                     gca_drop_weights,
                     gca_feature_weights,
-                    contrastive_batch_size=contrastive_batch_size)
+                    contrastive_batch_size=contrastive_batch_size,
+                    return_exp1_stats=exp1_metrics_enabled,
+                    exp1_batch_size=exp1_metrics_batch_size)
                 phase = 'warmup-gca'
             else:
                 if du_cache is None or (epoch - warmup_epochs - 1) % update_interval == 0:
@@ -846,7 +938,7 @@ if __name__ == '__main__':
                 progress = max(epoch - warmup_epochs, 0) / max(corrected_ramp_epochs, 1)
                 current_unlabeled_weight = unlabeled_weight * min(progress, 1.0)
 
-                loss = train_iflgc(
+                loss, exp1_stats = train_iflgc(
                     model,
                     data.x,
                     data.edge_index,
@@ -859,7 +951,9 @@ if __name__ == '__main__':
                     iflgc_refl_du_weight,
                     corrected_batch_size=corrected_batch_size,
                     du_pos_csr=du_cache.get('du_pos_csr'),
-                    du_pos_csr_t=du_cache.get('du_pos_csr_t'))
+                    du_pos_csr_t=du_cache.get('du_pos_csr_t'),
+                    return_exp1_stats=exp1_metrics_enabled,
+                    exp1_batch_size=exp1_metrics_batch_size)
                 phase = 'corrected-gca'
         else:
             # IFL-GR branch:
@@ -867,11 +961,13 @@ if __name__ == '__main__':
             # 2) periodically mine D_U^+
             # 3) optimize corrected InfoNCE (cross-view semantic term)
             if epoch <= warmup_epochs:
-                loss = train_grace(
+                loss, exp1_stats = train_grace(
                     model,
                     data.x,
                     data.edge_index,
-                    contrastive_batch_size=contrastive_batch_size)
+                    contrastive_batch_size=contrastive_batch_size,
+                    return_exp1_stats=exp1_metrics_enabled,
+                    exp1_batch_size=exp1_metrics_batch_size)
                 phase = 'warmup'
             else:
                 if du_cache is None or (epoch - warmup_epochs - 1) % update_interval == 0:
@@ -895,7 +991,7 @@ if __name__ == '__main__':
                 progress = max(epoch - warmup_epochs, 0) / max(corrected_ramp_epochs, 1)
                 current_unlabeled_weight = unlabeled_weight * min(progress, 1.0)
 
-                loss = train_iflgr(
+                loss, exp1_stats = train_iflgr(
                     model,
                     data.x,
                     data.edge_index,
@@ -904,12 +1000,22 @@ if __name__ == '__main__':
                     current_unlabeled_weight,
                     corrected_batch_size=corrected_batch_size,
                     du_pos_csr=du_cache.get('du_pos_csr'),
-                    du_pos_csr_t=du_cache.get('du_pos_csr_t'))
+                    du_pos_csr_t=du_cache.get('du_pos_csr_t'),
+                    return_exp1_stats=exp1_metrics_enabled,
+                    exp1_batch_size=exp1_metrics_batch_size)
                 phase = 'corrected'
 
         now = t()
+        exp1_msg = ''
+        if exp1_stats is not None:
+            exp1_msg = (
+                f', v_rate={exp1_stats["violation_rate"]:.4f}, '
+                f'm_margin={exp1_stats["mean_margin"]:.4f}, '
+                f'p10={exp1_stats["p10_margin"]:.4f}'
+            )
         if args.method in ['grace', 'gca'] or phase in ['warmup', 'warmup-gca']:
-            print(f'(T) | Epoch={epoch:03d}, phase={phase}, loss={loss:.4f}, '
+            print(f'(T) | Epoch={epoch:03d}, phase={phase}, loss={loss:.4f}'
+                  f'{exp1_msg}, '
                   f'this epoch {now - prev:.4f}, total {now - start:.4f}')
         else:
             print(f'(T) | Epoch={epoch:03d}, loss={loss:.4f}, '
@@ -918,9 +1024,24 @@ if __name__ == '__main__':
                   f'ts={active_threshold:.4f}, '
                   f'mined_pairs={mined_pairs}, '
                   f'avg_pairs_per_node={mean_pairs_per_node:.2f}, '
-                  f'mean_w={mean_weight:.4f}, '
+                  f'mean_w={mean_weight:.4f}'
+                  f'{exp1_msg}, '
                   f'this epoch {now - prev:.4f}, total {now - start:.4f}')
+        if csv_writer is not None and csv_fp is not None and exp1_stats is not None:
+            csv_writer.writerow({
+                'epoch': epoch,
+                'loss': loss,
+                'violation_rate': exp1_stats['violation_rate'],
+                'mean_margin': exp1_stats['mean_margin'],
+                'p10_margin': exp1_stats['p10_margin'],
+                'mean_pos_sim': exp1_stats['mean_pos_sim'],
+                'mean_max_neg_sim': exp1_stats['mean_max_neg_sim'],
+            })
+            csv_fp.flush()
         prev = now
+
+    if csv_fp is not None:
+        csv_fp.close()
 
     print("=== Final ===")
     test(model, data.x, data.edge_index, data.y, final=True)
