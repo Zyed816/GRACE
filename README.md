@@ -8,6 +8,21 @@ This repository is based on the paper [deep **GRA**ph **C**ontrastive r**E**pres
 
 For a broad collection of graph SSL methods, see [awesome-self-supervised-learning-for-graphs](https://github.com/SXKDZ/awesome-self-supervised-learning-for-graphs).
 
+## Project Layout | 工程结构
+
+- Core code stays at the repository root: `train.py`, `model.py`, `eval.py`, `config.yaml`
+- Comparison experiments live in `experiments/comparison/`
+- Hyper-parameter analysis lives in `experiments/hyperparameter_analysis/`
+- Sampling-bias validation utilities live in `experiments/sampling_bias/`
+- Documentation lives in `docs/`
+- `tools/` is kept as a compatibility layer so older commands still work
+
+Recommended references:
+
+- `docs/CODE_STRUCTURE.md`
+- `docs/GRID_SEARCH_GUIDE.md`
+- `experiments/README.md`
+
 ## What This Project Can Do | 项目能力总览
 
 ### Methods | 支持方法
@@ -52,7 +67,7 @@ python train.py --dataset Cora --method grace
 ### 3) Run full comparison on one dataset
 
 ```bash
-python tools/run_cora_full_pipeline.py --dataset Cora --gpu_id 0
+python experiments/comparison/run_cora_full_pipeline.py --dataset Cora --gpu_id 0
 ```
 
 Default output:
@@ -100,28 +115,28 @@ python train.py --dataset Cora --method ifl-gc
 #### IFL-GR
 
 ```bash
-python tools/grid_search_iflgr_cora.py --dataset Cora --gpu_id 0 --topk 10
-python tools/grid_search_iflgr_citeseer.py --gpu_id 0 --topk 10
-python tools/grid_search_iflgr_pubmed.py --gpu_id 0 --topk 10
-python tools/grid_search_iflgr_dblp.py --gpu_id 0 --topk 10
+python experiments/comparison/grid_search_iflgr_cora.py --dataset Cora --gpu_id 0 --topk 10
+python experiments/comparison/grid_search_iflgr_citeseer.py --gpu_id 0 --topk 10
+python experiments/comparison/grid_search_iflgr_pubmed.py --gpu_id 0 --topk 10
+python experiments/comparison/grid_search_iflgr_dblp.py --gpu_id 0 --topk 10
 ```
 
 #### GCA
 
 ```bash
-python tools/grid_search_gca_cora.py --dataset Cora --gpu_id 0 --topk 10
-python tools/grid_search_gca_citeseer.py --gpu_id 0 --topk 10
-python tools/grid_search_gca_pubmed.py --gpu_id 0 --topk 10
-python tools/grid_search_gca_dblp.py --gpu_id 0 --topk 10
+python experiments/comparison/grid_search_gca_cora.py --dataset Cora --gpu_id 0 --topk 10
+python experiments/comparison/grid_search_gca_citeseer.py --gpu_id 0 --topk 10
+python experiments/comparison/grid_search_gca_pubmed.py --gpu_id 0 --topk 10
+python experiments/comparison/grid_search_gca_dblp.py --gpu_id 0 --topk 10
 ```
 
 #### IFL-GC
 
 ```bash
-python tools/grid_search_iflgc_cora.py --dataset Cora --gpu_id 0 --topk 10
-python tools/grid_search_iflgc_citeseer.py --gpu_id 0 --topk 10
-python tools/grid_search_iflgc_pubmed.py --gpu_id 0 --topk 10
-python tools/grid_search_iflgc_dblp.py --gpu_id 0 --topk 10
+python experiments/comparison/grid_search_iflgc_cora.py --dataset Cora --gpu_id 0 --topk 10
+python experiments/comparison/grid_search_iflgc_citeseer.py --gpu_id 0 --topk 10
+python experiments/comparison/grid_search_iflgc_pubmed.py --gpu_id 0 --topk 10
+python experiments/comparison/grid_search_iflgc_dblp.py --gpu_id 0 --topk 10
 ```
 
 ### Typical Outputs | 典型输出文件
@@ -147,9 +162,9 @@ Grid search ranks candidates by:
 After grid search, verify top candidates with repeated runs:
 
 ```bash
-python tools/verify_top_params.py --dataset Cora --method ifl-gr --top_params results/grid_search_iflgr_cora_results.csv --topk 3 --runs 3 --gpu_id 0
-python tools/verify_top_params.py --dataset Cora --method gca --top_params results/grid_search_gca_cora_results.csv --topk 3 --runs 3 --gpu_id 0
-python tools/verify_top_params.py --dataset Cora --method ifl-gc --top_params results/grid_search_iflgc_cora_results.csv --topk 3 --runs 3 --gpu_id 0
+python experiments/comparison/verify_top_params.py --dataset Cora --method ifl-gr --top_params results/grid_search_iflgr_cora_results.csv --topk 3 --runs 3 --gpu_id 0
+python experiments/comparison/verify_top_params.py --dataset Cora --method gca --top_params results/grid_search_gca_cora_results.csv --topk 3 --runs 3 --gpu_id 0
+python experiments/comparison/verify_top_params.py --dataset Cora --method ifl-gc --top_params results/grid_search_iflgc_cora_results.csv --topk 3 --runs 3 --gpu_id 0
 ```
 
 复验目的：降低单次随机波动影响，得到更稳定的最终参数推荐。
@@ -159,7 +174,7 @@ python tools/verify_top_params.py --dataset Cora --method ifl-gc --top_params re
 For `ifl-gr` and `ifl-gc`, you can now reuse the best ranked grid-search row and vary one paper hyper-parameter at a time.
 
 ```bash
-python tools/run_ifl_param_sensitivity.py --datasets Cora --methods ifl-gr ifl-gc --gpu_id 0
+python experiments/hyperparameter_analysis/run_ifl_param_sensitivity.py --datasets Cora --methods ifl-gr ifl-gc --gpu_id 0
 ```
 
 Default behavior:
@@ -180,10 +195,10 @@ Useful customizations:
 
 ```bash
 # Explicit sweep values.
-python tools/run_ifl_param_sensitivity.py --datasets Cora --methods ifl-gr --ts_values 99.5 99.7 99.9 --m_values 10 12 14 --k_values 80 100 120 --runs 3 --gpu_id 0
+python experiments/hyperparameter_analysis/run_ifl_param_sensitivity.py --datasets Cora --methods ifl-gr --ts_values 99.5 99.7 99.9 --m_values 10 12 14 --k_values 80 100 120 --runs 3 --gpu_id 0
 
 # Use the 2nd ranked grid-search row as the anchor.
-python tools/run_ifl_param_sensitivity.py --datasets PubMed --methods ifl-gc --base_rank 2 --runs 3 --gpu_id 0
+python experiments/hyperparameter_analysis/run_ifl_param_sensitivity.py --datasets PubMed --methods ifl-gc --base_rank 2 --runs 3 --gpu_id 0
 ```
 
 ## Automated Comparison Pipelines | 自动化对比实验
@@ -191,33 +206,33 @@ python tools/run_ifl_param_sensitivity.py --datasets PubMed --methods ifl-gc --b
 ### Single Dataset Full Pipeline | 单数据集完整流水线
 
 ```bash
-python tools/run_cora_full_pipeline.py --dataset Cora --gpu_id 0
-python tools/run_citeseer_full_pipeline.py --gpu_id 0
-python tools/run_pubmed_full_pipeline.py --gpu_id 0
-python tools/run_dblp_full_pipeline.py --gpu_id 0
+python experiments/comparison/run_cora_full_pipeline.py --dataset Cora --gpu_id 0
+python experiments/comparison/run_citeseer_full_pipeline.py --gpu_id 0
+python experiments/comparison/run_pubmed_full_pipeline.py --gpu_id 0
+python experiments/comparison/run_dblp_full_pipeline.py --gpu_id 0
 ```
 
-The core implementation is in `tools/run_cora_full_pipeline.py`.
+The core implementation is in `experiments/comparison/run_cora_full_pipeline.py`.
 Other dataset scripts are wrappers that call the same core logic with different dataset names.
 
-核心逻辑在 `tools/run_cora_full_pipeline.py`，其他三个脚本是按数据集封装的入口。
+核心逻辑在 `experiments/comparison/run_cora_full_pipeline.py`，其他三个脚本是按数据集封装的入口。
 
 ### Multi-Dataset Batch Dispatch | 多数据集批量调度
 
 ```bash
-python tools/run_selected_full_pipelines.py --datasets Cora CiteSeer PubMed DBLP --gpu_id 0
+python experiments/comparison/run_selected_full_pipelines.py --datasets Cora CiteSeer PubMed DBLP --gpu_id 0
 ```
 
 Continue even if one dataset fails:
 
 ```bash
-python tools/run_selected_full_pipelines.py --datasets Cora CiteSeer PubMed DBLP --gpu_id 0 --continue_on_error
+python experiments/comparison/run_selected_full_pipelines.py --datasets Cora CiteSeer PubMed DBLP --gpu_id 0 --continue_on_error
 ```
 
 If you want to run only PubMed and DBLP:
 
 ```bash
-python tools/run_selected_full_pipelines.py --datasets PubMed DBLP --gpu_id 0
+python experiments/comparison/run_selected_full_pipelines.py --datasets PubMed DBLP --gpu_id 0
 ```
 
 ### Full Pipeline Output | 完整流水线输出
@@ -263,13 +278,13 @@ python train.py --dataset Cora --method grace
 2. Run one grid search:
 
 ```bash
-python tools/grid_search_iflgr_cora.py --dataset Cora --gpu_id 0 --topk 3
+python experiments/comparison/grid_search_iflgr_cora.py --dataset Cora --gpu_id 0 --topk 3
 ```
 
 3. Run one full pipeline:
 
 ```bash
-python tools/run_cora_full_pipeline.py --dataset Cora --gpu_id 0 --topk_verify 3 --runs_per_top 3
+python experiments/comparison/run_cora_full_pipeline.py --dataset Cora --gpu_id 0 --topk_verify 3 --runs_per_top 3
 ```
 
 Success signals:
@@ -290,8 +305,8 @@ PubMed/DBLP 训练耗时更长，建议优先在 Cora/CiteSeer 验证流程后�
 
 ## File Guide | 文档导航
 
-- `CODE_STRUCTURE.md`: architecture and call flow details
-- `tools/GRID_SEARCH_GUIDE.md`: practical search and verification guide
+- `docs/CODE_STRUCTURE.md`: architecture and call flow details
+- `docs/GRID_SEARCH_GUIDE.md`: practical search and verification guide
 
 ## Requirements | 依赖
 

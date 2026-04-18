@@ -1,0 +1,324 @@
+# IFL-GR 网格搜索快速指南
+
+## 为什么网格搜索结果和单独训练结果会不同？
+
+### 原因
+1. **随机性累积**：虽然种子固定，但数据增强的随机序列在网格搜索（串联多个 trial）和独立训练（新进程）中是不同的。
+2. **评估方差**：`eval.py` 中的 `@repeat(3)` 装饰器对逻辑回归分类器重复 3 次，所以不同运行的 F1 指标本身就有方差（通常 ±0.01）。
+3. **网格搜索的单次估计**：网格搜索中每个参数组合只运行一次评估，而你独立运行时是新的随机重复。
+
+**预期差异范围**：Top-1 参数的 F1 指标在单独运行时可能波动 ±0.005~0.015，这是正常的。
+
+## 如何进行可靠的参数验证？
+
+### 方法 1：快速验证（推荐）
+对网格搜索输出的 Top-3 参数各运行 **3 次**，取平均值作为最终评估指标。
+```bash
+python tools/verify_top_params.py --top_params results/grid_search_iflgr_cora_results.csv --topk 3 --gpu_id 0
+```
+
+### 方法 2：直接使用 Top-1 参数
+如果你的时间有限，可以直接：
+1. 将网格搜索输出的 Top-1 参数填入 `config.yaml` 的 Cora 配置。
+2. 运行 `python train.py --dataset Cora --method ifl-gr` 三遍，手动取平均和标准差。
+3. 与 `python train.py --dataset Cora --method grace` 的结果对比。
+
+### 方法 3：完整二阶段搜索
+在时间充裕的情况下，用 `fine_grid_search.py` 进行更精细的搜索（围绕 Top-3 做 3x3x3 网格）。
+
+## CSV 文件释义
+
+`results/grid_search_iflgr_cora_results.csv` 中的列名：
+- `similarity_percentile`: 自适应阈值的分位数（较高 = 更严格的伪正样本筛选）
+- `max_du_per_node`: 每个节点最多保留多少个 DU+
+- `unlabeled_weight`: 无标签项的权重系数
+- `warmup_epochs`: 预热轮数
+- `F1Mi_mean / F1Mi_std`: 微 F1 的均值和标准差
+- `F1Ma_mean / F1Ma_std`: 宏 F1 的均值和标准差
+- `robust_score`: 稳健评分（F1Mi_mean - 0.5 * F1Mi_std）
+- `delta_vs_grace`: 相对 GRACE 基线的提升
+
+## 典型情况
+
+### 情况 A：参数已验证且稳定超过 GRACE
+- 网格搜索的 Top-1 参数 F1Mi 为 0.850+，独立运行的结果为 0.833+
+- **原因**：网格搜索在其他参数配置下找到的最优值，在新的随机序列中可能有衰减。
+- **解决**：用 verify_top_params.py 验证，或对该参数再运行 3 遍确认平均值。
+
+### 情况 B：参数不稳定或下降
+- 独立运行多次出现 > 0.015 的标准差
+- **可能原因**：该参数组合对初始化无序列敏感，或伪正样本质量不稳定。
+- **解决**：选择 Top-2 或 Top-3 的参数再试，或参考 CSV 中 delta_vs_grace 相对靠前的其他参数。
+
+## 快速启动
+
+1. **运行网格搜索**（约 20-30 分钟，取决于硬件）
+   ```bash
+   python tools/grid_search_iflgr_cora.py --gpu_id 0 --topk 10
+   ```
+
+2. **验证 Top-3 参数**（约 40-60 分钟，3 遍完整训练）
+   ```bash
+   python tools/verify_top_params.py --top_params results/grid_search_iflgr_cora_results.csv --topk 3 --gpu_id 0
+   ```
+
+3. **更新配置** 或 **进行精搜**（可选）
+
+## GCA 参数搜索
+
+GCA 的搜索脚本与 IFL-GR 保持一致的输出与对比方式（同样使用 robust_score 和 delta_vs_grace）：
+
+1. **运行 GCA 网格搜索**（默认 108 个 trial）
+   ```bash
+   python tools/grid_search_gca_cora.py --gpu_id 0 --topk 10
+   ```
+
+2. **验证 GCA Top 参数**（复用 verify 工具）
+   ```bash
+   python tools/verify_top_params.py --method gca --top_params results/grid_search_gca_cora_results.csv --topk 3 --runs 3 --gpu_id 0
+   ```
+
+`results/grid_search_gca_cora_results.csv` 关键列：
+- `gca_drop_scheme`: 增强策略（degree / pr / uniform）
+- `drop_edge_rate_1`, `drop_edge_rate_2`: 两个视图的边丢弃率
+- `drop_feature_rate_1`, `drop_feature_rate_2`: 两个视图的特征丢弃率
+- `tau`: 对比温度
+- `robust_score`, `delta_vs_grace`: 与 IFL-GR 搜索同定义
+
+## IFL-GC 参数搜索
+
+IFL-GC 继承 GCA 的采样增强，并加入语义引导的修正损失，搜索脚本如下：
+
+1. **运行 IFL-GC 网格搜索**
+   ```bash
+   python tools/grid_search_iflgc_cora.py --gpu_id 0 --topk 10
+   ```
+
+2. **验证 IFL-GC Top 参数**
+   ```bash
+   python tools/verify_top_params.py --method ifl-gc --top_params results/grid_search_iflgc_cora_results.csv --topk 3 --runs 3 --gpu_id 0
+   ```
+
+`results/grid_search_iflgc_cora_results.csv` 关键列：
+- `similarity_percentile`, `max_du_per_node`: 语义正样本筛选强度
+- `unlabeled_weight`: 无标签语义正样本损失权重
+- `iflgc_refl_du_weight`: 同视图语义正样本项权重
+- `gca_drop_scheme`, `drop_edge_rate_*`, `drop_feature_rate_*`: 采样增强策略
+- `robust_score`, `delta_vs_grace`: 与其他搜索脚本同定义
+
+## 一键自动化完整实验流程
+
+如果你希望按固定流程自动执行并将结果写到同一个文件，可使用：
+
+```bash
+python tools/run_cora_full_pipeline.py --gpu_id 0
+```
+
+默认流程：
+1. `grace` 基线运行 3 次
+2. `ifl-gr` 自动寻参 + Top3 各 3 次复验
+3. `gca` 自动寻参 + Top3 各 3 次复验
+4. `ifl-gc` 自动寻参 + Top3 各 3 次复验
+
+默认统一结果文件：
+- `results/cora_full_pipeline_results.csv`
+
+可调参数示例：
+```bash
+python tools/run_cora_full_pipeline.py --gpu_id 0 --baseline_runs 3 --topk_verify 3 --runs_per_top 3 --out results/cora_compare.csv
+```
+
+## CiteSeer 对应流程（与 Cora 同命名规范）
+
+你现在可以直接使用 CiteSeer 对应入口脚本，结果会写入 `results/` 下同风格命名的 CSV。
+
+### 1) GRACE 基线（3 次）
+```bash
+python train.py --dataset CiteSeer --method grace
+python train.py --dataset CiteSeer --method grace
+python train.py --dataset CiteSeer --method grace
+```
+
+### 2) IFL-GR：先寻参，再复验
+```bash
+python tools/grid_search_iflgr_citeseer.py --gpu_id 0 --topk 10
+python tools/verify_top_params.py --dataset CiteSeer --method ifl-gr --top_params results/grid_search_iflgr_citeseer_results.csv --topk 3 --runs 3 --gpu_id 0
+```
+
+### 3) GCA：先寻参，再复验
+```bash
+python tools/grid_search_gca_citeseer.py --gpu_id 0 --topk 10
+python tools/verify_top_params.py --dataset CiteSeer --method gca --top_params results/grid_search_gca_citeseer_results.csv --topk 3 --runs 3 --gpu_id 0
+```
+
+### 4) IFL-GC：先寻参，再复验
+```bash
+python tools/grid_search_iflgc_citeseer.py --gpu_id 0 --topk 10
+python tools/verify_top_params.py --dataset CiteSeer --method ifl-gc --top_params results/grid_search_iflgc_citeseer_results.csv --topk 3 --runs 3 --gpu_id 0
+```
+
+### 5) 一键完整流程（推荐）
+```bash
+python tools/run_citeseer_full_pipeline.py --gpu_id 0
+```
+
+默认统一结果文件：
+- `results/citeseer_full_pipeline_results.csv`
+
+可调参数示例：
+```bash
+python tools/run_citeseer_full_pipeline.py --gpu_id 0 --baseline_runs 3 --topk_verify 3 --runs_per_top 3 --out results/citeseer_compare.csv
+```
+
+## PubMed 对应流程（与 Cora / CiteSeer 同命名规范）
+
+PubMed 当前使用独立收缩后的搜索空间，和 Cora/CiteSeer 的脚本分支分开维护，不会修改前两个数据集的参数。
+
+- IFL-GR：8 个 trial
+- GCA：6 个 trial
+- IFL-GC：16 个 trial
+- 合计：30 个 trial
+
+你现在可以直接使用 PubMed 对应入口脚本，结果会写入 `results/` 下同风格命名的 CSV。
+
+### 1) GRACE 基线（3 次）
+```bash
+python train.py --dataset PubMed --method grace
+python train.py --dataset PubMed --method grace
+python train.py --dataset PubMed --method grace
+```
+
+### 2) IFL-GR：先寻参，再复验
+```bash
+python tools/grid_search_iflgr_pubmed.py --gpu_id 0 --topk 10
+python tools/verify_top_params.py --dataset PubMed --method ifl-gr --top_params results/grid_search_iflgr_pubmed_results.csv --topk 3 --runs 3 --gpu_id 0
+```
+
+### 3) GCA：先寻参，再复验
+```bash
+python tools/grid_search_gca_pubmed.py --gpu_id 0 --topk 10
+python tools/verify_top_params.py --dataset PubMed --method gca --top_params results/grid_search_gca_pubmed_results.csv --topk 3 --runs 3 --gpu_id 0
+```
+
+### 4) IFL-GC：先寻参，再复验
+```bash
+python tools/grid_search_iflgc_pubmed.py --gpu_id 0 --topk 10
+python tools/verify_top_params.py --dataset PubMed --method ifl-gc --top_params results/grid_search_iflgc_pubmed_results.csv --topk 3 --runs 3 --gpu_id 0
+```
+
+### 5) 一键完整流程（推荐）
+```bash
+python tools/run_pubmed_full_pipeline.py --gpu_id 0
+```
+
+默认统一结果文件：
+- `results/pubmed_full_pipeline_results.csv`
+
+可调参数示例：
+```bash
+python tools/run_pubmed_full_pipeline.py --gpu_id 0 --baseline_runs 3 --topk_verify 3 --runs_per_top 3 --out results/pubmed_compare.csv
+```
+
+## DBLP 对应流程（与 Cora / CiteSeer / PubMed 同命名规范）
+
+DBLP 的搜索空间比 PubMed 更紧，目的是进一步缩短单次实验时间，同时保留目标排序。
+
+- IFL-GR：4 个 trial
+- GCA：4 个 trial
+- IFL-GC：8 个 trial
+- 合计：16 个 trial
+
+你现在可以直接使用 DBLP 对应入口脚本，结果会写入 `results/` 下同风格命名的 CSV。
+
+> 说明：DBLP 与 PubMed 一样，已自动启用分块对比损失、分块修正损失与分块挖掘，默认用于降低 OOM 风险。
+
+### 1) GRACE 基线（3 次）
+```bash
+python train.py --dataset DBLP --method grace
+python train.py --dataset DBLP --method grace
+python train.py --dataset DBLP --method grace
+```
+
+### 2) IFL-GR：先寻参，再复验
+```bash
+python tools/grid_search_iflgr_dblp.py --gpu_id 0 --topk 10
+python tools/verify_top_params.py --dataset DBLP --method ifl-gr --top_params results/grid_search_iflgr_dblp_results.csv --topk 3 --runs 3 --gpu_id 0
+```
+
+### 3) GCA：先寻参，再复验
+```bash
+python tools/grid_search_gca_dblp.py --gpu_id 0 --topk 10
+python tools/verify_top_params.py --dataset DBLP --method gca --top_params results/grid_search_gca_dblp_results.csv --topk 3 --runs 3 --gpu_id 0
+```
+
+### 4) IFL-GC：先寻参，再复验
+```bash
+python tools/grid_search_iflgc_dblp.py --gpu_id 0 --topk 10
+python tools/verify_top_params.py --dataset DBLP --method ifl-gc --top_params results/grid_search_iflgc_dblp_results.csv --topk 3 --runs 3 --gpu_id 0
+```
+
+### 5) 一键完整流程（推荐）
+```bash
+python tools/run_dblp_full_pipeline.py --gpu_id 0
+```
+
+默认统一结果文件：
+- `results/dblp_full_pipeline_results.csv`
+
+可调参数示例：
+```bash
+python tools/run_dblp_full_pipeline.py --gpu_id 0 --baseline_runs 3 --topk_verify 3 --runs_per_top 3 --out results/dblp_compare.csv
+```
+
+## 统一调度脚本（多数据集顺序运行）
+
+如果你希望通过一个脚本顺序执行多个 `run_*_full_pipeline.py`，可使用：
+
+```bash
+python tools/run_selected_full_pipelines.py --datasets Cora CiteSeer PubMed DBLP --gpu_id 0
+```
+
+说明：
+- `--datasets` 按给定顺序执行，可选：`Cora`、`CiteSeer`、`PubMed`、`DBLP`
+- 统一脚本未识别的参数会透传给每个子脚本（例如 `--gpu_id`、`--baseline_runs`、`--topk_verify`）
+- 默认遇到失败会停止；如需失败后继续后续数据集，可加 `--continue_on_error`
+
+示例：仅运行 Cora + CiteSeer
+```bash
+python tools/run_selected_full_pipelines.py --datasets Cora CiteSeer --gpu_id 0 --baseline_runs 3 --topk_verify 3 --runs_per_top 3
+```
+
+## 超参数敏感性分析（IFL-GR / IFL-GC）
+
+现在可以直接基于网格搜索 CSV 中的最优参数做单因素敏感性实验。脚本会固定最优参数组，只改变一个论文超参数，并把原始运行结果与汇总统计一起写入 `results/`。
+
+默认映射关系：
+- `t_s -> similarity_threshold`
+- `M -> warmup_epochs`
+- `K -> update_interval`
+
+说明：
+- 现有 `grid_search` 结果文件里保存的是 `similarity_percentile`，不是固定的 `similarity_threshold`
+- 因此脚本在分析 `t_s` 时，会先用最佳参数组跑一遍训练，并从日志中的 `ts=` 估计锚点阈值，再围绕该阈值做单因素扰动
+
+默认输出文件：
+- `results/sensitivity_iflgr_<dataset>_results.csv`
+- `results/sensitivity_iflgc_<dataset>_results.csv`
+
+推荐用法：
+
+```bash
+# 同时分析 IFL-GR / IFL-GC
+python tools/run_ifl_param_sensitivity.py --datasets Cora --methods ifl-gr ifl-gc --runs 3 --gpu_id 0
+
+# 指定某个方法，并显式给出 t_s / M / K 的取值
+python tools/run_ifl_param_sensitivity.py --datasets PubMed --methods ifl-gc --ts_values 99.3 99.5 99.7 --m_values 10 12 14 --k_values 80 100 120 --runs 3 --gpu_id 0
+
+# 以网格搜索第 2 名作为基准点
+python tools/run_ifl_param_sensitivity.py --datasets DBLP --methods ifl-gr --base_rank 2 --runs 3 --gpu_id 0
+```
+
+CSV 中除了 `F1Mi/F1Ma/robust_score` 外，还会额外保存训练日志里解析出的过程量，便于后续画敏感性曲线或做解释分析：
+- `trace_ts_mean`, `trace_ts_last`
+- `trace_mined_pairs_mean`, `trace_mined_pairs_last`
+- `trace_avg_pairs_mean`, `trace_avg_pairs_last`

@@ -1,14 +1,5 @@
-import os
-import subprocess
-import sys
+from _run_experiment import run
 
 
 if __name__ == "__main__":
-    cmd = [
-        sys.executable,
-        os.path.join(os.path.dirname(__file__), "grid_search_iflgr_cora.py"),
-        "--dataset",
-        "DBLP",
-        *sys.argv[1:],
-    ]
-    raise SystemExit(subprocess.call(cmd))
+    run("experiments/comparison/grid_search_iflgr_dblp.py")

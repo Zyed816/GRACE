@@ -1,14 +1,5 @@
-import os
-import subprocess
-import sys
+from _run_experiment import run
 
 
 if __name__ == "__main__":
-    cmd = [
-        sys.executable,
-        os.path.join(os.path.dirname(__file__), "run_cora_full_pipeline.py"),
-        "--dataset",
-        "DBLP",
-        *sys.argv[1:],
-    ]
-    raise SystemExit(subprocess.call(cmd))
+    run("experiments/comparison/run_dblp_full_pipeline.py")

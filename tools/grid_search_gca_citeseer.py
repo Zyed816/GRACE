@@ -1,14 +1,5 @@
-import os
-import subprocess
-import sys
+from _run_experiment import run
 
 
 if __name__ == "__main__":
-    cmd = [
-        sys.executable,
-        os.path.join(os.path.dirname(__file__), "grid_search_gca_cora.py"),
-        "--dataset",
-        "CiteSeer",
-        *sys.argv[1:],
-    ]
-    raise SystemExit(subprocess.call(cmd))
+    run("experiments/comparison/grid_search_gca_citeseer.py")
