@@ -121,7 +121,7 @@ def main():
     if dataset_key == "CiteSeer":
         # CiteSeer-specific stronger IFL-GC preset.
         search_space = {
-            "gca_drop_scheme": ["uniform", "degree", "pr"],
+            "gca_drop_scheme": ["degree", "pr"],
             "similarity_percentile": [99.3, 99.5],
             "max_du_per_node": [8, 10],
             "unlabeled_weight": [0.3, 0.4],
@@ -209,12 +209,12 @@ def main():
     else:
         # Standard strong IFL-GC preset for Cora.
         search_space = {
-            "gca_drop_scheme": ["uniform", "degree", "pr"],
+            "gca_drop_scheme": ["degree", "pr"],
             "similarity_percentile": [99.5, 99.7],
             "max_du_per_node": [12, 14],
             "unlabeled_weight": [0.2, 0.3],
             "warmup_epochs": [80],
-            "iflgc_refl_du_weight": [0.5, 0.6],
+            "iflgc_refl_du_weight": [0.4, 0.5, 0.6],
             "tau": [0.3, 0.4],
         }
 
