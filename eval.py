@@ -1,5 +1,7 @@
-import numpy as np
 import functools
+import os
+
+import numpy as np
 
 from sklearn.metrics import f1_score
 from sklearn.linear_model import LogisticRegression
@@ -60,9 +62,10 @@ def label_classification(embeddings, y, ratio):
 
     logreg = LogisticRegression(solver='liblinear')
     c = 2.0 ** np.arange(-10, 10)
+    eval_n_jobs = int(os.environ.get('GRACE_EVAL_N_JOBS', '1'))
 
     clf = GridSearchCV(estimator=OneVsRestClassifier(logreg),
-                       param_grid=dict(estimator__C=c), n_jobs=8, cv=5,
+                       param_grid=dict(estimator__C=c), n_jobs=eval_n_jobs, cv=5,
                        verbose=0)
     clf.fit(X_train, y_train)
 

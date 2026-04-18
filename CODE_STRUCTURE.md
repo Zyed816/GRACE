@@ -31,6 +31,7 @@ GRACE/
     grid_search_gca_dblp.py           # GCA(DBLP) 网格搜索入口
     grid_search_iflgc_dblp.py         # IFL-GC(DBLP) 网格搜索入口
     verify_top_params.py              # Top-K 参数复验（支持 ifl-gr / gca / ifl-gc）
+    run_ifl_param_sensitivity.py      # IFL-GR / IFL-GC 超参数敏感性分析（t_s / M / K）
     run_cora_full_pipeline.py         # 一键自动化：基线+三方法寻参+Top复验+统一结果文件
     run_citeseer_full_pipeline.py     # CiteSeer 一键自动化完整流程
     run_pubmed_full_pipeline.py       # PubMed 一键自动化完整流程

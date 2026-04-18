@@ -154,6 +154,38 @@ python tools/verify_top_params.py --dataset Cora --method ifl-gc --top_params re
 
 复验目的：降低单次随机波动影响，得到更稳定的最终参数推荐。
 
+## Sensitivity Analysis | 超参数敏感性分析
+
+For `ifl-gr` and `ifl-gc`, you can now reuse the best ranked grid-search row and vary one paper hyper-parameter at a time.
+
+```bash
+python tools/run_ifl_param_sensitivity.py --datasets Cora --methods ifl-gr ifl-gc --gpu_id 0
+```
+
+Default behavior:
+- anchor on `base_rank=1` from `results/grid_search_<method>_<dataset>_results.csv`
+- vary `t_s`, `M`, `K` one-at-a-time around the anchor
+- save raw runs and summary rows to `results/sensitivity_<method>_<dataset>_results.csv`
+
+Paper-to-config mapping used by the script:
+- `t_s -> similarity_threshold`
+- `M -> warmup_epochs`
+- `K -> update_interval`
+
+Note:
+- existing grid-search CSVs rank settings by `similarity_percentile`, not a fixed threshold
+- when analyzing `t_s`, the script first estimates the anchor threshold from the logged `ts=` trace of the best configuration, then sweeps around that inferred anchor
+
+Useful customizations:
+
+```bash
+# Explicit sweep values.
+python tools/run_ifl_param_sensitivity.py --datasets Cora --methods ifl-gr --ts_values 99.5 99.7 99.9 --m_values 10 12 14 --k_values 80 100 120 --runs 3 --gpu_id 0
+
+# Use the 2nd ranked grid-search row as the anchor.
+python tools/run_ifl_param_sensitivity.py --datasets PubMed --methods ifl-gc --base_rank 2 --runs 3 --gpu_id 0
+```
+
 ## Automated Comparison Pipelines | 自动化对比实验
 
 ### Single Dataset Full Pipeline | 单数据集完整流水线

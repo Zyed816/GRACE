@@ -287,3 +287,38 @@ python tools/run_selected_full_pipelines.py --datasets Cora CiteSeer PubMed DBLP
 ```bash
 python tools/run_selected_full_pipelines.py --datasets Cora CiteSeer --gpu_id 0 --baseline_runs 3 --topk_verify 3 --runs_per_top 3
 ```
+
+## 超参数敏感性分析（IFL-GR / IFL-GC）
+
+现在可以直接基于网格搜索 CSV 中的最优参数做单因素敏感性实验。脚本会固定最优参数组，只改变一个论文超参数，并把原始运行结果与汇总统计一起写入 `results/`。
+
+默认映射关系：
+- `t_s -> similarity_threshold`
+- `M -> warmup_epochs`
+- `K -> update_interval`
+
+说明：
+- 现有 `grid_search` 结果文件里保存的是 `similarity_percentile`，不是固定的 `similarity_threshold`
+- 因此脚本在分析 `t_s` 时，会先用最佳参数组跑一遍训练，并从日志中的 `ts=` 估计锚点阈值，再围绕该阈值做单因素扰动
+
+默认输出文件：
+- `results/sensitivity_iflgr_<dataset>_results.csv`
+- `results/sensitivity_iflgc_<dataset>_results.csv`
+
+推荐用法：
+
+```bash
+# 同时分析 IFL-GR / IFL-GC
+python tools/run_ifl_param_sensitivity.py --datasets Cora --methods ifl-gr ifl-gc --runs 3 --gpu_id 0
+
+# 指定某个方法，并显式给出 t_s / M / K 的取值
+python tools/run_ifl_param_sensitivity.py --datasets PubMed --methods ifl-gc --ts_values 99.3 99.5 99.7 --m_values 10 12 14 --k_values 80 100 120 --runs 3 --gpu_id 0
+
+# 以网格搜索第 2 名作为基准点
+python tools/run_ifl_param_sensitivity.py --datasets DBLP --methods ifl-gr --base_rank 2 --runs 3 --gpu_id 0
+```
+
+CSV 中除了 `F1Mi/F1Ma/robust_score` 外，还会额外保存训练日志里解析出的过程量，便于后续画敏感性曲线或做解释分析：
+- `trace_ts_mean`, `trace_ts_last`
+- `trace_mined_pairs_mean`, `trace_mined_pairs_last`
+- `trace_avg_pairs_mean`, `trace_avg_pairs_last`
