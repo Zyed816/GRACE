@@ -12,7 +12,11 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from experiments.comparison.run_cora_full_pipeline import make_temp_config_for_method, robust_score, run_train
+from experiments.method_comparison.run_full_pipeline import (
+    make_temp_config_for_method,
+    robust_score,
+    run_train,
+)
 
 
 DATASET_CHOICES = ["Cora", "CiteSeer", "PubMed", "DBLP"]

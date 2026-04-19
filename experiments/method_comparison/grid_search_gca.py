@@ -12,7 +12,7 @@ from time import perf_counter as t
 
 import yaml
 
-# Grid-search pipeline (GCA on Cora):
+# Grid-search pipeline (GCA on a selected dataset):
 # 1) run GRACE baseline
 # 2) sweep GCA augmentation/search space
 # 3) rank by robust_score and save CSV

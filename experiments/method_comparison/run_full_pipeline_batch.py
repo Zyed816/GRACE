@@ -4,21 +4,15 @@ import subprocess
 import sys
 from time import perf_counter as t
 
-
-DATASET_SCRIPT = {
-    "Cora": "run_cora_full_pipeline.py",
-    "CiteSeer": "run_citeseer_full_pipeline.py",
-    "PubMed": "run_pubmed_full_pipeline.py",
-    "DBLP": "run_dblp_full_pipeline.py",
-}
+PIPELINE_SCRIPT = "run_full_pipeline.py"
 
 
-def run_one(grace_dir, script_dir, dataset, script_name, child_args):
-    script_path = os.path.join(script_dir, script_name)
-    cmd = [sys.executable, script_path, *child_args]
+def run_one(grace_dir, script_dir, dataset, child_args):
+    script_path = os.path.join(script_dir, PIPELINE_SCRIPT)
+    cmd = [sys.executable, script_path, "--dataset", dataset, *child_args]
 
     print("=" * 90)
-    print(f"[dispatch] dataset={dataset} | script={script_name}")
+    print(f"[dispatch] dataset={dataset} | script={PIPELINE_SCRIPT}")
     print(f"[dispatch] command: {' '.join(cmd)}")
 
     start = t()
@@ -77,7 +71,7 @@ def main():
     total_start = t()
 
     for dataset in datasets:
-        code = run_one(grace_dir, script_dir, dataset, DATASET_SCRIPT[dataset], passthrough)
+        code = run_one(grace_dir, script_dir, dataset, passthrough)
         if code != 0:
             failures.append((dataset, code))
             if not args.continue_on_error:

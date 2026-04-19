@@ -1,121 +1,96 @@
-# GRACE Code Structure
+# 代码结构说明
 
-This repository is now organized around one core layer and three experiment blocks.
-
-## 1. Top-Level Layout
+## 1. 顶层目录
 
 ```text
 GRACE/
-  config.yaml
   train.py
   model.py
   eval.py
-  README.md
-  requirements.txt
+  config.yaml
   experiments/
-    comparison/
-    hyperparameter_analysis/
-    sampling_bias/
   docs/
-    CODE_STRUCTURE.md
-    GRID_SEARCH_GUIDE.md
-  tools/
-    ... legacy compatibility wrappers ...
+  legacy/
   results/
   logs/
   datasets/
 ```
 
-## 2. Core Layer
+### 顶层各文件职责
 
 - `train.py`
-  Unified training entry for `grace`, `gca`, `ifl-gr`, and `ifl-gc`.
+  统一训练入口，负责加载数据、构建模型、训练并输出评估结果。
 - `model.py`
-  Encoder, projection head, contrastive losses, and corrected IFL variants.
+  编码器、投影头、对比损失以及 IFL 相关逻辑的核心实现。
 - `eval.py`
-  Linear-evaluation based node classification reporting `F1Mi` and `F1Ma`.
+  节点分类线性评估逻辑，输出 `F1Mi` 和 `F1Ma`。
 - `config.yaml`
-  Dataset-specific default hyper-parameters and large-graph settings.
+  各数据集的默认超参数配置，以及大图数据集的分块/子图设置。
 
-These files stay at the repository root because they are shared by every experiment type.
+## 2. experiments 目录
 
-## 3. Experiment Blocks
+当前仓库把实验脚本划分为三个正式模块。
 
-### 3.1 Comparison
+### 2.1 `experiments/method_comparison/`
 
-Path: `experiments/comparison/`
+用途：
 
-Purpose:
-- Compare `GRACE`, `GCA`, `IFL-GR`, and `IFL-GC`
-- Run grid search
-- Verify top-ranked settings
-- Produce unified full-pipeline summaries
+- 比较 `grace`、`gca`、`ifl-gr`、`ifl-gc`
+- 进行网格搜索
+- 对 Top-K 参数做复验
+- 自动生成单数据集或多数据集完整对比流程
 
-Key scripts:
-- `grid_search_iflgr_*.py`
-- `grid_search_gca_*.py`
-- `grid_search_iflgc_*.py`
+关键脚本：
+
+- `grid_search_iflgr.py`
+- `grid_search_gca.py`
+- `grid_search_iflgc.py`
 - `verify_top_params.py`
-- `run_cora_full_pipeline.py`
-- `run_citeseer_full_pipeline.py`
-- `run_pubmed_full_pipeline.py`
-- `run_dblp_full_pipeline.py`
-- `run_selected_full_pipelines.py`
+- `run_full_pipeline.py`
+- `run_full_pipeline_batch.py`
 
-### 3.2 Hyper-Parameter Analysis
+### 2.2 `experiments/hyperparameter_sensitivity/`
 
-Path: `experiments/hyperparameter_analysis/`
+用途：
 
-Purpose:
-- Analyze the impact of paper-level hyper-parameters for `IFL-GR` / `IFL-GC`
-- Reuse top-ranked search results as anchors
-- Generate plots and markdown summaries
+- 对 `ifl-gr`、`ifl-gc` 做单因素超参数敏感性分析
+- 输出 CSV、图片和简短文字报告
 
-Key scripts:
+关键脚本：
+
 - `run_ifl_param_sensitivity.py`
 - `plot_ifl_param_sensitivity.py`
 
-### 3.3 Sampling Bias
+### 2.3 `experiments/sampling_bias_validation/`
 
-Path: `experiments/sampling_bias/`
+用途：
 
-Purpose:
-- Validate sampling-bias behavior during training
-- Plot `violation_rate` and `mean_margin` from logged CSV files
+- 将训练阶段输出的采样偏差日志画成曲线
 
-Key scripts:
-- `plot_exp1_curves.py`
+关键脚本：
 
-## 4. Outputs and Artifacts
+- `plot_sampling_bias_curves.py`
 
-To avoid changing experimental behavior, artifact directories remain unchanged:
+## 3. outputs 目录
+
+为保证实验结果路径不受重构影响，以下目录仍保留原命名。
 
 - `results/`
-  Comparison outputs, grid-search CSVs, sensitivity CSVs, and generated plots.
+  保存网格搜索结果、完整流程结果、敏感性分析结果及其图表。
 - `logs/`
-  Sampling-bias CSV logs and curve figures.
+  保存采样偏差验证的 CSV 日志和曲线图。
 - `datasets/`
-  Project-local dataset cache used by PyG.
+  保存 PyG 处理后的数据集缓存。
 
-## 5. Compatibility Layer
+## 4. legacy 目录
 
-Path: `tools/`
+`legacy/` 仅保留旧 `tools/` 目录的迁移说明，不再作为主入口。
 
-The original `tools/` command paths are still available, but they are now thin wrappers that forward to the new `experiments/` locations.
+如果你在旧命令里看到 `tools/...`，请直接切换到 `experiments/...` 下的新入口脚本。
 
-Examples:
+## 5. 入口脚本建议
 
-```bash
-# Recommended
-python experiments/comparison/run_cora_full_pipeline.py --gpu_id 0
-
-# Still supported
-python tools/run_cora_full_pipeline.py --gpu_id 0
-```
-
-## 6. Recommended Entry Points
-
-### Core training
+### 统一训练
 
 ```bash
 python train.py --dataset Cora --method grace
@@ -124,34 +99,34 @@ python train.py --dataset Cora --method gca
 python train.py --dataset Cora --method ifl-gc
 ```
 
-### Method comparison
+### 方法比较
 
 ```bash
-python experiments/comparison/grid_search_iflgr_cora.py --gpu_id 0 --topk 10
-python experiments/comparison/verify_top_params.py --dataset Cora --method ifl-gr --top_params results/grid_search_iflgr_cora_results.csv --topk 3 --runs 3 --gpu_id 0
-python experiments/comparison/run_cora_full_pipeline.py --gpu_id 0
+python experiments/method_comparison/grid_search_iflgr.py --dataset Cora --gpu_id 0 --topk 10
+python experiments/method_comparison/verify_top_params.py --dataset Cora --method ifl-gr --top_params results/grid_search_iflgr_cora_results.csv --topk 3 --runs 3 --gpu_id 0
+python experiments/method_comparison/run_full_pipeline.py --dataset Cora --gpu_id 0
 ```
 
-### Hyper-parameter analysis
+### 超参数敏感性分析
 
 ```bash
-python experiments/hyperparameter_analysis/run_ifl_param_sensitivity.py --datasets Cora --methods ifl-gr ifl-gc --gpu_id 0
-python experiments/hyperparameter_analysis/plot_ifl_param_sensitivity.py --dataset Cora
+python experiments/hyperparameter_sensitivity/run_ifl_param_sensitivity.py --datasets Cora --methods ifl-gr ifl-gc --gpu_id 0
+python experiments/hyperparameter_sensitivity/plot_ifl_param_sensitivity.py --dataset Cora
 ```
 
-### Sampling-bias validation
+### 采样偏差验证
 
 ```bash
 python train.py --dataset Cora --method grace --exp1_metrics --exp1_log_csv logs/exp1_cora.csv
-python experiments/sampling_bias/plot_exp1_curves.py --csv logs/exp1_cora.csv --out logs/exp1_cora_curves.png
+python experiments/sampling_bias_validation/plot_sampling_bias_curves.py --csv logs/exp1_cora.csv --out logs/exp1_cora_curves.png
 ```
 
-## 7. Reading Order
+## 6. 推荐阅读顺序
 
 1. `train.py`
 2. `model.py`
 3. `eval.py`
-4. `experiments/comparison/run_cora_full_pipeline.py`
-5. `experiments/comparison/grid_search_*.py`
-6. `experiments/hyperparameter_analysis/run_ifl_param_sensitivity.py`
-7. `experiments/sampling_bias/plot_exp1_curves.py`
+4. `experiments/method_comparison/run_full_pipeline.py`
+5. `experiments/method_comparison/grid_search_*.py`
+6. `experiments/hyperparameter_sensitivity/run_ifl_param_sensitivity.py`
+7. `experiments/sampling_bias_validation/plot_sampling_bias_curves.py`

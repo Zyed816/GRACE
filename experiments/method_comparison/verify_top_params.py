@@ -220,7 +220,7 @@ def print_param_summary(csv_row, method):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Verify top IFL-GR parameters by multiple runs")
+    parser = argparse.ArgumentParser(description="Verify top-ranked method parameters by repeated runs")
     parser.add_argument("--top_params", type=str, required=True, help="Path to grid_search CSV")
     parser.add_argument("--topk", type=int, default=3, help="Number of top params to verify")
     parser.add_argument("--runs", type=int, default=3, help="Runs per parameter")

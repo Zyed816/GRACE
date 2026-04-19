@@ -1,96 +1,121 @@
 # GRACE
 
-<img src="grace.png" alt="model" style="zoom: 50%;" />
+<img src="grace.png" alt="GRACE framework" style="zoom: 50%;" />
 
-This repository is based on the paper [deep **GRA**ph **C**ontrastive r**E**presentation learning (GRACE)](https://arxiv.org/pdf/2006.04131v2.pdf), and extends it with a unified training/evaluation/search pipeline.
+## 项目简介
 
-本仓库基于 GRACE 论文实现，并在同一代码框架中扩展了统一训练、评估、自动寻参与对比实验流程。
+本项目基于论文 [Deep Graph Contrastive Representation Learning (GRACE)](https://arxiv.org/abs/2006.04131)，在原始 GRACE 训练代码的基础上，扩展出一套面向实验复现的统一框架。当前仓库围绕三类实验任务组织：
 
-For a broad collection of graph SSL methods, see [awesome-self-supervised-learning-for-graphs](https://github.com/SXKDZ/awesome-self-supervised-learning-for-graphs).
+1. 采样偏差验证
+2. 图对比学习方法比较
+3. 超参数敏感性分析
 
-## Project Layout | 工程结构
+代码层面支持四种方法：
 
-- Core code stays at the repository root: `train.py`, `model.py`, `eval.py`, `config.yaml`
-- Comparison experiments live in `experiments/comparison/`
-- Hyper-parameter analysis lives in `experiments/hyperparameter_analysis/`
-- Sampling-bias validation utilities live in `experiments/sampling_bias/`
-- Documentation lives in `docs/`
-- `tools/` is kept as a compatibility layer so older commands still work
+- `grace`：原始 GRACE
+- `gca`：Graph Contrastive Augmentation
+- `ifl-gr`：基于 IFL 的 GRACE 变体
+- `ifl-gc`：IFL 与 GCA 的混合方法
 
-Recommended references:
-
-- `docs/CODE_STRUCTURE.md`
-- `docs/GRID_SEARCH_GUIDE.md`
-- `experiments/README.md`
-
-## What This Project Can Do | 项目能力总览
-
-### Methods | 支持方法
-
-- `grace`: original GRACE
-- `gca`: structure-aware Graph Contrastive Augmentation
-- `ifl-gr`: IFL-enhanced GRACE (corrected InfoNCE with unlabeled semantic positives)
-- `ifl-gc`: IFL + GCA hybrid
-
-### Datasets | 支持数据集
+支持四个数据集：
 
 - `Cora`
 - `CiteSeer`
 - `PubMed`
 - `DBLP`
 
-### Experiment Capabilities | 实验能力
+## 当前目录结构
 
-- Single-run training and evaluation for all dataset-method combinations
-  所有数据集与方法组合都可单独训练评估
-- Automatic hyper-parameter search (1-stage grid search)
-  自动超参数搜索（一阶段网格搜索）
-- Top-K parameter verification with repeated runs
-  Top-K 参数多次复验
-- Unified comparison pipeline (baseline + search + verification + summary CSV)
-  统一对比实验流水线（基线 + 搜索 + 复验 + 汇总）
+```text
+GRACE/
+  train.py
+  model.py
+  eval.py
+  config.yaml
+  README.md
+  requirements.txt
+  experiments/
+    method_comparison/
+      grid_search_iflgr.py
+      grid_search_gca.py
+      grid_search_iflgc.py
+      verify_top_params.py
+      run_full_pipeline.py
+      run_full_pipeline_batch.py
+    hyperparameter_sensitivity/
+      run_ifl_param_sensitivity.py
+      plot_ifl_param_sensitivity.py
+    sampling_bias_validation/
+      plot_sampling_bias_curves.py
+  docs/
+    CODE_STRUCTURE.md
+    GRID_SEARCH_GUIDE.md
+  legacy/
+    README.md
+  results/
+  logs/
+  datasets/
+```
 
-## Quick Start | 快速开始
+目录设计原则如下：
 
-### 1) Install
+- 根目录只保留所有实验共用的核心训练代码与配置。
+- `experiments/` 只保留三大模块对应的正式入口脚本。
+- `results/`、`logs/`、`datasets/` 的默认位置保持不变，以免影响已有实验结果与脚本行为。
+- 历史 `tools/` 兼容层已经移出主路径，迁移说明放在 `legacy/README.md`。
+
+## 环境准备
+
+安装依赖：
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2) Train one model
+数据集缓存说明：
+
+- 默认数据缓存目录为 `datasets/`
+- 若本地已有处理后的数据，会直接复用
+- 若本地缺失数据，PyG 会自动下载并处理到 `datasets/`
+- 如需自定义缓存目录，可使用 `--dataset_root <path>`
+
+大图数据集说明：
+
+- `PubMed` 和 `DBLP` 的默认配置中已经启用了分块计算相关参数，以降低 OOM 风险
+- `PubMed` 和 `DBLP` 的默认配置还启用了子图实验开关 `use_subset: true`，这样可以更快完成大图实验流程
+
+## 快速开始
+
+### 1. 运行一次基础训练
 
 ```bash
 python train.py --dataset Cora --method grace
 ```
 
-### 3) Run full comparison on one dataset
+### 2. 在单个数据集上跑完整方法比较流程
 
 ```bash
-python experiments/comparison/run_cora_full_pipeline.py --dataset Cora --gpu_id 0
+python experiments/method_comparison/run_full_pipeline.py --dataset Cora --gpu_id 0
 ```
 
-Default output:
+默认输出文件：
+
 - `results/cora_full_pipeline_results.csv`
 
-默认输出：
-- `results/cora_full_pipeline_results.csv`
+## 核心训练入口
 
-## Core Usage | 核心用法
-
-### Training Entry | 训练入口
-
-The unified training entry is:
+统一训练入口如下：
 
 ```bash
 python train.py --dataset <DATASET> --method <METHOD>
 ```
 
-Where:
-- `<DATASET>` in `{Cora, CiteSeer, PubMed, DBLP}`
-- `<METHOD>` in `{grace, gca, ifl-gr, ifl-gc}`
+其中：
 
-示例：
+- `<DATASET>` 可选：`Cora`、`CiteSeer`、`PubMed`、`DBLP`
+- `<METHOD>` 可选：`grace`、`gca`、`ifl-gr`、`ifl-gc`
+
+常用示例：
 
 ```bash
 python train.py --dataset Cora --method grace
@@ -99,229 +124,287 @@ python train.py --dataset Cora --method ifl-gr
 python train.py --dataset Cora --method ifl-gc
 ```
 
-### Dataset Cache Behavior | 数据集缓存行为
+## 实验模块一：采样偏差验证
 
-- Default dataset root: `GRACE/datasets/`
-- If data exists, it is reused directly
-- If data is missing, PyG downloads/processes it under `GRACE/datasets/`
-- You can override with `--dataset_root <path>`
+该模块用于记录训练过程中与采样偏差相关的统计量，并将其画成曲线。当前正式入口为：
 
-默认数据根目录是 `GRACE/datasets/`；若已存在则直接读取，不存在则自动下载并处理。
+- `train.py`
+- `experiments/sampling_bias_validation/plot_sampling_bias_curves.py`
 
-## Automatic Hyper-Parameter Search (1-Stage) | 自动参数搜索（一阶段）
+### 实验流程
 
-### Script Matrix | 脚本矩阵
+第一步：训练时记录偏差指标到 CSV
+
+```bash
+python train.py --dataset Cora --method grace --gpu_id 0 --exp1_metrics --exp1_log_csv logs/exp1_cora.csv
+```
+
+如果你想比较其他方法，也可以把 `grace` 换成 `gca`、`ifl-gr` 或 `ifl-gc`。
+
+第二步：将日志绘制为曲线
+
+```bash
+python experiments/sampling_bias_validation/plot_sampling_bias_curves.py --csv logs/exp1_cora.csv --out logs/exp1_cora_curves.png
+```
+
+常用参数：
+
+- `--csv`：输入日志文件
+- `--out`：输出图片路径
+- `--title`：图标题
+
+输出结果：
+
+- 原始日志：`logs/exp1_<dataset>.csv`
+- 曲线图片：`logs/exp1_<dataset>_curves.png`
+
+## 实验模块二：图对比学习方法比较
+
+该模块用于比较 `grace`、`gca`、`ifl-gr`、`ifl-gc` 四种方法的表现，是当前项目最核心的一组实验。正式入口位于 `experiments/method_comparison/`：
+
+- `grid_search_iflgr.py`
+- `grid_search_gca.py`
+- `grid_search_iflgc.py`
+- `verify_top_params.py`
+- `run_full_pipeline.py`
+- `run_full_pipeline_batch.py`
+
+### 推荐实验顺序
+
+建议按下面顺序复现实验：
+
+1. 先运行单次基础训练，确认环境正常
+2. 再对 `ifl-gr`、`gca`、`ifl-gc` 做网格搜索
+3. 对每种方法的 Top-K 参数做重复实验复验
+4. 最后使用完整流程脚本统一生成对比结果
+
+### 2.1 单次训练
+
+如果只想快速看某个方法能否正常运行：
+
+```bash
+python train.py --dataset Cora --method ifl-gr --gpu_id 0
+```
+
+### 2.2 网格搜索
 
 #### IFL-GR
 
 ```bash
-python experiments/comparison/grid_search_iflgr_cora.py --dataset Cora --gpu_id 0 --topk 10
-python experiments/comparison/grid_search_iflgr_citeseer.py --gpu_id 0 --topk 10
-python experiments/comparison/grid_search_iflgr_pubmed.py --gpu_id 0 --topk 10
-python experiments/comparison/grid_search_iflgr_dblp.py --gpu_id 0 --topk 10
+python experiments/method_comparison/grid_search_iflgr.py --dataset Cora --gpu_id 0 --topk 10
+python experiments/method_comparison/grid_search_iflgr.py --dataset CiteSeer --gpu_id 0 --topk 10
+python experiments/method_comparison/grid_search_iflgr.py --dataset PubMed --gpu_id 0 --topk 10
+python experiments/method_comparison/grid_search_iflgr.py --dataset DBLP --gpu_id 0 --topk 10
 ```
 
 #### GCA
 
 ```bash
-python experiments/comparison/grid_search_gca_cora.py --dataset Cora --gpu_id 0 --topk 10
-python experiments/comparison/grid_search_gca_citeseer.py --gpu_id 0 --topk 10
-python experiments/comparison/grid_search_gca_pubmed.py --gpu_id 0 --topk 10
-python experiments/comparison/grid_search_gca_dblp.py --gpu_id 0 --topk 10
+python experiments/method_comparison/grid_search_gca.py --dataset Cora --gpu_id 0 --topk 10
+python experiments/method_comparison/grid_search_gca.py --dataset CiteSeer --gpu_id 0 --topk 10
+python experiments/method_comparison/grid_search_gca.py --dataset PubMed --gpu_id 0 --topk 10
+python experiments/method_comparison/grid_search_gca.py --dataset DBLP --gpu_id 0 --topk 10
 ```
 
 #### IFL-GC
 
 ```bash
-python experiments/comparison/grid_search_iflgc_cora.py --dataset Cora --gpu_id 0 --topk 10
-python experiments/comparison/grid_search_iflgc_citeseer.py --gpu_id 0 --topk 10
-python experiments/comparison/grid_search_iflgc_pubmed.py --gpu_id 0 --topk 10
-python experiments/comparison/grid_search_iflgc_dblp.py --gpu_id 0 --topk 10
+python experiments/method_comparison/grid_search_iflgc.py --dataset Cora --gpu_id 0 --topk 10
+python experiments/method_comparison/grid_search_iflgc.py --dataset CiteSeer --gpu_id 0 --topk 10
+python experiments/method_comparison/grid_search_iflgc.py --dataset PubMed --gpu_id 0 --topk 10
+python experiments/method_comparison/grid_search_iflgc.py --dataset DBLP --gpu_id 0 --topk 10
 ```
 
-### Typical Outputs | 典型输出文件
+网格搜索结果默认输出到：
 
 - `results/grid_search_iflgr_<dataset>_results.csv`
 - `results/grid_search_gca_<dataset>_results.csv`
 - `results/grid_search_iflgc_<dataset>_results.csv`
 
-示例：
-- `results/grid_search_iflgr_cora_results.csv`
-- `results/grid_search_gca_pubmed_results.csv`
+排序指标为：
 
-### Score Definition | 评分定义
-
-Grid search ranks candidates by:
-
-`robust_score = F1Mi_mean - std_weight * F1Mi_std`
+```text
+robust_score = F1Mi_mean - std_weight * F1Mi_std
+```
 
 默认 `std_weight=0.5`。
 
-## Top-K Verification | Top-K 参数复验
+### 2.3 Top-K 参数复验
 
-After grid search, verify top candidates with repeated runs:
-
-```bash
-python experiments/comparison/verify_top_params.py --dataset Cora --method ifl-gr --top_params results/grid_search_iflgr_cora_results.csv --topk 3 --runs 3 --gpu_id 0
-python experiments/comparison/verify_top_params.py --dataset Cora --method gca --top_params results/grid_search_gca_cora_results.csv --topk 3 --runs 3 --gpu_id 0
-python experiments/comparison/verify_top_params.py --dataset Cora --method ifl-gc --top_params results/grid_search_iflgc_cora_results.csv --topk 3 --runs 3 --gpu_id 0
-```
-
-复验目的：降低单次随机波动影响，得到更稳定的最终参数推荐。
-
-## Sensitivity Analysis | 超参数敏感性分析
-
-For `ifl-gr` and `ifl-gc`, you can now reuse the best ranked grid-search row and vary one paper hyper-parameter at a time.
+网格搜索结束后，建议对前几组参数做重复实验，以降低单次随机性的影响。
 
 ```bash
-python experiments/hyperparameter_analysis/run_ifl_param_sensitivity.py --datasets Cora --methods ifl-gr ifl-gc --gpu_id 0
+python experiments/method_comparison/verify_top_params.py --dataset Cora --method ifl-gr --top_params results/grid_search_iflgr_cora_results.csv --topk 3 --runs 3 --gpu_id 0
+python experiments/method_comparison/verify_top_params.py --dataset Cora --method gca --top_params results/grid_search_gca_cora_results.csv --topk 3 --runs 3 --gpu_id 0
+python experiments/method_comparison/verify_top_params.py --dataset Cora --method ifl-gc --top_params results/grid_search_iflgc_cora_results.csv --topk 3 --runs 3 --gpu_id 0
 ```
 
-Default behavior:
-- anchor on `base_rank=1` from `results/grid_search_<method>_<dataset>_results.csv`
-- vary `t_s`, `M`, `K` one-at-a-time around the anchor
-- save raw runs and summary rows to `results/sensitivity_<method>_<dataset>_results.csv`
+关键参数：
 
-Paper-to-config mapping used by the script:
-- `t_s -> similarity_threshold`
-- `M -> warmup_epochs`
-- `K -> update_interval`
+- `--top_params`：网格搜索输出的 CSV
+- `--topk`：复验前多少组参数
+- `--runs`：每组参数重复运行次数
+- `--method`：需要与 CSV 对应的方法一致
 
-Note:
-- existing grid-search CSVs rank settings by `similarity_percentile`, not a fixed threshold
-- when analyzing `t_s`, the script first estimates the anchor threshold from the logged `ts=` trace of the best configuration, then sweeps around that inferred anchor
+### 2.4 单数据集完整流程
 
-Useful customizations:
+如果想自动执行“GRACE 基线 + 三种方法搜索 + Top-K 复验 + 汇总输出”，直接运行：
 
 ```bash
-# Explicit sweep values.
-python experiments/hyperparameter_analysis/run_ifl_param_sensitivity.py --datasets Cora --methods ifl-gr --ts_values 99.5 99.7 99.9 --m_values 10 12 14 --k_values 80 100 120 --runs 3 --gpu_id 0
-
-# Use the 2nd ranked grid-search row as the anchor.
-python experiments/hyperparameter_analysis/run_ifl_param_sensitivity.py --datasets PubMed --methods ifl-gc --base_rank 2 --runs 3 --gpu_id 0
+python experiments/method_comparison/run_full_pipeline.py --dataset Cora --gpu_id 0
+python experiments/method_comparison/run_full_pipeline.py --dataset CiteSeer --gpu_id 0
+python experiments/method_comparison/run_full_pipeline.py --dataset PubMed --gpu_id 0
+python experiments/method_comparison/run_full_pipeline.py --dataset DBLP --gpu_id 0
 ```
 
-## Automated Comparison Pipelines | 自动化对比实验
+常用可调参数：
 
-### Single Dataset Full Pipeline | 单数据集完整流水线
+- `--baseline_runs`：GRACE 基线重复次数，默认 `3`
+- `--topk_verify`：每种方法取前多少组参数复验，默认 `3`
+- `--runs_per_top`：每组候选参数重复运行次数，默认 `3`
+- `--force_grid`：即使已有历史搜索 CSV，也强制重新搜索
+- `--out`：自定义输出 CSV 路径
 
-```bash
-python experiments/comparison/run_cora_full_pipeline.py --dataset Cora --gpu_id 0
-python experiments/comparison/run_citeseer_full_pipeline.py --gpu_id 0
-python experiments/comparison/run_pubmed_full_pipeline.py --gpu_id 0
-python experiments/comparison/run_dblp_full_pipeline.py --gpu_id 0
-```
+默认输出：
 
-The core implementation is in `experiments/comparison/run_cora_full_pipeline.py`.
-Other dataset scripts are wrappers that call the same core logic with different dataset names.
-
-核心逻辑在 `experiments/comparison/run_cora_full_pipeline.py`，其他三个脚本是按数据集封装的入口。
-
-### Multi-Dataset Batch Dispatch | 多数据集批量调度
-
-```bash
-python experiments/comparison/run_selected_full_pipelines.py --datasets Cora CiteSeer PubMed DBLP --gpu_id 0
-```
-
-Continue even if one dataset fails:
-
-```bash
-python experiments/comparison/run_selected_full_pipelines.py --datasets Cora CiteSeer PubMed DBLP --gpu_id 0 --continue_on_error
-```
-
-If you want to run only PubMed and DBLP:
-
-```bash
-python experiments/comparison/run_selected_full_pipelines.py --datasets PubMed DBLP --gpu_id 0
-```
-
-### Full Pipeline Output | 完整流水线输出
-
-By default:
 - `results/cora_full_pipeline_results.csv`
 - `results/citeseer_full_pipeline_results.csv`
 - `results/pubmed_full_pipeline_results.csv`
 - `results/dblp_full_pipeline_results.csv`
 
-Each unified CSV includes:
-- baseline rows (`stage=baseline`)
-- top candidate verification rows (`stage=top_verify`)
-- summary rows (`stage=summary`)
+每个完整流程 CSV 中会包含：
 
-## Result Interpretation | 结果解读
+- `stage=baseline`：GRACE 基线
+- `stage=top_verify`：候选参数复验
+- `stage=summary`：汇总统计
 
-Common columns in result CSV:
+### 2.5 多数据集批量调度
 
-- `F1Mi_mean`, `F1Mi_std`
-- `F1Ma_mean`, `F1Ma_std`
-- `robust_score`
-- `delta_vs_grace`
-- `params_json`
-
-Interpretation tips:
-- Prefer settings with high `robust_score`
-- Check `delta_vs_grace > 0` for gains over GRACE baseline
-- Use verification means rather than a single grid trial when choosing final parameters
-
-建议优先参考复验后的均值结果，而不是单次网格 trial。
-
-## Recommended Validation Path | 推荐验证路径
-
-To verify that your environment can run the full chain:
-
-1. Run one baseline training:
+按顺序批量跑多个数据集：
 
 ```bash
-python train.py --dataset Cora --method grace
+python experiments/method_comparison/run_full_pipeline_batch.py --datasets Cora CiteSeer PubMed DBLP --gpu_id 0
 ```
 
-2. Run one grid search:
+如果希望某个数据集失败后继续跑后面的数据集：
 
 ```bash
-python experiments/comparison/grid_search_iflgr_cora.py --dataset Cora --gpu_id 0 --topk 3
+python experiments/method_comparison/run_full_pipeline_batch.py --datasets Cora CiteSeer PubMed DBLP --gpu_id 0 --continue_on_error
 ```
 
-3. Run one full pipeline:
+只跑部分数据集：
 
 ```bash
-python experiments/comparison/run_cora_full_pipeline.py --dataset Cora --gpu_id 0 --topk_verify 3 --runs_per_top 3
+python experiments/method_comparison/run_full_pipeline_batch.py --datasets PubMed DBLP --gpu_id 0
 ```
 
-Success signals:
-- terminal prints final evaluation line with `F1Mi=...+-...`
-- corresponding CSV files are created under `results/`
- 
-## Notes for PubMed / DBLP | PubMed / DBLP 注意事项
+## 实验模块三：超参数敏感性分析
 
-- PubMed and DBLP are larger; runs are significantly longer than Cora/CiteSeer
-- Chunked computation is used to reduce OOM risk
-- You can adjust chunk sizes in `config.yaml`:
-  - `contrastive_batch_size`
-  - `corrected_batch_size`
-  - `mining_batch_size`
-- PubMed/DBLP now use the same live terminal output style as Cora/CiteSeer, and still keep 30-second heartbeat messages during long baseline or grid-search steps
+该模块基于方法比较阶段生成的最优参数 CSV，固定其余参数，只改变一个论文超参数，观察性能变化。正式入口位于 `experiments/hyperparameter_sensitivity/`：
 
-PubMed/DBLP 训练耗时更长，建议优先在 Cora/CiteSeer 验证流程后再跑全量实验。
+- `run_ifl_param_sensitivity.py`
+- `plot_ifl_param_sensitivity.py`
 
-## File Guide | 文档导航
+当前支持的方法：
 
-- `docs/CODE_STRUCTURE.md`: architecture and call flow details
-- `docs/GRID_SEARCH_GUIDE.md`: practical search and verification guide
+- `ifl-gr`
+- `ifl-gc`
 
-## Requirements | 依赖
+当前支持的论文超参数映射：
 
-- torch 1.4.0
-- torch-geometric 1.5.0
-- sklearn 0.21.3
-- numpy 1.18.1
-- pyyaml 5.3.1
+- `t_s -> similarity_threshold`
+- `M -> warmup_epochs`
+- `K -> update_interval`
 
-If `torch-geometric` installation fails, refer to the official docs:
-https://pytorch-geometric.readthedocs.io/en/latest/notes/installation.html
+### 3.1 运行敏感性实验
 
-## Citation
+先确保已经有对应的网格搜索结果文件，例如：
 
-Please cite our paper if you use this code:
+- `results/grid_search_iflgr_cora_results.csv`
+- `results/grid_search_iflgc_cora_results.csv`
+
+然后运行：
+
+```bash
+python experiments/hyperparameter_sensitivity/run_ifl_param_sensitivity.py --datasets Cora --methods ifl-gr ifl-gc --gpu_id 0
+```
+
+默认行为：
+
+- 读取 `base_rank=1` 的最优参数组
+- 在锚点附近对 `t_s`、`M`、`K` 分别做单因素扰动
+- 将原始运行结果和汇总结果写入 `results/`
+
+输出文件默认为：
+
+- `results/sensitivity_iflgr_<dataset>_results.csv`
+- `results/sensitivity_iflgc_<dataset>_results.csv`
+
+自定义 sweep 范围示例：
+
+```bash
+python experiments/hyperparameter_sensitivity/run_ifl_param_sensitivity.py --datasets Cora --methods ifl-gr --ts_values 99.5 99.7 99.9 --m_values 10 12 14 --k_values 80 100 120 --runs 3 --gpu_id 0
+```
+
+使用非 Top-1 结果作为锚点示例：
+
+```bash
+python experiments/hyperparameter_sensitivity/run_ifl_param_sensitivity.py --datasets PubMed --methods ifl-gc --base_rank 2 --runs 3 --gpu_id 0
+```
+
+### 3.2 绘制敏感性分析图与报告
+
+```bash
+python experiments/hyperparameter_sensitivity/plot_ifl_param_sensitivity.py --dataset Cora
+```
+
+默认输出：
+
+- 图片：`results/plots/cora_ifl_sensitivity_overview.png`
+- 文字报告：`results/plots/cora_ifl_sensitivity_analysis.md`
+
+## 结果文件命名规范
+
+为了保证重构前后的实验结果路径不变，当前仍沿用以下输出命名规则：
+
+- 方法搜索：`results/grid_search_<method_slug>_<dataset_slug>_results.csv`
+- 完整流程：`results/<dataset_slug>_full_pipeline_results.csv`
+- 敏感性分析：`results/sensitivity_<method_slug>_<dataset_slug>_results.csv`
+- 敏感性图表：`results/plots/<dataset_slug>_ifl_sensitivity_overview.png`
+- 采样偏差日志：`logs/exp1_<dataset_slug>.csv`
+- 采样偏差曲线：`logs/exp1_<dataset_slug>_curves.png`
+
+其中：
+
+- `ifl-gr -> iflgr`
+- `ifl-gc -> iflgc`
+- `Cora -> cora`
+- `CiteSeer -> citeseer`
+- `PubMed -> pubmed`
+- `DBLP -> dblp`
+
+## 推荐复现实验顺序
+
+如果你第一次使用本仓库，建议按下列顺序执行：
+
+1. `python train.py --dataset Cora --method grace --gpu_id 0`
+2. `python experiments/method_comparison/grid_search_iflgr.py --dataset Cora --gpu_id 0 --topk 3`
+3. `python experiments/method_comparison/verify_top_params.py --dataset Cora --method ifl-gr --top_params results/grid_search_iflgr_cora_results.csv --topk 3 --runs 3 --gpu_id 0`
+4. `python experiments/method_comparison/run_full_pipeline.py --dataset Cora --gpu_id 0`
+5. `python experiments/hyperparameter_sensitivity/run_ifl_param_sensitivity.py --datasets Cora --methods ifl-gr ifl-gc --gpu_id 0`
+6. `python train.py --dataset Cora --method grace --gpu_id 0 --exp1_metrics --exp1_log_csv logs/exp1_cora.csv`
+7. `python experiments/sampling_bias_validation/plot_sampling_bias_curves.py --csv logs/exp1_cora.csv --out logs/exp1_cora_curves.png`
+
+## 补充文档
+
+- `docs/CODE_STRUCTURE.md`：代码结构说明
+- `docs/GRID_SEARCH_GUIDE.md`：方法比较与网格搜索的补充说明
+- `experiments/README.md`：三大实验模块简介
+- `legacy/README.md`：旧目录迁移说明
+
+## 引用
+
+如果本项目对你的研究有帮助，请引用原始 GRACE 论文：
 
 ```bibtex
 @inproceedings{Zhu:2020vf,
