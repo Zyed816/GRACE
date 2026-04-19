@@ -1,66 +1,68 @@
 {% extends "lab/base.html" %}
 {% load lab_extras %}
 
-{% block title %}Run Detail #{{ run.pk }}{% endblock %}
+{% block title %}{{ detail_title }}{% endblock %}
 
 {% block content %}
   <section class="detail-hero">
     <div>
-      <a class="back-link" href="{% url 'lab:dashboard' %}">Back to Dashboard</a>
-      <p class="eyebrow">Experiment Detail</p>
-      <h1>{{ run.display_name }}</h1>
+      <a class="back-link" href="{{ back_url }}">Back to Dashboard</a>
+      <p class="eyebrow">{{ detail_eyebrow }}</p>
+      <h1>{{ detail_title }}</h1>
       <p class="hero-text">
-        {{ run.get_experiment_type_display }}{% if run.dataset %} | {{ run.dataset }}{% endif %} |
-        Created at {{ run.created_at|date:"Y-m-d H:i:s" }}
+        {{ type_label }}{% if dataset %} | {{ dataset }}{% endif %}
+        {% if created_at %} | {{ created_label }} {{ created_at|date:"Y-m-d H:i:s" }}{% endif %}
       </p>
     </div>
     <div class="detail-meta-card">
-      <span class="status-pill status-{{ run.status }}">{{ run.get_status_display }}</span>
-      {% if run.started_at %}
-        <p>Started: {{ run.started_at|date:"Y-m-d H:i:s" }}</p>
+      <span class="status-pill status-{{ status_class }}">{{ status_label }}</span>
+      {% if created_at %}
+        <p>{{ created_label }}: {{ created_at|date:"Y-m-d H:i:s" }}</p>
       {% endif %}
-      {% if run.finished_at %}
-        <p>Finished: {{ run.finished_at|date:"Y-m-d H:i:s" }}</p>
+      {% if started_at %}
+        <p>Started: {{ started_at|date:"Y-m-d H:i:s" }}</p>
       {% endif %}
-      {% if run.can_stop %}
-        <form method="post" action="{% url 'lab:stop_run' run.pk %}" class="inline-form detail-delete-form">
+      {% if finished_at %}
+        <p>Finished: {{ finished_at|date:"Y-m-d H:i:s" }}</p>
+      {% endif %}
+
+      {% if show_stop_action %}
+        <form method="post" action="{{ stop_action_url }}" class="inline-form detail-delete-form">
           {% csrf_token %}
-          <input type="hidden" name="next" value="{{ run.get_absolute_url }}">
+          <input type="hidden" name="next" value="{{ stop_next }}">
           <button
             type="submit"
             class="warning-btn detail-danger-btn"
-            onclick="return confirm('Stop run #{{ run.pk }} now? Related output files will be deleted.');"
+            onclick="return confirm('{{ stop_confirm_text }}');"
           >
-            Stop Run
+            {{ stop_button_label }}
           </button>
         </form>
-      {% elif run.is_active %}
+      {% elif show_disabled_stop %}
         <button type="button" class="warning-btn warning-btn-disabled detail-danger-btn detail-delete-form" disabled>
-          Stop Unavailable
+          {{ disabled_stop_label }}
         </button>
-      {% else %}
-        <form method="post" action="{% url 'lab:delete_run' run.pk %}" class="inline-form detail-delete-form">
+      {% endif %}
+
+      {% if show_delete_action %}
+        <form method="post" action="{{ delete_action_url }}" class="inline-form detail-delete-form">
           {% csrf_token %}
-          <input type="hidden" name="next" value="{% url 'lab:dashboard' %}">
+          <input type="hidden" name="next" value="{{ delete_next }}">
           <button
             type="submit"
             class="danger-btn detail-danger-btn"
-            onclick="return confirm('Delete run #{{ run.pk }} and its related files?');"
+            onclick="return confirm('{{ delete_confirm_text }}');"
           >
-            Delete Run
+            {{ delete_button_label }}
           </button>
         </form>
       {% endif %}
     </div>
   </section>
 
-  {% if run.status == "running" %}
+  {% if page_notice %}
     <section class="notice-card">
-      <p>This experiment is still running in the background. Refresh this page to see new logs and artifacts.</p>
-    </section>
-  {% elif run.status == "aborted" %}
-    <section class="notice-card">
-      <p>This experiment was aborted by the user. Related output files have already been removed.</p>
+      <p>{{ page_notice }}</p>
     </section>
   {% endif %}
 
@@ -76,7 +78,7 @@
   {% endif %}
 
   {% if chart_svgs %}
-    <section class="chart-grid">
+    <section class="chart-grid{% if chart_grid_class %} {{ chart_grid_class }}{% endif %}">
       {% for chart in chart_svgs %}
         <article class="chart-card">{{ chart|safe }}</article>
       {% endfor %}
@@ -93,9 +95,9 @@
           <article class="image-card">
             <div class="image-card-head">
               <h3>{{ artifact.label }}</h3>
-              <a href="{% url 'lab:artifact_file' run.pk artifact.pk %}" target="_blank" rel="noopener">Open File</a>
+              <a href="{{ artifact.url }}" target="_blank" rel="noopener">Open File</a>
             </div>
-            <img src="{% url 'lab:artifact_file' run.pk artifact.pk %}" alt="{{ artifact.label }}">
+            <img src="{{ artifact.url }}" alt="{{ artifact.label }}">
           </article>
         {% endfor %}
       </div>
@@ -113,7 +115,7 @@
             <div class="report-head">
               <h3>{% if block.artifact %}{{ block.artifact.label }}{% else %}In-memory Report{% endif %}</h3>
               {% if block.artifact %}
-                <a href="{% url 'lab:artifact_file' run.pk block.artifact.pk %}" target="_blank" rel="noopener">Open Source File</a>
+                <a href="{{ block.artifact.url }}" target="_blank" rel="noopener">Open Source File</a>
               {% endif %}
             </div>
             <pre>{{ block.content }}</pre>
@@ -128,7 +130,7 @@
       <div class="section-title">
         <h2>CSV Preview</h2>
       </div>
-      <div class="csv-stack">
+      <div class="csv-stack{% if csv_stack_class %} {{ csv_stack_class }}{% endif %}">
         {% for item in csv_previews %}
           <article class="table-card">
             <div class="table-head">
@@ -136,7 +138,7 @@
                 <h3>{{ item.artifact.label }}</h3>
                 <p>{{ item.preview.total_rows }} rows</p>
               </div>
-              <a href="{% url 'lab:artifact_file' run.pk item.artifact.pk %}" target="_blank" rel="noopener">Open File</a>
+              <a href="{{ item.artifact.url }}" target="_blank" rel="noopener">Open File</a>
             </div>
             {% if item.preview.headers %}
               <div class="table-wrap">
@@ -176,7 +178,7 @@
     <div class="fold-grid">
       <details class="fold-card" open>
         <summary>
-          <span>Run Config</span>
+          <span>{{ config_title }}</span>
           <span class="fold-hint">toggle</span>
         </summary>
         <pre class="code-scroll code-scroll-short">{{ config_json }}</pre>
@@ -201,29 +203,31 @@
     </div>
   </section>
 
-  <section class="artifact-section">
-    <div class="section-title">
-      <h2>Execution</h2>
-    </div>
-    <div class="fold-stack">
-      <details class="fold-card">
-        <summary>
-          <span>Executed Commands</span>
-          <span class="fold-hint">toggle</span>
-        </summary>
-        <pre class="code-scroll code-scroll-short">{{ run.command }}</pre>
-      </details>
+  {% if show_execution %}
+    <section class="artifact-section">
+      <div class="section-title">
+        <h2>Execution</h2>
+      </div>
+      <div class="fold-stack">
+        <details class="fold-card">
+          <summary>
+            <span>Executed Commands</span>
+            <span class="fold-hint">toggle</span>
+          </summary>
+          <pre class="code-scroll code-scroll-short">{{ command_text }}</pre>
+        </details>
 
-      <details class="fold-card"{% if run.status == "failed" and run.error_message %} open{% endif %}>
-        <summary>
-          <span>Runtime Log</span>
-          <span class="fold-hint">{% if run.status == "failed" and run.error_message %}error{% else %}toggle{% endif %}</span>
-        </summary>
-        {% if run.status == "failed" and run.error_message %}
-          <p class="error-inline error-block">Error: {{ run.error_message }}</p>
-        {% endif %}
-        <pre class="code-scroll code-scroll-tall">{{ run.stdout_log }}</pre>
-      </details>
-    </div>
-  </section>
+        <details class="fold-card"{% if error_message %} open{% endif %}>
+          <summary>
+            <span>Runtime Log</span>
+            <span class="fold-hint">{% if error_message %}error{% else %}toggle{% endif %}</span>
+          </summary>
+          {% if error_message %}
+            <p class="error-inline error-block">Error: {{ error_message }}</p>
+          {% endif %}
+          <pre class="code-scroll code-scroll-tall">{{ runtime_log }}</pre>
+        </details>
+      </div>
+    </section>
+  {% endif %}
 {% endblock %}

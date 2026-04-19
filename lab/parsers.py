@@ -1,7 +1,7 @@
 import csv
 from pathlib import Path
 
-from .constants import METHOD_LABELS
+from .constants import METHOD_LABELS, SENSITIVITY_PARAM_LABELS
 
 
 def safe_float(value, default=None):
@@ -145,9 +145,68 @@ def build_sampling_bias_summary(path):
     }
 
 
+def build_sensitivity_series(csv_paths):
+    grouped = {}
+    param_order = {"t_s": 0, "M": 1, "K": 2}
+
+    for csv_path in csv_paths:
+        rows = read_csv_rows(csv_path)
+        for row in rows:
+            if row.get("stage") != "summary":
+                continue
+
+            method = row.get("method", "")
+            param = row.get("paper_param", "")
+            sweep_value = row.get("sweep_value", "")
+            robust_score = safe_float(row.get("robust_score"))
+            if not method or not param or robust_score is None or sweep_value == "":
+                continue
+
+            grouped.setdefault(param, {}).setdefault(method, []).append(
+                {
+                    "x": safe_float(sweep_value),
+                    "label": str(sweep_value),
+                    "value": robust_score,
+                }
+            )
+
+    series_groups = []
+    for param, methods in grouped.items():
+        rendered_series = []
+        for method, points in methods.items():
+            unique_points = {}
+            for point in points:
+                unique_points[point["label"]] = point
+            ordered_points = sorted(
+                unique_points.values(),
+                key=lambda item: (item["x"] is None, item["x"] if item["x"] is not None else item["label"]),
+            )
+            rendered_series.append(
+                {
+                    "method": method,
+                    "label": METHOD_LABELS.get(method, method),
+                    "points": ordered_points,
+                }
+            )
+
+        rendered_series.sort(key=lambda item: item["label"])
+        series_groups.append(
+            {
+                "param": param,
+                "label": SENSITIVITY_PARAM_LABELS.get(param, param),
+                "series": rendered_series,
+            }
+        )
+
+    series_groups.sort(key=lambda item: (param_order.get(item["param"], 99), item["label"]))
+    return series_groups
+
+
 def build_sensitivity_summary(csv_paths, report_path=None):
     best_rows = []
     total_summary_rows = 0
+    methods = set()
+    params = set()
 
     for csv_path in csv_paths:
         rows = read_csv_rows(csv_path)
@@ -160,6 +219,9 @@ def build_sensitivity_summary(csv_paths, report_path=None):
             robust = safe_float(row.get("robust_score"))
             if not method or robust is None:
                 continue
+            methods.add(method)
+            if row.get("paper_param"):
+                params.add(row["paper_param"])
             candidate = {
                 "method": method,
                 "label": METHOD_LABELS.get(method, method),
@@ -178,5 +240,8 @@ def build_sensitivity_summary(csv_paths, report_path=None):
     return {
         "best_rows": best_rows,
         "summary_rows": total_summary_rows,
+        "methods": [METHOD_LABELS.get(method, method) for method in sorted(methods)],
+        "params": sorted(params, key=lambda item: {"t_s": 0, "M": 1, "K": 2}.get(item, 99)),
+        "sensitivity_series": build_sensitivity_series(csv_paths),
         "report_text": read_text_file(report_path) if report_path else "",
     }

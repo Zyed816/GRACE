@@ -14,4 +14,6 @@ urlpatterns = [
     path("runs/<int:pk>/stop/", views.stop_run, name="stop_run"),
     path("runs/<int:pk>/delete/", views.delete_run, name="delete_run"),
     path("runs/<int:run_id>/artifacts/<int:artifact_id>/", views.artifact_file, name="artifact_file"),
+    path("official/<slug:slug>/", views.official_result_detail, name="official_result_detail"),
+    path("official/artifacts/<path:relative_path>/", views.official_artifact_file, name="official_artifact_file"),
 ]

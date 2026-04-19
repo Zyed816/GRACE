@@ -10,7 +10,8 @@
       <p class="hero-text">
         Each entry below reuses the current project scripts for sampling-bias validation,
         graph contrastive method comparison, and hyperparameter sensitivity analysis.
-        Every web run writes to its own output folder so existing artifacts stay untouched.
+        Official lab outputs from <code>results/</code> and <code>logs/</code> are also surfaced here, and both
+        official data and new web runs now share the same result-page layout.
       </p>
     </div>
     <div class="hero-panel">
@@ -25,6 +26,10 @@
       <div class="mini-stat">
         <span class="mini-label">Recent Runs</span>
         <strong>{{ recent_runs|length }}</strong>
+      </div>
+      <div class="mini-stat">
+        <span class="mini-label">Official Results</span>
+        <strong>{{ official_results|length }}</strong>
       </div>
     </div>
   </section>
@@ -128,6 +133,40 @@
         <button type="submit" class="primary-btn">Start Sensitivity Run</button>
       </form>
     </article>
+  </section>
+
+  <section class="runs-section">
+    <div class="section-title">
+      <h2>Official Results</h2>
+      <p>Archived lab outputs from <code>results/</code> and <code>logs/</code>, rendered with the same detail page used by new web experiments.</p>
+    </div>
+
+    {% if official_results %}
+      <div class="run-list">
+        {% for item in official_results %}
+          <article class="run-card">
+            <div class="run-card-top">
+              <span class="status-pill status-official">Official</span>
+              <span class="run-id">{{ item.dataset }}</span>
+            </div>
+            <a class="run-card-link" href="{{ item.url }}">
+              <h3>{{ item.title }}</h3>
+              <p class="run-meta">{{ item.type_label }}{% if item.dataset %} | {{ item.dataset }}{% endif %}</p>
+              {% if item.updated_at %}
+                <p class="run-meta">Updated: {{ item.updated_at|date:"Y-m-d H:i:s" }}</p>
+              {% endif %}
+            </a>
+            <div class="run-card-actions">
+              <a class="secondary-btn" href="{{ item.url }}">Open Result</a>
+            </div>
+          </article>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty-box">
+        <p>No official result files were discovered outside <code>webapp/</code>.</p>
+      </div>
+    {% endif %}
   </section>
 
   <section class="runs-section">
