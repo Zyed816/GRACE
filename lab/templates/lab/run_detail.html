@@ -1,12 +1,12 @@
 {% extends "lab/base.html" %}
-{% load lab_extras %}
+{% load lab_extras lab_i18n %}
 
 {% block title %}{{ detail_title }}{% endblock %}
 
 {% block content %}
   <section class="detail-hero">
     <div>
-      <a class="back-link" href="{{ back_url }}">Back to Dashboard</a>
+      <a class="back-link" href="{{ back_url }}">{% tr 'detail.back_home' %}</a>
       <p class="eyebrow">{{ detail_eyebrow }}</p>
       <h1>{{ detail_title }}</h1>
       <p class="hero-text">
@@ -20,10 +20,10 @@
         <p>{{ created_label }}: {{ created_at|date:"Y-m-d H:i:s" }}</p>
       {% endif %}
       {% if started_at %}
-        <p>Started: {{ started_at|date:"Y-m-d H:i:s" }}</p>
+        <p>{{ started_label }}: {{ started_at|date:"Y-m-d H:i:s" }}</p>
       {% endif %}
       {% if finished_at %}
-        <p>Finished: {{ finished_at|date:"Y-m-d H:i:s" }}</p>
+        <p>{{ finished_label }}: {{ finished_at|date:"Y-m-d H:i:s" }}</p>
       {% endif %}
 
       {% if show_stop_action %}
@@ -88,14 +88,14 @@
   {% if image_artifacts %}
     <section class="artifact-section">
       <div class="section-title">
-        <h2>Image Artifacts</h2>
+        <h2>{% tr 'detail.image_artifacts' %}</h2>
       </div>
       <div class="image-grid">
         {% for artifact in image_artifacts %}
           <article class="image-card">
             <div class="image-card-head">
               <h3>{{ artifact.label }}</h3>
-              <a href="{{ artifact.url }}" target="_blank" rel="noopener">Open File</a>
+              <a href="{{ artifact.url }}" target="_blank" rel="noopener">{% tr 'common.open_file' %}</a>
             </div>
             <img src="{{ artifact.url }}" alt="{{ artifact.label }}">
           </article>
@@ -107,15 +107,15 @@
   {% if report_blocks %}
     <section class="artifact-section">
       <div class="section-title">
-        <h2>Reports</h2>
+        <h2>{% tr 'detail.reports' %}</h2>
       </div>
       <div class="report-stack">
         {% for block in report_blocks %}
           <article class="report-card">
             <div class="report-head">
-              <h3>{% if block.artifact %}{{ block.artifact.label }}{% else %}In-memory Report{% endif %}</h3>
+              <h3>{% if block.artifact %}{{ block.artifact.label }}{% else %}{% tr 'detail.in_memory_report' %}{% endif %}</h3>
               {% if block.artifact %}
-                <a href="{{ block.artifact.url }}" target="_blank" rel="noopener">Open Source File</a>
+                <a href="{{ block.artifact.url }}" target="_blank" rel="noopener">{% tr 'common.open_source_file' %}</a>
               {% endif %}
             </div>
             <pre>{{ block.content }}</pre>
@@ -128,7 +128,7 @@
   {% if csv_previews %}
     <section class="artifact-section">
       <div class="section-title">
-        <h2>CSV Preview</h2>
+        <h2>{% tr 'detail.csv_preview' %}</h2>
       </div>
       <div class="csv-stack{% if csv_stack_class %} {{ csv_stack_class }}{% endif %}">
         {% for item in csv_previews %}
@@ -136,9 +136,9 @@
             <div class="table-head">
               <div>
                 <h3>{{ item.artifact.label }}</h3>
-                <p>{{ item.preview.total_rows }} rows</p>
+                <p>{% tr 'common.rows_count' count=item.preview.total_rows %}</p>
               </div>
-              <a href="{{ item.artifact.url }}" target="_blank" rel="noopener">Open File</a>
+              <a href="{{ item.artifact.url }}" target="_blank" rel="noopener">{% tr 'common.open_file' %}</a>
             </div>
             {% if item.preview.headers %}
               <div class="table-wrap">
@@ -162,7 +162,7 @@
                 </table>
               </div>
             {% else %}
-              <p class="empty-inline">No preview data is currently available.</p>
+              <p class="empty-inline">{% tr 'detail.no_preview_data' %}</p>
             {% endif %}
           </article>
         {% endfor %}
@@ -172,29 +172,29 @@
 
   <section class="artifact-section">
     <div class="section-title">
-      <h2>Technical Details</h2>
-      <p>Secondary data is collapsed by default to keep the page compact.</p>
+      <h2>{% tr 'detail.technical_details' %}</h2>
+      <p>{% tr 'detail.technical_details_hint' %}</p>
     </div>
     <div class="fold-grid">
       <details class="fold-card" open>
         <summary>
           <span>{{ config_title }}</span>
-          <span class="fold-hint">toggle</span>
+          <span class="fold-hint">{% tr 'common.expand' %}</span>
         </summary>
         <pre class="code-scroll code-scroll-short">{{ config_json }}</pre>
       </details>
 
       <details class="fold-card">
         <summary>
-          <span>Result Summary JSON</span>
-          <span class="fold-hint">toggle</span>
+          <span>{% tr 'detail.result_summary_json' %}</span>
+          <span class="fold-hint">{% tr 'common.expand' %}</span>
         </summary>
         <pre class="code-scroll code-scroll-short">{{ summary_json_compact }}</pre>
         {% if summary_json_truncated %}
           <details class="sub-fold-card">
             <summary>
-              <span>Show Full JSON</span>
-              <span class="fold-hint">expand</span>
+              <span>{% tr 'detail.view_full_json' %}</span>
+              <span class="fold-hint">{% tr 'common.expand' %}</span>
             </summary>
             <pre class="code-scroll code-scroll-tall">{{ summary_json }}</pre>
           </details>
@@ -206,24 +206,24 @@
   {% if show_execution %}
     <section class="artifact-section">
       <div class="section-title">
-        <h2>Execution</h2>
+        <h2>{% tr 'detail.execution_info' %}</h2>
       </div>
       <div class="fold-stack">
         <details class="fold-card">
           <summary>
-            <span>Executed Commands</span>
-            <span class="fold-hint">toggle</span>
+            <span>{% tr 'detail.executed_commands' %}</span>
+            <span class="fold-hint">{% tr 'common.expand' %}</span>
           </summary>
           <pre class="code-scroll code-scroll-short">{{ command_text }}</pre>
         </details>
 
         <details class="fold-card"{% if error_message %} open{% endif %}>
           <summary>
-            <span>Runtime Log</span>
-            <span class="fold-hint">{% if error_message %}error{% else %}toggle{% endif %}</span>
+            <span>{% tr 'detail.runtime_log' %}</span>
+            <span class="fold-hint">{% if error_message %}{% tr 'common.error' %}{% else %}{% tr 'common.expand' %}{% endif %}</span>
           </summary>
           {% if error_message %}
-            <p class="error-inline error-block">Error: {{ error_message }}</p>
+            <p class="error-inline error-block">{% tr 'common.error' %}: {{ error_message }}</p>
           {% endif %}
           <pre class="code-scroll code-scroll-tall">{{ runtime_log }}</pre>
         </details>

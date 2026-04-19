@@ -307,7 +307,8 @@ def _run_method_comparison(run):
     _register_artifact(run, "Unified Results CSV", ExperimentArtifact.TYPE_CSV, out_csv)
     for method_slug in ("iflgr", "gca", "iflgc"):
         grid_file = grid_dir / f"grid_search_{method_slug}_{dataset_slug}_results.csv"
-        _register_artifact(run, f"{method_slug} grid search", ExperimentArtifact.TYPE_CSV, grid_file)
+        method_label = {"iflgr": "IFL-GR", "gca": "GCA", "iflgc": "IFL-GC"}[method_slug]
+        _register_artifact(run, f"{method_label} Grid Search", ExperimentArtifact.TYPE_CSV, grid_file)
 
     summary = build_method_comparison_summary(BASE_DIR / out_csv)
     summary.update(
@@ -358,7 +359,7 @@ def _run_sampling_bias(run):
     _run_command(run, plot_command, "sampling-plot")
 
     _register_artifact(run, "Sampling Bias CSV", ExperimentArtifact.TYPE_CSV, csv_path)
-    _register_artifact(run, "Sampling Bias Plot", ExperimentArtifact.TYPE_IMAGE, plot_path)
+    _register_artifact(run, "Sampling Bias Curve", ExperimentArtifact.TYPE_IMAGE, plot_path)
 
     summary = build_sampling_bias_summary(BASE_DIR / csv_path)
     summary.update(
@@ -412,7 +413,8 @@ def _run_sensitivity(run):
             command.append("--continue_on_error")
 
         _run_command(run, command, f"sensitivity-{method}")
-        _register_artifact(run, f"{method_slug} sensitivity csv", ExperimentArtifact.TYPE_CSV, out_csv)
+        method_label = {"iflgr": "IFL-GR", "iflgc": "IFL-GC"}.get(method_slug, method_slug.upper())
+        _register_artifact(run, f"{method_label} Sensitivity CSV", ExperimentArtifact.TYPE_CSV, out_csv)
         csv_paths.append(out_csv)
 
     plot_png = plots_dir / f"{dataset_slug}_ifl_sensitivity_overview.png"
@@ -431,8 +433,8 @@ def _run_sensitivity(run):
     ]
     _run_command(run, plot_command, "sensitivity-plot")
 
-    _register_artifact(run, "Sensitivity Overview", ExperimentArtifact.TYPE_IMAGE, plot_png)
-    _register_artifact(run, "Sensitivity Report", ExperimentArtifact.TYPE_REPORT, report_md)
+    _register_artifact(run, "Sensitivity Overview Plot", ExperimentArtifact.TYPE_IMAGE, plot_png)
+    _register_artifact(run, "Sensitivity Analysis Report", ExperimentArtifact.TYPE_REPORT, report_md)
 
     summary = build_sensitivity_summary(
         [BASE_DIR / path for path in csv_paths],

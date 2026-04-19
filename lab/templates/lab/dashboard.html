@@ -1,34 +1,30 @@
 {% extends "lab/base.html" %}
+{% load lab_i18n %}
 
-{% block title %}GRACE Experiment System{% endblock %}
+{% block title %}{% tr 'site.title' %}{% endblock %}
 
 {% block content %}
   <section class="hero">
     <div class="hero-copy">
-      <p class="eyebrow">Django Experiment System</p>
-      <h1>Turn the existing GRACE scripts into a configurable web-based experiment console.</h1>
-      <p class="hero-text">
-        Each entry below reuses the current project scripts for sampling-bias validation,
-        graph contrastive method comparison, and hyperparameter sensitivity analysis.
-        Official lab outputs from <code>results/</code> and <code>logs/</code> are also surfaced here, and both
-        official data and new web runs now share the same result-page layout.
-      </p>
+      <p class="eyebrow">{% tr 'dashboard.hero_eyebrow' %}</p>
+      <h1>{% tr 'dashboard.hero_title' %}</h1>
+      <p class="hero-text">{% tr 'dashboard.hero_text' %}</p>
     </div>
     <div class="hero-panel">
       <div class="mini-stat">
-        <span class="mini-label">Datasets</span>
+        <span class="mini-label">{% tr 'dashboard.stat_datasets' %}</span>
         <strong>4</strong>
       </div>
       <div class="mini-stat">
-        <span class="mini-label">Modules</span>
+        <span class="mini-label">{% tr 'dashboard.stat_modules' %}</span>
         <strong>3</strong>
       </div>
       <div class="mini-stat">
-        <span class="mini-label">Recent Runs</span>
+        <span class="mini-label">{% tr 'dashboard.stat_recent_runs' %}</span>
         <strong>{{ recent_runs|length }}</strong>
       </div>
       <div class="mini-stat">
-        <span class="mini-label">Official Results</span>
+        <span class="mini-label">{% tr 'dashboard.stat_official_results' %}</span>
         <strong>{{ official_results|length }}</strong>
       </div>
     </div>
@@ -38,8 +34,8 @@
     <article class="panel-card">
       <div class="panel-head">
         <p class="panel-kicker">01</p>
-        <h2>Sampling Bias Validation</h2>
-        <p>Run training with bias metrics enabled and generate violation rate / mean margin curves automatically.</p>
+        <h2>{% tr 'sampling_bias_label' %}</h2>
+        <p>{% tr 'dashboard.sampling_desc' %}</p>
       </div>
       <form method="post" action="{% url 'lab:create_sampling_bias' %}" class="config-form">
         {% csrf_token %}
@@ -64,15 +60,15 @@
             </div>
           {% endif %}
         {% endfor %}
-        <button type="submit" class="primary-btn">Start Sampling Bias Run</button>
+        <button type="submit" class="primary-btn">{% tr 'dashboard.sampling_start' %}</button>
       </form>
     </article>
 
     <article class="panel-card">
       <div class="panel-head">
         <p class="panel-kicker">02</p>
-        <h2>Method Comparison Pipeline</h2>
-        <p>Run the full single-dataset comparison pipeline and visualize robust scores on the result page.</p>
+        <h2>{% tr 'method_comparison_label' %}</h2>
+        <p>{% tr 'dashboard.method_desc' %}</p>
       </div>
       <form method="post" action="{% url 'lab:create_method_comparison' %}" class="config-form">
         {% csrf_token %}
@@ -97,15 +93,15 @@
             </div>
           {% endif %}
         {% endfor %}
-        <button type="submit" class="primary-btn">Start Method Comparison</button>
+        <button type="submit" class="primary-btn">{% tr 'dashboard.method_start' %}</button>
       </form>
     </article>
 
     <article class="panel-card">
       <div class="panel-head">
         <p class="panel-kicker">03</p>
-        <h2>Sensitivity Analysis</h2>
-        <p>Run sensitivity sweeps per method, build overview plots, and inspect CSV outputs from the detail page.</p>
+        <h2>{% tr 'sensitivity_label' %}</h2>
+        <p>{% tr 'dashboard.sensitivity_desc' %}</p>
       </div>
       <form method="post" action="{% url 'lab:create_sensitivity' %}" class="config-form">
         {% csrf_token %}
@@ -130,15 +126,15 @@
             </div>
           {% endif %}
         {% endfor %}
-        <button type="submit" class="primary-btn">Start Sensitivity Run</button>
+        <button type="submit" class="primary-btn">{% tr 'dashboard.sensitivity_start' %}</button>
       </form>
     </article>
   </section>
 
   <section class="runs-section">
     <div class="section-title">
-      <h2>Official Results</h2>
-      <p>Archived lab outputs from <code>results/</code> and <code>logs/</code>, rendered with the same detail page used by new web experiments.</p>
+      <h2>{% tr 'dashboard.official_title' %}</h2>
+      <p>{% tr 'dashboard.official_desc' %}</p>
     </div>
 
     {% if official_results %}
@@ -146,33 +142,33 @@
         {% for item in official_results %}
           <article class="run-card">
             <div class="run-card-top">
-              <span class="status-pill status-official">Official</span>
+              <span class="status-pill status-official">{% tr 'status_official' %}</span>
               <span class="run-id">{{ item.dataset }}</span>
             </div>
             <a class="run-card-link" href="{{ item.url }}">
               <h3>{{ item.title }}</h3>
               <p class="run-meta">{{ item.type_label }}{% if item.dataset %} | {{ item.dataset }}{% endif %}</p>
               {% if item.updated_at %}
-                <p class="run-meta">Updated: {{ item.updated_at|date:"Y-m-d H:i:s" }}</p>
+                <p class="run-meta">{% tr 'labels.updated_at' %}: {{ item.updated_at|date:"Y-m-d H:i:s" }}</p>
               {% endif %}
             </a>
             <div class="run-card-actions">
-              <a class="secondary-btn" href="{{ item.url }}">Open Result</a>
+              <a class="secondary-btn" href="{{ item.url }}">{% tr 'dashboard.view_result' %}</a>
             </div>
           </article>
         {% endfor %}
       </div>
     {% else %}
       <div class="empty-box">
-        <p>No official result files were discovered outside <code>webapp/</code>.</p>
+        <p>{% tr 'dashboard.official_empty' %}</p>
       </div>
     {% endif %}
   </section>
 
   <section class="runs-section">
     <div class="section-title">
-      <h2>Recent Runs</h2>
-      <p>Open any run to inspect status, artifacts, logs, and generated visualizations.</p>
+      <h2>{% tr 'dashboard.recent_title' %}</h2>
+      <p>{% tr 'dashboard.recent_desc' %}</p>
     </div>
 
     {% if recent_runs %}
@@ -180,16 +176,16 @@
         {% for run in recent_runs %}
           <article class="run-card">
             <div class="run-card-top">
-              <span class="status-pill status-{{ run.status }}">{{ run.get_status_display }}</span>
+              <span class="status-pill status-{{ run.status }}">{{ run.status_label }}</span>
               <span class="run-id">#{{ run.pk }}</span>
             </div>
-            <a class="run-card-link" href="{{ run.get_absolute_url }}">
-              <h3>{{ run.display_name }}</h3>
-              <p class="run-meta">{{ run.get_experiment_type_display }}{% if run.dataset %} | {{ run.dataset }}{% endif %}</p>
-              <p class="run-meta">Created: {{ run.created_at|date:"Y-m-d H:i:s" }}</p>
+            <a class="run-card-link" href="{{ run.url }}">
+              <h3>{{ run.title }}</h3>
+              <p class="run-meta">{{ run.type_label }}{% if run.dataset %} | {{ run.dataset }}{% endif %}</p>
+              <p class="run-meta">{% tr 'dashboard.created_at' %}: {{ run.created_at|date:"Y-m-d H:i:s" }}</p>
             </a>
             <div class="run-card-actions">
-              <a class="secondary-btn" href="{{ run.get_absolute_url }}">Open</a>
+              <a class="secondary-btn" href="{{ run.url }}">{% tr 'dashboard.view_run' %}</a>
               {% if run.can_stop %}
                 <form method="post" action="{% url 'lab:stop_run' run.pk %}" class="inline-form">
                   {% csrf_token %}
@@ -197,13 +193,13 @@
                   <button
                     type="submit"
                     class="warning-btn"
-                    onclick="return confirm('Stop run #{{ run.pk }} now? Related output files will be deleted.');"
+                    onclick="return confirm('{{ run.stop_confirm_text }}');"
                   >
-                    Stop
+                    {% tr 'button.stop' %}
                   </button>
                 </form>
               {% elif run.is_active %}
-                <button type="button" class="warning-btn warning-btn-disabled" disabled>Stop Unavailable</button>
+                <button type="button" class="warning-btn warning-btn-disabled" disabled>{% tr 'button.stop_unavailable' %}</button>
               {% else %}
                 <form method="post" action="{% url 'lab:delete_run' run.pk %}" class="inline-form">
                   {% csrf_token %}
@@ -211,9 +207,9 @@
                   <button
                     type="submit"
                     class="danger-btn"
-                    onclick="return confirm('Delete run #{{ run.pk }} and its related files?');"
+                    onclick="return confirm('{{ run.delete_confirm_text }}');"
                   >
-                    Delete
+                    {% tr 'button.delete' %}
                   </button>
                 </form>
               {% endif %}
@@ -223,7 +219,7 @@
       </div>
     {% else %}
       <div class="empty-box">
-        <p>No runs yet. Start with any experiment form above.</p>
+        <p>{% tr 'dashboard.recent_empty' %}</p>
       </div>
     {% endif %}
   </section>

@@ -4,13 +4,10 @@ from pathlib import Path
 from django.conf import settings
 from django.utils import timezone
 
-from .constants import DATASET_CHOICES, EXPERIMENT_TYPE_LABELS, METHOD_LABELS
+from .constants import DATASET_CHOICES, METHOD_LABELS
 from .models import ExperimentArtifact, ExperimentRun
-from .parsers import (
-    build_method_comparison_summary,
-    build_sampling_bias_summary,
-    build_sensitivity_summary,
-)
+from .parsers import build_method_comparison_summary, build_sampling_bias_summary, build_sensitivity_summary
+from .ui_text import experiment_type_label, text
 
 
 BASE_DIR = Path(settings.BASE_DIR).resolve()
@@ -61,11 +58,22 @@ def _method_key_from_slug(method_slug):
     }.get(method_slug, method_slug)
 
 
-def _method_comparison_entries():
+def _official_config(language, *, location_key, dataset, experiment_type, artifacts):
+    return {
+        text("official.config_source", language): text("official.source_archive", language),
+        text("official.config_location", language): text(location_key, language),
+        "dataset": dataset,
+        text("official.config_result_type", language): experiment_type_label(experiment_type, language),
+        text("official.config_artifacts", language): [artifact["relative_path"] for artifact in artifacts],
+    }
+
+
+def _method_comparison_entries(language):
     entries = []
     for full_csv in sorted(RESULTS_DIR.glob("*_full_pipeline_results.csv")):
         dataset_slug = full_csv.name[: -len("_full_pipeline_results.csv")]
         dataset = _dataset_label(dataset_slug)
+        experiment_type = ExperimentRun.TYPE_METHOD_COMPARISON
 
         artifacts = [
             _artifact("Unified Results CSV", ExperimentArtifact.TYPE_CSV, full_csv),
@@ -88,30 +96,26 @@ def _method_comparison_entries():
         artifacts = [artifact for artifact in artifacts if artifact]
 
         summary = build_method_comparison_summary(full_csv)
-        summary.update(
-            {
-                "dataset": dataset,
-                "main_csv": _relative_path(full_csv),
-            }
-        )
+        summary.update({"dataset": dataset, "main_csv": _relative_path(full_csv)})
 
+        type_label = experiment_type_label(experiment_type, language)
         entries.append(
             {
                 "slug": f"method-comparison-{dataset_slug}",
-                "title": f"Method Comparison Pipeline / {dataset}",
-                "experiment_type": ExperimentRun.TYPE_METHOD_COMPARISON,
-                "type_label": EXPERIMENT_TYPE_LABELS[ExperimentRun.TYPE_METHOD_COMPARISON],
+                "title": f"{type_label} / {dataset}",
+                "experiment_type": experiment_type,
+                "type_label": type_label,
                 "dataset": dataset,
                 "dataset_slug": dataset_slug,
                 "updated_at": _updated_at([(BASE_DIR / artifact["relative_path"]).resolve() for artifact in artifacts]),
                 "summary": summary,
-                "config": {
-                    "source": "Official archived result",
-                    "storage": "results/ (outside webapp)",
-                    "dataset": dataset,
-                    "entry_type": EXPERIMENT_TYPE_LABELS[ExperimentRun.TYPE_METHOD_COMPARISON],
-                    "artifacts": [artifact["relative_path"] for artifact in artifacts],
-                },
+                "config": _official_config(
+                    language,
+                    location_key="official.location.results",
+                    dataset=dataset,
+                    experiment_type=experiment_type,
+                    artifacts=artifacts,
+                ),
                 "artifacts": artifacts,
             }
         )
@@ -119,16 +123,17 @@ def _method_comparison_entries():
     return entries
 
 
-def _sampling_bias_entries():
+def _sampling_bias_entries(language):
     entries = []
     for csv_path in sorted(LOGS_DIR.glob("exp1_*.csv")):
         dataset_slug = csv_path.stem[len("exp1_") :]
         dataset = _dataset_label(dataset_slug)
         plot_path = LOGS_DIR / f"exp1_{dataset_slug}_curves.png"
+        experiment_type = ExperimentRun.TYPE_SAMPLING_BIAS
 
         artifacts = [
             _artifact("Sampling Bias CSV", ExperimentArtifact.TYPE_CSV, csv_path),
-            _artifact("Sampling Bias Plot", ExperimentArtifact.TYPE_IMAGE, plot_path),
+            _artifact("Sampling Bias Curve", ExperimentArtifact.TYPE_IMAGE, plot_path),
         ]
         artifacts = [artifact for artifact in artifacts if artifact]
 
@@ -141,23 +146,24 @@ def _sampling_bias_entries():
             }
         )
 
+        type_label = experiment_type_label(experiment_type, language)
         entries.append(
             {
                 "slug": f"sampling-bias-{dataset_slug}",
-                "title": f"Sampling Bias Validation / {dataset}",
-                "experiment_type": ExperimentRun.TYPE_SAMPLING_BIAS,
-                "type_label": EXPERIMENT_TYPE_LABELS[ExperimentRun.TYPE_SAMPLING_BIAS],
+                "title": f"{type_label} / {dataset}",
+                "experiment_type": experiment_type,
+                "type_label": type_label,
                 "dataset": dataset,
                 "dataset_slug": dataset_slug,
                 "updated_at": _updated_at([csv_path, plot_path]),
                 "summary": summary,
-                "config": {
-                    "source": "Official archived result",
-                    "storage": "logs/ (outside webapp)",
-                    "dataset": dataset,
-                    "entry_type": EXPERIMENT_TYPE_LABELS[ExperimentRun.TYPE_SAMPLING_BIAS],
-                    "artifacts": [artifact["relative_path"] for artifact in artifacts],
-                },
+                "config": _official_config(
+                    language,
+                    location_key="official.location.logs",
+                    dataset=dataset,
+                    experiment_type=experiment_type,
+                    artifacts=artifacts,
+                ),
                 "artifacts": artifacts,
             }
         )
@@ -165,7 +171,7 @@ def _sampling_bias_entries():
     return entries
 
 
-def _sensitivity_entries():
+def _sensitivity_entries(language):
     grouped = {}
     for csv_path in sorted(RESULTS_DIR.glob("sensitivity_*_results.csv")):
         parts = csv_path.stem.split("_")
@@ -179,22 +185,18 @@ def _sensitivity_entries():
         dataset = _dataset_label(dataset_slug)
         plot_path = PLOTS_DIR / f"{dataset_slug}_ifl_sensitivity_overview.png"
         report_path = PLOTS_DIR / f"{dataset_slug}_ifl_sensitivity_analysis.md"
+        experiment_type = ExperimentRun.TYPE_SENSITIVITY
 
         artifacts = []
         for csv_path in csv_paths:
             method_slug = csv_path.stem.split("_")[1]
             method_key = _method_key_from_slug(method_slug)
-            artifacts.append(
-                _artifact(
-                    f"{METHOD_LABELS.get(method_key, method_slug.upper())} Sensitivity CSV",
-                    ExperimentArtifact.TYPE_CSV,
-                    csv_path,
-                )
-            )
+            method_label = METHOD_LABELS.get(method_key, method_slug.upper())
+            artifacts.append(_artifact(f"{method_label} Sensitivity CSV", ExperimentArtifact.TYPE_CSV, csv_path))
         artifacts.extend(
             [
-                _artifact("Sensitivity Overview", ExperimentArtifact.TYPE_IMAGE, plot_path),
-                _artifact("Sensitivity Report", ExperimentArtifact.TYPE_REPORT, report_path),
+                _artifact("Sensitivity Overview Plot", ExperimentArtifact.TYPE_IMAGE, plot_path),
+                _artifact("Sensitivity Analysis Report", ExperimentArtifact.TYPE_REPORT, report_path),
             ]
         )
         artifacts = [artifact for artifact in artifacts if artifact]
@@ -208,23 +210,24 @@ def _sensitivity_entries():
             }
         )
 
+        type_label = experiment_type_label(experiment_type, language)
         entries.append(
             {
                 "slug": f"sensitivity-{dataset_slug}",
-                "title": f"Sensitivity Analysis / {dataset}",
-                "experiment_type": ExperimentRun.TYPE_SENSITIVITY,
-                "type_label": EXPERIMENT_TYPE_LABELS[ExperimentRun.TYPE_SENSITIVITY],
+                "title": f"{type_label} / {dataset}",
+                "experiment_type": experiment_type,
+                "type_label": type_label,
                 "dataset": dataset,
                 "dataset_slug": dataset_slug,
                 "updated_at": _updated_at([*csv_paths, plot_path, report_path]),
                 "summary": summary,
-                "config": {
-                    "source": "Official archived result",
-                    "storage": "results/ and results/plots/ (outside webapp)",
-                    "dataset": dataset,
-                    "entry_type": EXPERIMENT_TYPE_LABELS[ExperimentRun.TYPE_SENSITIVITY],
-                    "artifacts": [artifact["relative_path"] for artifact in artifacts],
-                },
+                "config": _official_config(
+                    language,
+                    location_key="official.location.sensitivity",
+                    dataset=dataset,
+                    experiment_type=experiment_type,
+                    artifacts=artifacts,
+                ),
                 "artifacts": artifacts,
             }
         )
@@ -232,11 +235,11 @@ def _sensitivity_entries():
     return entries
 
 
-def list_official_results():
+def list_official_results(language="zh"):
     entries = [
-        *_sampling_bias_entries(),
-        *_method_comparison_entries(),
-        *_sensitivity_entries(),
+        *_sampling_bias_entries(language),
+        *_method_comparison_entries(language),
+        *_sensitivity_entries(language),
     ]
     return sorted(
         entries,
@@ -248,8 +251,8 @@ def list_official_results():
     )
 
 
-def get_official_result(slug):
-    for entry in list_official_results():
+def get_official_result(slug, language="zh"):
+    for entry in list_official_results(language):
         if entry["slug"] == slug:
             return entry
     return None

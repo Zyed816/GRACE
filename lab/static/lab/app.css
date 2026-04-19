@@ -18,7 +18,8 @@
   --radius-xl: 28px;
   --radius-lg: 20px;
   --radius-md: 14px;
-  --font-main: "Aptos", "Trebuchet MS", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-main: "PingFang SC", "Source Han Sans SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
+  --font-display: "STSong", "Songti SC", "Source Han Serif SC", "Noto Serif CJK SC", serif;
 }
 
 * {
@@ -69,6 +70,10 @@ code {
 }
 
 .topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
   margin-bottom: 18px;
 }
 
@@ -91,6 +96,40 @@ code {
 .brand-copy {
   font-size: 0.95rem;
   color: var(--muted);
+}
+
+.lang-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(23, 32, 51, 0.1);
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: var(--shadow);
+}
+
+.lang-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 58px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.92rem;
+  font-weight: 700;
+  transition: background 160ms ease, color 160ms ease;
+}
+
+.lang-link.is-active {
+  background: linear-gradient(135deg, var(--brand), var(--brand-deep));
+  color: #fff;
+}
+
+.lang-link:not(.is-active):hover {
+  background: rgba(15, 118, 110, 0.1);
+  color: var(--brand-deep);
 }
 
 .content-shell {
@@ -137,6 +176,13 @@ h2,
 h3,
 p {
   margin-top: 0;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  font-weight: 600;
 }
 
 h1 {
@@ -580,6 +626,10 @@ h2 {
   height: auto;
 }
 
+.chart-card svg text {
+  font-family: var(--font-main);
+}
+
 .chart-grid-wide {
   grid-template-columns: minmax(0, 1fr);
 }
@@ -809,6 +859,11 @@ pre {
 @media (max-width: 720px) {
   .page-shell {
     padding: 18px 14px 48px;
+  }
+
+  .topbar {
+    flex-direction: column;
+    align-items: flex-start;
   }
 
   .panel-card,

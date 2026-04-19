@@ -1,10 +1,14 @@
-{% load static %}
+{% load static lab_i18n %}
+{% html_lang_code as document_lang %}
+{% current_lang as active_lang %}
+{% lang_url 'zh' as zh_lang_url %}
+{% lang_url 'en' as en_lang_url %}
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="{{ document_lang }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}GRACE Experiment System{% endblock %}</title>
+  <title>{% block title %}{% tr 'site.title' %}{% endblock %}</title>
   <link rel="stylesheet" href="{% static 'lab/app.css' %}">
 </head>
 <body>
@@ -12,8 +16,12 @@
     <header class="topbar">
       <a class="brand" href="{% url 'lab:dashboard' %}">
         <span class="brand-mark">GRACE</span>
-        <span class="brand-copy">Graph Research Experiment Console</span>
+        <span class="brand-copy">{% tr 'site.brand_copy' %}</span>
       </a>
+      <nav class="lang-switch" aria-label="{% tr 'site.language_switch' %}">
+        <a class="lang-link{% if active_lang == 'zh' %} is-active{% endif %}" href="{{ zh_lang_url }}">{% tr 'site.lang_zh' %}</a>
+        <a class="lang-link{% if active_lang == 'en' %} is-active{% endif %}" href="{{ en_lang_url }}">{% tr 'site.lang_en' %}</a>
+      </nav>
     </header>
 
     {% if messages %}

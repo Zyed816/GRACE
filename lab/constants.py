@@ -18,9 +18,9 @@ SENSITIVITY_METHOD_CHOICES = [
 ]
 
 SENSITIVITY_PARAM_CHOICES = [
-    ("t_s", "t_s / similarity threshold"),
-    ("M", "M / warmup epochs"),
-    ("K", "K / update interval"),
+    ("t_s", "t_s / 相似度阈值"),
+    ("M", "M / 预热轮数"),
+    ("K", "K / 更新间隔"),
 ]
 
 METHOD_LABELS = {
@@ -38,15 +38,15 @@ METHOD_DISPLAY_ORDER = [
 ]
 
 EXPERIMENT_TYPE_LABELS = {
-    "method_comparison": "Method Comparison Pipeline",
-    "sampling_bias": "Sampling Bias Validation",
-    "sensitivity": "Sensitivity Analysis",
+    "method_comparison": "方法比较流水线",
+    "sampling_bias": "采样偏差验证",
+    "sensitivity": "超参数敏感性分析",
 }
 
 SENSITIVITY_PARAM_LABELS = {
-    "t_s": "t_s / similarity threshold",
-    "M": "M / warmup epochs",
-    "K": "K / update interval",
+    "t_s": "t_s / 相似度阈值",
+    "M": "M / 预热轮数",
+    "K": "K / 更新间隔",
 }
 
 METHOD_FILE_SLUG = {
