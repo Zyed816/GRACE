@@ -1,0 +1,229 @@
+{% extends "lab/base.html" %}
+{% load lab_extras %}
+
+{% block title %}Run Detail #{{ run.pk }}{% endblock %}
+
+{% block content %}
+  <section class="detail-hero">
+    <div>
+      <a class="back-link" href="{% url 'lab:dashboard' %}">Back to Dashboard</a>
+      <p class="eyebrow">Experiment Detail</p>
+      <h1>{{ run.display_name }}</h1>
+      <p class="hero-text">
+        {{ run.get_experiment_type_display }}{% if run.dataset %} | {{ run.dataset }}{% endif %} |
+        Created at {{ run.created_at|date:"Y-m-d H:i:s" }}
+      </p>
+    </div>
+    <div class="detail-meta-card">
+      <span class="status-pill status-{{ run.status }}">{{ run.get_status_display }}</span>
+      {% if run.started_at %}
+        <p>Started: {{ run.started_at|date:"Y-m-d H:i:s" }}</p>
+      {% endif %}
+      {% if run.finished_at %}
+        <p>Finished: {{ run.finished_at|date:"Y-m-d H:i:s" }}</p>
+      {% endif %}
+      {% if run.can_stop %}
+        <form method="post" action="{% url 'lab:stop_run' run.pk %}" class="inline-form detail-delete-form">
+          {% csrf_token %}
+          <input type="hidden" name="next" value="{{ run.get_absolute_url }}">
+          <button
+            type="submit"
+            class="warning-btn detail-danger-btn"
+            onclick="return confirm('Stop run #{{ run.pk }} now? Related output files will be deleted.');"
+          >
+            Stop Run
+          </button>
+        </form>
+      {% elif run.is_active %}
+        <button type="button" class="warning-btn warning-btn-disabled detail-danger-btn detail-delete-form" disabled>
+          Stop Unavailable
+        </button>
+      {% else %}
+        <form method="post" action="{% url 'lab:delete_run' run.pk %}" class="inline-form detail-delete-form">
+          {% csrf_token %}
+          <input type="hidden" name="next" value="{% url 'lab:dashboard' %}">
+          <button
+            type="submit"
+            class="danger-btn detail-danger-btn"
+            onclick="return confirm('Delete run #{{ run.pk }} and its related files?');"
+          >
+            Delete Run
+          </button>
+        </form>
+      {% endif %}
+    </div>
+  </section>
+
+  {% if run.status == "running" %}
+    <section class="notice-card">
+      <p>This experiment is still running in the background. Refresh this page to see new logs and artifacts.</p>
+    </section>
+  {% elif run.status == "aborted" %}
+    <section class="notice-card">
+      <p>This experiment was aborted by the user. Related output files have already been removed.</p>
+    </section>
+  {% endif %}
+
+  {% if summary_cards %}
+    <section class="summary-grid">
+      {% for card in summary_cards %}
+        <article class="summary-card">
+          <span class="summary-label">{{ card.label }}</span>
+          <strong>{{ card.value }}</strong>
+        </article>
+      {% endfor %}
+    </section>
+  {% endif %}
+
+  {% if chart_svgs %}
+    <section class="chart-grid">
+      {% for chart in chart_svgs %}
+        <article class="chart-card">{{ chart|safe }}</article>
+      {% endfor %}
+    </section>
+  {% endif %}
+
+  {% if image_artifacts %}
+    <section class="artifact-section">
+      <div class="section-title">
+        <h2>Image Artifacts</h2>
+      </div>
+      <div class="image-grid">
+        {% for artifact in image_artifacts %}
+          <article class="image-card">
+            <div class="image-card-head">
+              <h3>{{ artifact.label }}</h3>
+              <a href="{% url 'lab:artifact_file' run.pk artifact.pk %}" target="_blank" rel="noopener">Open File</a>
+            </div>
+            <img src="{% url 'lab:artifact_file' run.pk artifact.pk %}" alt="{{ artifact.label }}">
+          </article>
+        {% endfor %}
+      </div>
+    </section>
+  {% endif %}
+
+  {% if report_blocks %}
+    <section class="artifact-section">
+      <div class="section-title">
+        <h2>Reports</h2>
+      </div>
+      <div class="report-stack">
+        {% for block in report_blocks %}
+          <article class="report-card">
+            <div class="report-head">
+              <h3>{% if block.artifact %}{{ block.artifact.label }}{% else %}In-memory Report{% endif %}</h3>
+              {% if block.artifact %}
+                <a href="{% url 'lab:artifact_file' run.pk block.artifact.pk %}" target="_blank" rel="noopener">Open Source File</a>
+              {% endif %}
+            </div>
+            <pre>{{ block.content }}</pre>
+          </article>
+        {% endfor %}
+      </div>
+    </section>
+  {% endif %}
+
+  {% if csv_previews %}
+    <section class="artifact-section">
+      <div class="section-title">
+        <h2>CSV Preview</h2>
+      </div>
+      <div class="csv-stack">
+        {% for item in csv_previews %}
+          <article class="table-card">
+            <div class="table-head">
+              <div>
+                <h3>{{ item.artifact.label }}</h3>
+                <p>{{ item.preview.total_rows }} rows</p>
+              </div>
+              <a href="{% url 'lab:artifact_file' run.pk item.artifact.pk %}" target="_blank" rel="noopener">Open File</a>
+            </div>
+            {% if item.preview.headers %}
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      {% for header in item.preview.headers %}
+                        <th>{{ header }}</th>
+                      {% endfor %}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for row in item.preview.rows %}
+                      <tr>
+                        {% for header in item.preview.headers %}
+                          <td>{{ row|get_item:header }}</td>
+                        {% endfor %}
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            {% else %}
+              <p class="empty-inline">No preview data is currently available.</p>
+            {% endif %}
+          </article>
+        {% endfor %}
+      </div>
+    </section>
+  {% endif %}
+
+  <section class="artifact-section">
+    <div class="section-title">
+      <h2>Technical Details</h2>
+      <p>Secondary data is collapsed by default to keep the page compact.</p>
+    </div>
+    <div class="fold-grid">
+      <details class="fold-card" open>
+        <summary>
+          <span>Run Config</span>
+          <span class="fold-hint">toggle</span>
+        </summary>
+        <pre class="code-scroll code-scroll-short">{{ config_json }}</pre>
+      </details>
+
+      <details class="fold-card">
+        <summary>
+          <span>Result Summary JSON</span>
+          <span class="fold-hint">toggle</span>
+        </summary>
+        <pre class="code-scroll code-scroll-short">{{ summary_json_compact }}</pre>
+        {% if summary_json_truncated %}
+          <details class="sub-fold-card">
+            <summary>
+              <span>Show Full JSON</span>
+              <span class="fold-hint">expand</span>
+            </summary>
+            <pre class="code-scroll code-scroll-tall">{{ summary_json }}</pre>
+          </details>
+        {% endif %}
+      </details>
+    </div>
+  </section>
+
+  <section class="artifact-section">
+    <div class="section-title">
+      <h2>Execution</h2>
+    </div>
+    <div class="fold-stack">
+      <details class="fold-card">
+        <summary>
+          <span>Executed Commands</span>
+          <span class="fold-hint">toggle</span>
+        </summary>
+        <pre class="code-scroll code-scroll-short">{{ run.command }}</pre>
+      </details>
+
+      <details class="fold-card"{% if run.status == "failed" and run.error_message %} open{% endif %}>
+        <summary>
+          <span>Runtime Log</span>
+          <span class="fold-hint">{% if run.status == "failed" and run.error_message %}error{% else %}toggle{% endif %}</span>
+        </summary>
+        {% if run.status == "failed" and run.error_message %}
+          <p class="error-inline error-block">Error: {{ run.error_message }}</p>
+        {% endif %}
+        <pre class="code-scroll code-scroll-tall">{{ run.stdout_log }}</pre>
+      </details>
+    </div>
+  </section>
+{% endblock %}

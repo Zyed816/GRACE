@@ -1,0 +1,32 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}GRACE Experiment System{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'lab/app.css' %}">
+</head>
+<body>
+  <div class="page-shell">
+    <header class="topbar">
+      <a class="brand" href="{% url 'lab:dashboard' %}">
+        <span class="brand-mark">GRACE</span>
+        <span class="brand-copy">Graph Research Experiment Console</span>
+      </a>
+    </header>
+
+    {% if messages %}
+      <section class="flash-stack">
+        {% for message in messages %}
+          <div class="flash flash-{{ message.tags|default:'info' }}">{{ message }}</div>
+        {% endfor %}
+      </section>
+    {% endif %}
+
+    <main class="content-shell">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</body>
+</html>

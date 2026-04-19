@@ -1,0 +1,191 @@
+{% extends "lab/base.html" %}
+
+{% block title %}GRACE Experiment System{% endblock %}
+
+{% block content %}
+  <section class="hero">
+    <div class="hero-copy">
+      <p class="eyebrow">Django Experiment System</p>
+      <h1>Turn the existing GRACE scripts into a configurable web-based experiment console.</h1>
+      <p class="hero-text">
+        Each entry below reuses the current project scripts for sampling-bias validation,
+        graph contrastive method comparison, and hyperparameter sensitivity analysis.
+        Every web run writes to its own output folder so existing artifacts stay untouched.
+      </p>
+    </div>
+    <div class="hero-panel">
+      <div class="mini-stat">
+        <span class="mini-label">Datasets</span>
+        <strong>4</strong>
+      </div>
+      <div class="mini-stat">
+        <span class="mini-label">Modules</span>
+        <strong>3</strong>
+      </div>
+      <div class="mini-stat">
+        <span class="mini-label">Recent Runs</span>
+        <strong>{{ recent_runs|length }}</strong>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel-grid">
+    <article class="panel-card">
+      <div class="panel-head">
+        <p class="panel-kicker">01</p>
+        <h2>Sampling Bias Validation</h2>
+        <p>Run training with bias metrics enabled and generate violation rate / mean margin curves automatically.</p>
+      </div>
+      <form method="post" action="{% url 'lab:create_sampling_bias' %}" class="config-form">
+        {% csrf_token %}
+        {% for field in sampling_form %}
+          {% if field.field.widget.input_type == 'checkbox' %}
+            <div class="field-block checkbox-field{% if field.errors %} has-error{% endif %}">
+              <label class="checkbox-row" for="{{ field.id_for_label }}">
+                {{ field }}
+                <span>{{ field.label }}</span>
+              </label>
+              {% for error in field.errors %}
+                <p class="field-error">{{ error }}</p>
+              {% endfor %}
+            </div>
+          {% else %}
+            <div class="field-block{% if field.errors %} has-error{% endif %}">
+              <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+              {{ field }}
+              {% for error in field.errors %}
+                <p class="field-error">{{ error }}</p>
+              {% endfor %}
+            </div>
+          {% endif %}
+        {% endfor %}
+        <button type="submit" class="primary-btn">Start Sampling Bias Run</button>
+      </form>
+    </article>
+
+    <article class="panel-card">
+      <div class="panel-head">
+        <p class="panel-kicker">02</p>
+        <h2>Method Comparison Pipeline</h2>
+        <p>Run the full single-dataset comparison pipeline and visualize robust scores on the result page.</p>
+      </div>
+      <form method="post" action="{% url 'lab:create_method_comparison' %}" class="config-form">
+        {% csrf_token %}
+        {% for field in method_form %}
+          {% if field.field.widget.input_type == 'checkbox' %}
+            <div class="field-block checkbox-field{% if field.errors %} has-error{% endif %}">
+              <label class="checkbox-row" for="{{ field.id_for_label }}">
+                {{ field }}
+                <span>{{ field.label }}</span>
+              </label>
+              {% for error in field.errors %}
+                <p class="field-error">{{ error }}</p>
+              {% endfor %}
+            </div>
+          {% else %}
+            <div class="field-block{% if field.errors %} has-error{% endif %}">
+              <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+              {{ field }}
+              {% for error in field.errors %}
+                <p class="field-error">{{ error }}</p>
+              {% endfor %}
+            </div>
+          {% endif %}
+        {% endfor %}
+        <button type="submit" class="primary-btn">Start Method Comparison</button>
+      </form>
+    </article>
+
+    <article class="panel-card">
+      <div class="panel-head">
+        <p class="panel-kicker">03</p>
+        <h2>Sensitivity Analysis</h2>
+        <p>Run sensitivity sweeps per method, build overview plots, and inspect CSV outputs from the detail page.</p>
+      </div>
+      <form method="post" action="{% url 'lab:create_sensitivity' %}" class="config-form">
+        {% csrf_token %}
+        {% for field in sensitivity_form %}
+          {% if field.field.widget.input_type == 'checkbox' %}
+            <div class="field-block checkbox-field{% if field.errors %} has-error{% endif %}">
+              <label class="checkbox-row" for="{{ field.id_for_label }}">
+                {{ field }}
+                <span>{{ field.label }}</span>
+              </label>
+              {% for error in field.errors %}
+                <p class="field-error">{{ error }}</p>
+              {% endfor %}
+            </div>
+          {% else %}
+            <div class="field-block{% if field.errors %} has-error{% endif %}">
+              <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+              {{ field }}
+              {% for error in field.errors %}
+                <p class="field-error">{{ error }}</p>
+              {% endfor %}
+            </div>
+          {% endif %}
+        {% endfor %}
+        <button type="submit" class="primary-btn">Start Sensitivity Run</button>
+      </form>
+    </article>
+  </section>
+
+  <section class="runs-section">
+    <div class="section-title">
+      <h2>Recent Runs</h2>
+      <p>Open any run to inspect status, artifacts, logs, and generated visualizations.</p>
+    </div>
+
+    {% if recent_runs %}
+      <div class="run-list">
+        {% for run in recent_runs %}
+          <article class="run-card">
+            <div class="run-card-top">
+              <span class="status-pill status-{{ run.status }}">{{ run.get_status_display }}</span>
+              <span class="run-id">#{{ run.pk }}</span>
+            </div>
+            <a class="run-card-link" href="{{ run.get_absolute_url }}">
+              <h3>{{ run.display_name }}</h3>
+              <p class="run-meta">{{ run.get_experiment_type_display }}{% if run.dataset %} | {{ run.dataset }}{% endif %}</p>
+              <p class="run-meta">Created: {{ run.created_at|date:"Y-m-d H:i:s" }}</p>
+            </a>
+            <div class="run-card-actions">
+              <a class="secondary-btn" href="{{ run.get_absolute_url }}">Open</a>
+              {% if run.can_stop %}
+                <form method="post" action="{% url 'lab:stop_run' run.pk %}" class="inline-form">
+                  {% csrf_token %}
+                  <input type="hidden" name="next" value="{% url 'lab:dashboard' %}">
+                  <button
+                    type="submit"
+                    class="warning-btn"
+                    onclick="return confirm('Stop run #{{ run.pk }} now? Related output files will be deleted.');"
+                  >
+                    Stop
+                  </button>
+                </form>
+              {% elif run.is_active %}
+                <button type="button" class="warning-btn warning-btn-disabled" disabled>Stop Unavailable</button>
+              {% else %}
+                <form method="post" action="{% url 'lab:delete_run' run.pk %}" class="inline-form">
+                  {% csrf_token %}
+                  <input type="hidden" name="next" value="{% url 'lab:dashboard' %}">
+                  <button
+                    type="submit"
+                    class="danger-btn"
+                    onclick="return confirm('Delete run #{{ run.pk }} and its related files?');"
+                  >
+                    Delete
+                  </button>
+                </form>
+              {% endif %}
+            </div>
+          </article>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty-box">
+        <p>No runs yet. Start with any experiment form above.</p>
+      </div>
+    {% endif %}
+  </section>
+{% endblock %}

@@ -168,7 +168,7 @@ def run_train(grace_dir, config_path, dataset, method, gpu_id, verbose_output=Fa
     return metrics, combined
 
 
-def run_grid_script(grace_dir, script_name, gpu_id, topk, std_weight, dataset):
+def run_grid_script(grace_dir, script_name, gpu_id, topk, std_weight, dataset, out_rel_path=None):
     start = t()
     print(f"[grid:{script_name}] start")
     cmd = [
@@ -183,6 +183,8 @@ def run_grid_script(grace_dir, script_name, gpu_id, topk, std_weight, dataset):
         "--dataset",
         dataset,
     ]
+    if out_rel_path:
+        cmd.extend(["--out", out_rel_path])
 
     env = os.environ.copy()
     env["PYTHONUNBUFFERED"] = "1"
@@ -559,7 +561,8 @@ def append_method_summary_rows(csv_path):
 
 
 def method_pipeline(grace_dir, base_config, dataset_key, method, grid_script, grid_csv_name, args, baseline_robust, out_csv_path):
-    grid_csv_path = os.path.join(grace_dir, "results", grid_csv_name)
+    grid_rel_path = os.path.join(args.grid_dir, grid_csv_name)
+    grid_csv_path = os.path.join(grace_dir, grid_rel_path)
     top_rows = []
 
     if (not args.force_grid) and os.path.exists(grid_csv_path):
@@ -584,6 +587,7 @@ def method_pipeline(grace_dir, base_config, dataset_key, method, grid_script, gr
             topk=max(args.topk_verify, 10),
             std_weight=args.std_weight,
             dataset=dataset_key,
+            out_rel_path=grid_rel_path,
         )
         top_rows = read_top_rows(grid_csv_path, args.topk_verify)
 
@@ -646,6 +650,12 @@ def main():
     parser.add_argument("--baseline_runs", type=int, default=3)
     parser.add_argument("--topk_verify", type=int, default=3)
     parser.add_argument("--runs_per_top", type=int, default=3)
+    parser.add_argument(
+        "--grid_dir",
+        type=str,
+        default="results",
+        help="Directory used to read/write per-method grid-search CSV files.",
+    )
     parser.add_argument(
         "--force_grid",
         action="store_true",

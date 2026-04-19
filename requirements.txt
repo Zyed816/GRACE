@@ -7,3 +7,6 @@ torch-geometric >= 1.4.3
 sklearn
 numpy
 pyyaml
+matplotlib
+pandas
+Django>=4.2,<6.0
