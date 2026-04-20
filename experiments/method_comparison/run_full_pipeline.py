@@ -23,6 +23,25 @@ F1_PATTERN = re.compile(
     r"F1Ma=(?P<f1ma_mean>\d+\.\d+)\+-(?P<f1ma_std>\d+\.\d+)"
 )
 
+# Keep this schema aligned with the checked-in results/*_full_pipeline_results.csv
+# files and the CSV previews consumed by the Django experiment system.
+RESULT_HEADERS = [
+    "timestamp",
+    "stage",
+    "method",
+    "candidate_rank",
+    "run_idx",
+    "F1Mi_mean",
+    "F1Mi_std",
+    "F1Ma_mean",
+    "F1Ma_std",
+    "robust_score",
+    "delta_vs_grace",
+    "grid_csv",
+    "params_json",
+    "notes",
+]
+
 
 def parse_metrics(output_text):
     match = F1_PATTERN.search(output_text)
@@ -380,26 +399,9 @@ def make_temp_config_for_method(base_config, dataset_key, csv_row, method):
 
 
 def append_result_row(csv_path, row, write_header=False):
-    headers = [
-        "timestamp",
-        "stage",
-        "method",
-        "candidate_rank",
-        "run_idx",
-        "F1Mi_mean",
-        "F1Mi_std",
-        "F1Ma_mean",
-        "F1Ma_std",
-        "robust_score",
-        "delta_vs_grace",
-        "grid_csv",
-        "params_json",
-        "notes",
-    ]
-
     os.makedirs(os.path.dirname(csv_path), exist_ok=True)
     with open(csv_path, "a", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=headers)
+        writer = csv.DictWriter(f, fieldnames=RESULT_HEADERS)
         if write_header:
             writer.writeheader()
         if row is not None:
