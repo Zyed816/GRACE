@@ -134,3 +134,5 @@ datasets/
 # Web experiment system runtime outputs
 results/webapp/
 logs/webapp/
+
+thesis/
