@@ -20,13 +20,14 @@ METHOD_LABELS = {
     "ifl-gc": "IFL-GC",
 }
 METHOD_COLORS = {
-    "grace": "#6B7280",
-    "gca": "#2563EB",
-    "ifl-gr": "#D97706",
-    "ifl-gc": "#059669",
+    "grace": "#1f77b4",
+    "gca": "#ff7f0e",
+    "ifl-gr": "#2ca02c",
+    "ifl-gc": "#d62728",
 }
 
 DATASET_ORDER = ["Cora", "CiteSeer", "PubMed", "DBLP"]
+OVERVIEW_DATASET_ORDER = ["Cora", "CiteSeer", "DBLP", "PubMed"]
 DATASET_SLUG_TO_LABEL = {
     "cora": "Cora",
     "citeseer": "CiteSeer",
@@ -250,19 +251,20 @@ def build_plot_summary(input_paths):
 
 
 def configure_plot_style():
+    plt.rcdefaults()
     plt.rcParams.update(
         {
-            "font.family": "serif",
-            "font.serif": ["Times New Roman", "DejaVu Serif", "STSong"],
-            "font.size": 11,
-            "axes.labelsize": 12,
-            "axes.titlesize": 14,
-            "axes.titleweight": "bold",
-            "axes.edgecolor": "#111827",
-            "axes.linewidth": 1.1,
-            "xtick.labelsize": 11,
-            "ytick.labelsize": 11,
-            "legend.fontsize": 10.5,
+            "font.family": "sans-serif",
+            "font.sans-serif": ["DejaVu Sans", "Arial", "SimHei"],
+            "font.size": 9,
+            "axes.labelsize": 9,
+            "axes.titlesize": 10,
+            "axes.titleweight": "normal",
+            "axes.edgecolor": "black",
+            "axes.linewidth": 0.8,
+            "xtick.labelsize": 8,
+            "ytick.labelsize": 8,
+            "legend.fontsize": 8,
             "figure.facecolor": "white",
             "axes.facecolor": "white",
             "savefig.facecolor": "white",
@@ -277,6 +279,16 @@ def metric_value_columns(metric_name):
     if metric_name == "delta_vs_grace":
         return "delta_vs_grace", "delta_vs_grace_std"
     return metric_name, METRIC_SPECS[metric_name]["err_col"]
+
+
+def to_plot_units(values):
+    return np.asarray(values, dtype=float) * 100.0
+
+
+def metric_axis_label(metric_name):
+    if metric_name == "delta_vs_grace":
+        return "Delta vs GRACE (pp)"
+    return f"{METRIC_SPECS[metric_name]['label']} (%)"
 
 
 def compute_axis_limits(value_matrix, err_matrix, metric_name):
@@ -294,51 +306,44 @@ def compute_axis_limits(value_matrix, err_matrix, metric_name):
     span = max(high - low, 1e-6)
 
     if metric_name == "delta_vs_grace":
-        lower = min(-0.002, low - span * 0.18)
-        upper = max(0.002, high + span * 0.22)
+        lower = min(-0.2, low - span * 0.18)
+        upper = max(0.2, high + span * 0.22)
         return lower, upper
 
-    lower = max(0.0, low - span * 0.25)
-    upper = min(1.0, high + span * 0.22)
-
-    if upper - lower < 0.04:
-        pad = (0.04 - (upper - lower)) * 0.5
-        lower = max(0.0, lower - pad)
-        upper = min(1.0, upper + pad)
-
-    return lower, upper
+    upper = high + max(span * 0.18, 1.0)
+    return 0.0, upper
 
 
-def annotate_bars(ax, bars, values, errors, metric_name):
-    for bar, value, error in zip(bars, values, errors):
+def annotate_bars(ax, bars, values):
+    y_min, y_max = ax.get_ylim()
+    offset = (y_max - y_min) * 0.012
+    for bar, value in zip(bars, values):
         if np.isnan(value):
             continue
         x = bar.get_x() + bar.get_width() * 0.5
-        y = value + (error if not np.isnan(error) else 0.0)
-        offset = 0.006 if metric_name != "delta_vs_grace" else 0.0018
+        y = value
         ax.text(
             x,
             y + offset,
-            f"{value:.3f}",
+            f"{value:.1f}",
             ha="center",
             va="bottom",
-            fontsize=9,
-            color="#374151",
+            fontsize=7,
+            color="black",
         )
 
 
 def make_metric_plot(summary_df, metric_name, out_dir, dpi, annotate):
-    value_col, err_col = metric_value_columns(metric_name)
+    value_col, _err_col = metric_value_columns(metric_name)
     metric_spec = METRIC_SPECS[metric_name]
 
     datasets = [d for d in DATASET_ORDER if d in set(summary_df["dataset"].astype(str))]
     x = np.arange(len(datasets), dtype=float)
     width = 0.18
 
-    fig, ax = plt.subplots(figsize=(10.8, 6.0))
+    fig, ax = plt.subplots(figsize=(7.0, 4.2))
 
     all_values = []
-    all_errors = []
     legend_handles = []
     legend_labels = []
 
@@ -346,8 +351,7 @@ def make_metric_plot(summary_df, metric_name, out_dir, dpi, annotate):
         subset = summary_df[summary_df["method"].astype(str) == method].copy()
         subset = subset.set_index(subset["dataset"].astype(str)).reindex(datasets)
 
-        values = subset[value_col].to_numpy(dtype=float)
-        errors = subset[err_col].to_numpy(dtype=float)
+        values = to_plot_units(subset[value_col].to_numpy(dtype=float))
         positions = x + (idx - 1.5) * width
 
         bars = ax.bar(
@@ -356,58 +360,26 @@ def make_metric_plot(summary_df, metric_name, out_dir, dpi, annotate):
             width=width,
             label=METHOD_LABELS[method],
             color=METHOD_COLORS[method],
-            edgecolor="#1F2937",
-            linewidth=0.8,
-            zorder=3,
-        )
-
-        ax.errorbar(
-            positions,
-            values,
-            yerr=errors,
-            fmt="none",
-            ecolor="#111827",
-            elinewidth=0.9,
-            capsize=3.2,
-            capthick=0.9,
-            zorder=4,
         )
 
         if annotate:
-            annotate_bars(ax, bars, values, errors, metric_name)
+            annotate_bars(ax, bars, values)
 
         all_values.append(values)
-        all_errors.append(errors)
         legend_handles.append(bars[0])
         legend_labels.append(METHOD_LABELS[method])
 
-    lower, upper = compute_axis_limits(np.array(all_values), np.array(all_errors), metric_name)
+    lower, upper = compute_axis_limits(np.array(all_values), np.zeros_like(np.array(all_values)), metric_name)
     ax.set_ylim(lower, upper)
     if metric_name == "delta_vs_grace":
-        ax.axhline(0.0, color="#6B7280", linewidth=1.0, linestyle="--", zorder=2)
+        ax.axhline(0.0, color="black", linewidth=0.8)
 
     ax.set_xticks(x)
     ax.set_xticklabels(datasets)
-    ax.set_xlabel("Dataset")
-    ax.set_ylabel(metric_spec["label"])
-    ax.set_title(f"Performance Comparison by {metric_spec['label']}")
-    ax.grid(axis="y", linestyle="--", linewidth=0.8, alpha=0.22, zorder=1)
-
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-    ax.spines["left"].set_color("#111827")
-    ax.spines["bottom"].set_color("#111827")
-
-    ax.legend(
-        legend_handles,
-        legend_labels,
-        loc="upper center",
-        bbox_to_anchor=(0.5, 1.10),
-        ncol=4,
-        frameon=False,
-        columnspacing=1.4,
-        handletextpad=0.6,
-    )
+    ax.set_ylabel(metric_axis_label(metric_name))
+    ax.set_title(metric_spec["label"])
+    ax.legend(legend_handles, legend_labels, loc="upper right", frameon=True)
+    fig.tight_layout()
 
     png_path = out_dir / f"{metric_spec['file_stem']}.png"
     pdf_path = out_dir / f"{metric_spec['file_stem']}.pdf"
@@ -420,29 +392,32 @@ def make_metric_plot(summary_df, metric_name, out_dir, dpi, annotate):
 
 def make_overview_plot(summary_df, out_dir, dpi):
     overview_metrics = ["robust_score", "F1Mi_mean", "F1Ma_mean"]
-    datasets = [d for d in DATASET_ORDER if d in set(summary_df["dataset"].astype(str))]
-    x = np.arange(len(datasets), dtype=float)
+    datasets = [d for d in OVERVIEW_DATASET_ORDER if d in set(summary_df["dataset"].astype(str))]
+    metric_labels = ["Robust", "Micro-F1", "Macro-F1"]
+    x = np.arange(len(overview_metrics), dtype=float)
     width = 0.18
 
-    fig, axes = plt.subplots(1, len(overview_metrics), figsize=(18.0, 5.6), sharex=False)
-    if len(overview_metrics) == 1:
-        axes = [axes]
-
+    fig, axes = plt.subplots(2, 2, figsize=(9.4, 7.2), sharex=False)
+    axes = axes.ravel()
     legend_handles = []
     legend_labels = []
 
-    for ax, metric_name in zip(axes, overview_metrics):
-        value_col, err_col = metric_value_columns(metric_name)
-        metric_spec = METRIC_SPECS[metric_name]
+    for ax, dataset in zip(axes, datasets):
         all_values = []
-        all_errors = []
 
         for idx, method in enumerate(METHOD_ORDER):
-            subset = summary_df[summary_df["method"].astype(str) == method].copy()
-            subset = subset.set_index(subset["dataset"].astype(str)).reindex(datasets)
-
-            values = subset[value_col].to_numpy(dtype=float)
-            errors = subset[err_col].to_numpy(dtype=float)
+            method_df = summary_df[
+                (summary_df["dataset"].astype(str) == dataset)
+                & (summary_df["method"].astype(str) == method)
+            ]
+            values = []
+            for metric_name in overview_metrics:
+                value_col, _err_col = metric_value_columns(metric_name)
+                if method_df.empty:
+                    values.append(np.nan)
+                else:
+                    values.append(float(method_df.iloc[0][value_col]) * 100.0)
+            values = np.asarray(values, dtype=float)
             positions = x + (idx - 1.5) * width
 
             bars = ax.bar(
@@ -450,54 +425,36 @@ def make_overview_plot(summary_df, out_dir, dpi):
                 values,
                 width=width,
                 color=METHOD_COLORS[method],
-                edgecolor="#1F2937",
-                linewidth=0.8,
-                zorder=3,
+                label=METHOD_LABELS[method],
             )
-            ax.errorbar(
-                positions,
-                values,
-                yerr=errors,
-                fmt="none",
-                ecolor="#111827",
-                elinewidth=0.9,
-                capsize=2.8,
-                capthick=0.9,
-                zorder=4,
-            )
-
-            if not legend_handles:
-                legend_handles.append(bars[0])
-                legend_labels.append(METHOD_LABELS[method])
-            elif len(legend_handles) < len(METHOD_ORDER):
+            if len(legend_handles) < len(METHOD_ORDER):
                 legend_handles.append(bars[0])
                 legend_labels.append(METHOD_LABELS[method])
 
             all_values.append(values)
-            all_errors.append(errors)
 
-        lower, upper = compute_axis_limits(np.array(all_values), np.array(all_errors), metric_name)
+        valid_values = np.asarray(all_values, dtype=float)
+        lower, upper = compute_axis_limits(valid_values, np.zeros_like(valid_values), "F1Mi_mean")
         ax.set_ylim(lower, upper)
         ax.set_xticks(x)
-        ax.set_xticklabels(datasets)
-        ax.set_title(metric_spec["label"])
-        ax.grid(axis="y", linestyle="--", linewidth=0.8, alpha=0.22, zorder=1)
-        ax.spines["top"].set_visible(False)
-        ax.spines["right"].set_visible(False)
-        ax.set_xlabel("Dataset")
-        if metric_name == "robust_score":
-            ax.set_ylabel("Score")
+        ax.set_xticklabels(metric_labels)
+        ax.set_title(dataset)
+        ax.set_ylabel("Score (%)")
 
-    fig.suptitle("Method Comparison Overview", fontsize=15, fontweight="bold", y=1.03)
-    fig.legend(
-        legend_handles,
-        legend_labels,
-        loc="upper center",
-        bbox_to_anchor=(0.5, 1.06),
-        ncol=4,
-        frameon=False,
-        columnspacing=1.5,
-    )
+    for ax in axes[len(datasets) :]:
+        ax.set_visible(False)
+
+    if legend_handles:
+        fig.legend(
+            legend_handles,
+            legend_labels,
+            loc="upper center",
+            bbox_to_anchor=(0.5, 0.985),
+            ncol=len(legend_handles),
+            frameon=True,
+        )
+
+    fig.tight_layout(rect=[0.0, 0.0, 1.0, 0.93], w_pad=1.7, h_pad=2.0)
 
     png_path = out_dir / "method_comparison_overview.png"
     pdf_path = out_dir / "method_comparison_overview.pdf"
