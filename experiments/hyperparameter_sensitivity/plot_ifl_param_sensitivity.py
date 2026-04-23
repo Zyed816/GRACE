@@ -7,6 +7,7 @@ matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
 import pandas as pd
+from matplotlib.lines import Line2D
 
 
 METHOD_FILE_SLUG = {
@@ -20,8 +21,13 @@ METHOD_LABELS = {
 }
 
 METHOD_COLORS = {
-    "ifl-gr": "#1f77b4",
-    "ifl-gc": "#d62728",
+    "ifl-gr": "#1B4E8A",
+    "ifl-gc": "#B21F35",
+}
+
+METHOD_MARKERS = {
+    "ifl-gr": "o",
+    "ifl-gc": "s",
 }
 
 PARAM_ORDER = ["t_s", "M", "K"]
@@ -31,11 +37,15 @@ PARAM_LABELS = {
     "K": "K",
 }
 
+DATASET_ORDER = ["Cora", "CiteSeer", "DBLP", "PubMed"]
+DATASET_SLUG_TO_LABEL = {
+    "cora": "Cora",
+    "citeseer": "CiteSeer",
+    "dblp": "DBLP",
+    "pubmed": "PubMed",
+}
+
 METRIC_SPECS = {
-    "F1Mi_mean": {
-        "label": "F1Mi",
-        "err_col": "F1Mi_std",
-    },
     "robust_score": {
         "label": "Robust Score",
         "err_col": "robust_score_std",
@@ -70,10 +80,31 @@ def parse_args():
         description="Plot IFL-GR / IFL-GC sensitivity-analysis CSV files and generate a short report."
     )
     parser.add_argument("--dataset", type=str, default="Cora")
+    parser.add_argument(
+        "--datasets",
+        nargs="+",
+        default=DATASET_ORDER,
+        help="Datasets used by --combined. Default: Cora CiteSeer DBLP PubMed.",
+    )
     parser.add_argument("--methods", nargs="+", default=["ifl-gr", "ifl-gc"], choices=list(METHOD_FILE_SLUG))
     parser.add_argument("--inputs", nargs="+", default=None, help="Optional explicit CSV paths.")
     parser.add_argument("--out_dir", type=str, default=os.path.join("results", "plots"))
+    parser.add_argument(
+        "--combined",
+        action="store_true",
+        help="Create one 2x2 Robust Score overview for all selected datasets.",
+    )
+    parser.add_argument("--dpi", type=int, default=320, help="Raster output dpi.")
     return parser.parse_args()
+
+
+def normalize_dataset_name(dataset):
+    slug = dataset.lower().replace("-", "").replace("_", "").replace(" ", "")
+    return DATASET_SLUG_TO_LABEL.get(slug, dataset)
+
+
+def dataset_slug(dataset):
+    return normalize_dataset_name(dataset).lower()
 
 
 def resolve_input_paths(grace_dir, dataset, methods, explicit_inputs):
@@ -81,11 +112,11 @@ def resolve_input_paths(grace_dir, dataset, methods, explicit_inputs):
         return [os.path.join(grace_dir, path) if not os.path.isabs(path) else path for path in explicit_inputs]
 
     paths = []
-    dataset_slug = dataset.lower()
+    slug = dataset_slug(dataset)
     for method in methods:
         method_slug = METHOD_FILE_SLUG[method]
         paths.append(
-            os.path.join(grace_dir, "results", f"sensitivity_{method_slug}_{dataset_slug}_results.csv")
+            os.path.join(grace_dir, "results", f"sensitivity_{method_slug}_{slug}_results.csv")
         )
     return paths
 
@@ -133,11 +164,136 @@ def format_value(param_name, value):
     return str(int(round(float(value))))
 
 
+def configure_plot_style():
+    plt.rcParams.update(
+        {
+            "font.family": "serif",
+            "font.serif": ["Times New Roman", "STIXGeneral", "DejaVu Serif", "STSong"],
+            "mathtext.fontset": "stix",
+            "font.size": 10,
+            "axes.labelsize": 10,
+            "axes.titlesize": 11,
+            "axes.titleweight": "semibold",
+            "axes.edgecolor": "#202124",
+            "axes.linewidth": 0.9,
+            "xtick.labelsize": 8.5,
+            "ytick.labelsize": 8.5,
+            "legend.fontsize": 9,
+            "figure.facecolor": "white",
+            "axes.facecolor": "white",
+            "savefig.facecolor": "white",
+            "savefig.bbox": "tight",
+            "pdf.fonttype": 42,
+            "ps.fonttype": 42,
+        }
+    )
+
+
+def robust_score_limits(summary_df):
+    if summary_df.empty or "robust_score" not in summary_df.columns:
+        return 0.0, 1.0
+
+    subset = summary_df[summary_df["paper_param"].isin(PARAM_ORDER)].copy()
+    values = pd.to_numeric(subset["robust_score"], errors="coerce") * 100.0
+    errors = (
+        pd.to_numeric(subset["robust_score_std"], errors="coerce").fillna(0.0) * 100.0
+        if "robust_score_std" in subset.columns
+        else 0.0
+    )
+
+    low = float((values - errors).min())
+    high = float((values + errors).max())
+    if pd.isna(low) or pd.isna(high):
+        return 0.0, 1.0
+
+    span = max(high - low, 1e-6)
+    lower = max(0.0, low - span * 0.18)
+    upper = high + span * 0.20
+    if upper - lower < 3.0:
+        pad = (3.0 - (upper - lower)) * 0.5
+        lower = max(0.0, lower - pad)
+        upper += pad
+    return lower, upper
+
+
+def style_axis(ax, show_ylabel=False):
+    ax.grid(axis="y", alpha=0.22, linestyle="--", linewidth=0.65)
+    ax.grid(axis="x", alpha=0.10, linestyle=":", linewidth=0.5)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.tick_params(axis="both", direction="out", length=3.5, width=0.8)
+    if show_ylabel:
+        ax.set_ylabel("Robust Score (%)")
+
+
+def draw_robust_param_axis(ax, summary_df, methods, param_name, y_limits=None, show_ylabel=False):
+    ax.set_title(PARAM_LABELS[param_name], pad=4)
+    ax.set_xlabel(PARAM_LABELS[param_name])
+    style_axis(ax, show_ylabel=show_ylabel)
+
+    has_any_data = False
+    required_cols = {"paper_param", "method", "sweep_value", "robust_score"}.issubset(summary_df.columns)
+    if not required_cols:
+        ax.text(0.5, 0.5, "No data", ha="center", va="center", transform=ax.transAxes, color="#6B7280")
+        ax.set_xticks([])
+        ax.set_yticks([])
+        return
+
+    for method in methods:
+        subset = summary_df[
+            (summary_df["paper_param"] == param_name) & (summary_df["method"] == method)
+        ].copy()
+        subset = subset.dropna(subset=["sweep_value", "robust_score"]).sort_values("sweep_value")
+        if subset.empty:
+            continue
+
+        has_any_data = True
+        x = subset["sweep_value"].to_numpy(dtype=float)
+        y = subset["robust_score"].to_numpy(dtype=float) * 100.0
+
+        color = METHOD_COLORS[method]
+        ax.plot(
+            x,
+            y,
+            color=color,
+            marker=METHOD_MARKERS[method],
+            markersize=4.5,
+            linewidth=1.7,
+            label=METHOD_LABELS[method],
+            zorder=3,
+        )
+
+        if "is_anchor" in subset.columns:
+            anchor_subset = subset[subset["is_anchor"]]
+            if not anchor_subset.empty:
+                ax.scatter(
+                    anchor_subset["sweep_value"],
+                    anchor_subset["robust_score"] * 100.0,
+                    color=color,
+                    marker="*",
+                    s=95,
+                    edgecolors="white",
+                    linewidths=0.7,
+                    zorder=5,
+                )
+
+    if not has_any_data:
+        ax.text(0.5, 0.5, "No data", ha="center", va="center", transform=ax.transAxes, color="#6B7280")
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+    if param_name == "t_s":
+        ax.tick_params(axis="x", labelrotation=32)
+
+    if y_limits:
+        ax.set_ylim(*y_limits)
+
+
 def make_plot(dataset, methods, summary_df, out_path):
     fig, axes = plt.subplots(
         nrows=len(METRIC_SPECS),
         ncols=len(PARAM_ORDER),
-        figsize=(15, 7),
+        figsize=(12.6, 3.7),
         squeeze=False,
     )
 
@@ -148,8 +304,8 @@ def make_plot(dataset, methods, summary_df, out_path):
     for row_idx, (metric_col, metric_spec) in enumerate(METRIC_SPECS.items()):
         for col_idx, param_name in enumerate(PARAM_ORDER):
             ax = axes[row_idx][col_idx]
-            ax.set_title(PARAM_LABELS[param_name], fontsize=12, fontweight="bold")
-            ax.grid(alpha=0.25, linestyle="--", linewidth=0.7)
+            ax.set_title(PARAM_LABELS[param_name], fontsize=12, fontweight="semibold")
+            style_axis(ax, show_ylabel=col_idx == 0)
 
             has_any_data = False
 
@@ -169,7 +325,7 @@ def make_plot(dataset, methods, summary_df, out_path):
                 if row_idx == len(METRIC_SPECS) - 1:
                     ax.set_xlabel(PARAM_LABELS[param_name])
                 if col_idx == 0:
-                    ax.set_ylabel(metric_spec["label"])
+                    ax.set_ylabel(f"{metric_spec['label']} (%)")
                 continue
 
             for method in methods:
@@ -188,26 +344,20 @@ def make_plot(dataset, methods, summary_df, out_path):
                 color = METHOD_COLORS[method]
                 label = METHOD_LABELS[method]
                 legend_map[label] = color
-                err_col = metric_spec["err_col"]
-                yerr = subset[err_col] if err_col in subset.columns else None
-                if yerr is not None:
-                    yerr = yerr.fillna(0.0)
 
                 if len(subset) > 1:
-                    ax.errorbar(
+                    ax.plot(
                         subset["sweep_value"],
-                        subset[metric_col],
-                        yerr=yerr,
+                        subset[metric_col] * 100.0,
                         color=color,
-                        marker="o",
+                        marker=METHOD_MARKERS[method],
                         linewidth=1.8,
-                        capsize=3,
                         label=label,
                     )
                 else:
                     ax.scatter(
                         subset["sweep_value"],
-                        subset[metric_col],
+                        subset[metric_col] * 100.0,
                         color=color,
                         s=45,
                         label=label,
@@ -218,7 +368,7 @@ def make_plot(dataset, methods, summary_df, out_path):
                 if not anchor_subset.empty:
                     ax.scatter(
                         anchor_subset["sweep_value"],
-                        anchor_subset[metric_col],
+                        anchor_subset[metric_col] * 100.0,
                         color=color,
                         marker="*",
                         s=180,
@@ -244,7 +394,7 @@ def make_plot(dataset, methods, summary_df, out_path):
             if row_idx == len(METRIC_SPECS) - 1:
                 ax.set_xlabel(PARAM_LABELS[param_name])
             if col_idx == 0:
-                ax.set_ylabel(metric_spec["label"])
+                ax.set_ylabel(f"{metric_spec['label']} (%)")
 
     if legend_map:
         handles = [
@@ -260,10 +410,113 @@ def make_plot(dataset, methods, summary_df, out_path):
             bbox_to_anchor=(0.5, 1.02),
         )
 
-    fig.suptitle(f"{dataset} Sensitivity Analysis Overview", fontsize=14, fontweight="bold", y=1.06)
+    fig.suptitle(f"{dataset} Sensitivity Analysis (Robust Score)", fontsize=14, fontweight="bold", y=1.08)
     fig.tight_layout()
     fig.savefig(out_path, dpi=220, bbox_inches="tight")
     plt.close(fig)
+
+
+def load_dataset_summary(grace_dir, dataset, methods):
+    input_paths = resolve_input_paths(grace_dir, dataset, methods, explicit_inputs=None)
+    input_infos = []
+    summary_frames = []
+    for path in input_paths:
+        info, summary_df = load_summary_rows(path)
+        input_infos.append(info)
+        if not summary_df.empty:
+            summary_frames.append(summary_df)
+    merged_summary = pd.concat(summary_frames, ignore_index=True) if summary_frames else pd.DataFrame()
+    return input_infos, merged_summary
+
+
+def make_combined_robust_plot(grace_dir, datasets, methods, out_dir, dpi):
+    datasets = [normalize_dataset_name(dataset) for dataset in datasets]
+    fig = plt.figure(figsize=(14.2, 9.0))
+    outer_grid = fig.add_gridspec(
+        2,
+        2,
+        left=0.055,
+        right=0.985,
+        bottom=0.075,
+        top=0.895,
+        wspace=0.16,
+        hspace=0.34,
+    )
+
+    for index, dataset in enumerate(datasets[:4]):
+        _, summary_df = load_dataset_summary(grace_dir, dataset, methods)
+        row = index // 2
+        col = index % 2
+        inner_grid = outer_grid[row, col].subgridspec(1, len(PARAM_ORDER), wspace=0.12)
+        axes = [fig.add_subplot(inner_grid[0, param_idx]) for param_idx in range(len(PARAM_ORDER))]
+        y_limits = robust_score_limits(summary_df)
+
+        for param_idx, (ax, param_name) in enumerate(zip(axes, PARAM_ORDER)):
+            draw_robust_param_axis(
+                ax,
+                summary_df,
+                methods,
+                param_name,
+                y_limits=y_limits,
+                show_ylabel=param_idx == 0,
+            )
+            if param_idx > 0:
+                ax.tick_params(axis="y", labelleft=False)
+
+        left = axes[0].get_position().x0
+        right = axes[-1].get_position().x1
+        top = axes[0].get_position().y1
+        fig.text(
+            (left + right) * 0.5,
+            top + 0.026,
+            dataset,
+            ha="center",
+            va="bottom",
+            fontsize=14,
+            fontweight="semibold",
+        )
+
+    legend_handles = [
+        Line2D(
+            [],
+            [],
+            color=METHOD_COLORS[method],
+            marker=METHOD_MARKERS[method],
+            linewidth=1.8,
+            markersize=5.5,
+            label=METHOD_LABELS[method],
+        )
+        for method in methods
+    ]
+    legend_handles.append(
+        Line2D(
+            [],
+            [],
+            marker="*",
+            color="#374151",
+            markerfacecolor="#374151",
+            markeredgecolor="white",
+            linestyle="",
+            markersize=10,
+            label="Anchor",
+        )
+    )
+    fig.legend(
+        handles=legend_handles,
+        loc="upper center",
+        bbox_to_anchor=(0.5, 0.975),
+        ncol=len(legend_handles),
+        frameon=True,
+        fancybox=False,
+        edgecolor="#C7CBD1",
+    )
+
+    png_path = os.path.join(out_dir, "ifl_sensitivity_robust_overview.png")
+    pdf_path = os.path.join(out_dir, "ifl_sensitivity_robust_overview.pdf")
+    fig.savefig(png_path, dpi=dpi)
+    fig.savefig(pdf_path)
+    plt.close(fig)
+    return png_path, pdf_path
 
 
 def summarize_one_group(group_df):
@@ -358,6 +611,19 @@ def main():
     grace_dir = os.path.abspath(os.path.join(script_dir, "..", ".."))
     out_dir = os.path.join(grace_dir, args.out_dir)
     os.makedirs(out_dir, exist_ok=True)
+    configure_plot_style()
+
+    if args.combined:
+        png_path, pdf_path = make_combined_robust_plot(
+            grace_dir=grace_dir,
+            datasets=args.datasets,
+            methods=args.methods,
+            out_dir=out_dir,
+            dpi=args.dpi,
+        )
+        print(f"[plot] saved combined figure: {png_path}")
+        print(f"[plot] saved combined figure: {pdf_path}")
+        return
 
     input_paths = resolve_input_paths(grace_dir, args.dataset, args.methods, args.inputs)
     input_infos = []
