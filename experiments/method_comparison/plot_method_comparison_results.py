@@ -10,6 +10,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.ticker import MaxNLocator
 
 
 METHOD_ORDER = ["grace", "gca", "ifl-gr", "ifl-gc"]
@@ -20,10 +21,10 @@ METHOD_LABELS = {
     "ifl-gc": "IFL-GC",
 }
 METHOD_COLORS = {
-    "grace": "#1f77b4",
-    "gca": "#ff7f0e",
-    "ifl-gr": "#2ca02c",
-    "ifl-gc": "#d62728",
+    "grace": "#4E79A7",
+    "gca": "#F28E2B",
+    "ifl-gr": "#59A14F",
+    "ifl-gc": "#E15759",
 }
 
 DATASET_ORDER = ["Cora", "CiteSeer", "PubMed", "DBLP"]
@@ -254,21 +255,27 @@ def configure_plot_style():
     plt.rcdefaults()
     plt.rcParams.update(
         {
-            "font.family": "sans-serif",
-            "font.sans-serif": ["DejaVu Sans", "Arial", "SimHei"],
-            "font.size": 9,
+            "font.family": "serif",
+            "font.serif": ["Times New Roman", "Times", "DejaVu Serif"],
+            "font.size": 8.5,
             "axes.labelsize": 9,
             "axes.titlesize": 10,
-            "axes.titleweight": "normal",
-            "axes.edgecolor": "black",
-            "axes.linewidth": 0.8,
-            "xtick.labelsize": 8,
-            "ytick.labelsize": 8,
-            "legend.fontsize": 8,
+            "axes.titleweight": "semibold",
+            "axes.edgecolor": "#303030",
+            "axes.linewidth": 0.7,
+            "xtick.labelsize": 8.2,
+            "ytick.labelsize": 8.2,
+            "xtick.major.size": 3.0,
+            "ytick.major.size": 3.0,
+            "xtick.major.width": 0.7,
+            "ytick.major.width": 0.7,
+            "legend.fontsize": 8.5,
             "figure.facecolor": "white",
             "axes.facecolor": "white",
             "savefig.facecolor": "white",
             "savefig.bbox": "tight",
+            "pdf.fonttype": 42,
+            "ps.fonttype": 42,
         }
     )
 
@@ -395,15 +402,16 @@ def make_overview_plot(summary_df, out_dir, dpi):
     datasets = [d for d in OVERVIEW_DATASET_ORDER if d in set(summary_df["dataset"].astype(str))]
     metric_labels = ["Robust", "Micro-F1", "Macro-F1"]
     x = np.arange(len(overview_metrics), dtype=float)
-    width = 0.18
+    width = 0.15
 
-    fig, axes = plt.subplots(2, 2, figsize=(9.4, 7.2), sharex=False)
+    fig, axes = plt.subplots(2, 2, figsize=(7.4, 5.25), sharex=False)
     axes = axes.ravel()
     legend_handles = []
     legend_labels = []
 
-    for ax, dataset in zip(axes, datasets):
+    for panel_idx, (ax, dataset) in enumerate(zip(axes, datasets)):
         all_values = []
+        all_errors = []
 
         for idx, method in enumerate(METHOD_ORDER):
             method_df = summary_df[
@@ -411,13 +419,17 @@ def make_overview_plot(summary_df, out_dir, dpi):
                 & (summary_df["method"].astype(str) == method)
             ]
             values = []
+            errors = []
             for metric_name in overview_metrics:
-                value_col, _err_col = metric_value_columns(metric_name)
+                value_col, err_col = metric_value_columns(metric_name)
                 if method_df.empty:
                     values.append(np.nan)
+                    errors.append(np.nan)
                 else:
                     values.append(float(method_df.iloc[0][value_col]) * 100.0)
+                    errors.append(float(method_df.iloc[0][err_col]) * 100.0)
             values = np.asarray(values, dtype=float)
+            errors = np.asarray(errors, dtype=float)
             positions = x + (idx - 1.5) * width
 
             bars = ax.bar(
@@ -425,6 +437,16 @@ def make_overview_plot(summary_df, out_dir, dpi):
                 values,
                 width=width,
                 color=METHOD_COLORS[method],
+                edgecolor="white",
+                linewidth=0.45,
+                alpha=0.94,
+                yerr=errors,
+                capsize=2.2,
+                error_kw={
+                    "elinewidth": 0.65,
+                    "capthick": 0.65,
+                    "ecolor": "#3b3b3b",
+                },
                 label=METHOD_LABELS[method],
             )
             if len(legend_handles) < len(METHOD_ORDER):
@@ -432,14 +454,23 @@ def make_overview_plot(summary_df, out_dir, dpi):
                 legend_labels.append(METHOD_LABELS[method])
 
             all_values.append(values)
+            all_errors.append(errors)
 
         valid_values = np.asarray(all_values, dtype=float)
-        lower, upper = compute_axis_limits(valid_values, np.zeros_like(valid_values), "F1Mi_mean")
+        valid_errors = np.asarray(all_errors, dtype=float)
+        lower, upper = compute_axis_limits(valid_values, valid_errors, "F1Mi_mean")
         ax.set_ylim(lower, upper)
         ax.set_xticks(x)
         ax.set_xticklabels(metric_labels)
-        ax.set_title(dataset)
-        ax.set_ylabel("Score (%)")
+        ax.set_title(f"({chr(ord('a') + panel_idx)}) {dataset}", loc="left", pad=4)
+        ax.set_ylabel("Score (%)" if panel_idx % 2 == 0 else "")
+        ax.yaxis.set_major_locator(MaxNLocator(nbins=5))
+        ax.grid(axis="y", color="#d9dde3", linewidth=0.6, alpha=0.9)
+        ax.set_axisbelow(True)
+        ax.margins(x=0.04)
+        ax.tick_params(axis="both", colors="#303030", pad=2)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
 
     for ax in axes[len(datasets) :]:
         ax.set_visible(False)
@@ -449,17 +480,19 @@ def make_overview_plot(summary_df, out_dir, dpi):
             legend_handles,
             legend_labels,
             loc="upper center",
-            bbox_to_anchor=(0.5, 0.985),
+            bbox_to_anchor=(0.5, 0.992),
             ncol=len(legend_handles),
-            frameon=True,
+            frameon=False,
+            handlelength=1.6,
+            columnspacing=1.6,
         )
 
-    fig.tight_layout(rect=[0.0, 0.0, 1.0, 0.93], w_pad=1.7, h_pad=2.0)
+    fig.tight_layout(rect=[0.0, 0.0, 1.0, 0.91], w_pad=1.3, h_pad=1.45)
 
     png_path = out_dir / "method_comparison_overview.png"
     pdf_path = out_dir / "method_comparison_overview.pdf"
-    fig.savefig(png_path, dpi=dpi)
-    fig.savefig(pdf_path)
+    fig.savefig(png_path, dpi=dpi, pad_inches=0.04)
+    fig.savefig(pdf_path, pad_inches=0.04)
     plt.close(fig)
     return png_path, pdf_path
 
