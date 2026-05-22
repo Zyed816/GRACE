@@ -1,4 +1,3 @@
-import functools
 import os
 
 import numpy as np
@@ -8,23 +7,6 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.multiclass import OneVsRestClassifier
 from sklearn.preprocessing import normalize, OneHotEncoder
-
-
-def repeat(n_times):
-    def decorator(f):
-        @functools.wraps(f)
-        def wrapper(*args, **kwargs):
-            results = [f(*args, **kwargs) for _ in range(n_times)]
-            statistics = {}
-            for key in results[0].keys():
-                values = [r[key] for r in results]
-                statistics[key] = {
-                    'mean': np.mean(values),
-                    'std': np.std(values)}
-            print_statistics(statistics, f.__name__)
-            return statistics
-        return wrapper
-    return decorator
 
 
 def prob_to_one_hot(y_pred):
@@ -47,8 +29,7 @@ def print_statistics(statistics, function_name):
             print()
 
 
-@repeat(3)
-def label_classification(embeddings, y, ratio):
+def _label_classification_once(embeddings, y, ratio, random_state=None):
     X = embeddings.detach().cpu().numpy()
     Y = y.detach().cpu().numpy()
     Y = Y.reshape(-1, 1)
@@ -57,8 +38,12 @@ def label_classification(embeddings, y, ratio):
 
     X = normalize(X, norm='l2')
 
-    X_train, X_test, y_train, y_test = train_test_split(X, Y,
-                                                        test_size=1 - ratio)
+    X_train, X_test, y_train, y_test = train_test_split(
+        X,
+        Y,
+        test_size=1 - ratio,
+        random_state=random_state,
+    )
 
     logreg = LogisticRegression(solver='liblinear')
     c = 2.0 ** np.arange(-10, 10)
@@ -79,3 +64,20 @@ def label_classification(embeddings, y, ratio):
         'F1Mi': micro,
         'F1Ma': macro
     }
+
+
+def label_classification(embeddings, y, ratio, eval_repeats=3, eval_seed=None):
+    eval_repeats = max(1, int(eval_repeats))
+    results = []
+    for idx in range(eval_repeats):
+        random_state = None if eval_seed is None else int(eval_seed) + idx
+        results.append(_label_classification_once(embeddings, y, ratio, random_state=random_state))
+
+    statistics = {}
+    for key in results[0].keys():
+        values = [r[key] for r in results]
+        statistics[key] = {
+            'mean': np.mean(values),
+            'std': np.std(values)}
+    print_statistics(statistics, 'label_classification')
+    return statistics

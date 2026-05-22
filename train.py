@@ -706,12 +706,12 @@ def train_gca(model: Model, x, edge_index, drop_scheme, drop_weights, feature_we
     return loss.item(), exp1_stats
 
 
-def test(model: Model, x, edge_index, y, final=False):
+def test(model: Model, x, edge_index, y, final=False, eval_repeats=3, eval_seed=None):
     # Keep evaluation identical across all methods.
     model.eval()
     z = model(x, edge_index)
 
-    label_classification(z, y, ratio=0.1)
+    label_classification(z, y, ratio=0.1, eval_repeats=eval_repeats, eval_seed=eval_seed)
 
 
 if __name__ == '__main__':
@@ -766,6 +766,8 @@ if __name__ == '__main__':
     gca_drop_scheme = config.get('gca_drop_scheme', 'degree')
     gca_pr_k = config.get('gca_pr_k', 200)
     iflgc_refl_du_weight = config.get('iflgc_refl_du_weight', 0.3)
+    eval_repeats = int(config.get('eval_repeats', 3))
+    eval_seed = config.get('eval_seed', None)
     use_subset = bool(config.get('use_subset', False))
     subset_num_nodes = int(config.get('subset_num_nodes', 0))
     subset_split_seed = int(config.get('subset_split_seed', config.get('seed', 0)))
@@ -1044,4 +1046,12 @@ if __name__ == '__main__':
         csv_fp.close()
 
     print("=== Final ===")
-    test(model, data.x, data.edge_index, data.y, final=True)
+    test(
+        model,
+        data.x,
+        data.edge_index,
+        data.y,
+        final=True,
+        eval_repeats=eval_repeats,
+        eval_seed=eval_seed,
+    )
