@@ -7,6 +7,7 @@ app_name = "lab"
 
 urlpatterns = [
     path("", views.dashboard, name="dashboard"),
+    path("training-process/", views.training_process_demo, name="training_process_demo"),
     path("experiments/method-comparison/create/", views.create_method_comparison_run, name="create_method_comparison"),
     path("experiments/sampling-bias/create/", views.create_sampling_bias_run, name="create_sampling_bias"),
     path("experiments/sensitivity/create/", views.create_sensitivity_run, name="create_sensitivity"),

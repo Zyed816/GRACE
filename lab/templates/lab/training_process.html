@@ -1,0 +1,158 @@
+{% extends "lab/base.html" %}
+{% load static lab_i18n %}
+
+{% block title %}
+  {% current_lang as active_lang %}
+  {% if active_lang == 'en' %}SG-GCL Training Process Visualization{% else %}SG-GCL 训练过程可视化{% endif %}
+{% endblock %}
+
+{% block content %}
+  {% current_lang as active_lang %}
+  <a class="back-link" href="{{ back_url }}">{% if active_lang == 'en' %}Back to Home{% else %}返回首页{% endif %}</a>
+
+  <section class="process-demo-hero">
+    <div>
+      <p class="eyebrow">{% if active_lang == 'en' %}Interactive Process{% else %}交互式过程演示{% endif %}</p>
+      <h1>{% if active_lang == 'en' %}SG-GCL Training Process Visualization{% else %}SG-GCL 训练过程可视化{% endif %}</h1>
+      <p class="hero-text">
+        {% if active_lang == 'en' %}
+          Nodes are shown as points in the embedding space. The page uses a deterministic front-end simulation to make augmentation, warmup training, hidden positive mining, and weighted correction visible.
+        {% else %}
+          页面用空间中的点表示图节点，通过前端仿真直观展示数据增强、预热训练、隐藏正样本挖掘和加权修正训练中的表示变化。
+        {% endif %}
+      </p>
+    </div>
+    <div class="process-hero-metrics">
+      <div class="mini-stat">
+        <span class="mini-label">{% if active_lang == 'en' %}Methods{% else %}方法{% endif %}</span>
+        <strong>SG-GR / SG-GC</strong>
+      </div>
+      <div class="mini-stat">
+        <span class="mini-label">{% if active_lang == 'en' %}Visible Stages{% else %}阶段{% endif %}</span>
+        <strong>6</strong>
+      </div>
+    </div>
+  </section>
+
+  <section class="process-workbench" data-lang="{{ active_lang }}">
+    <aside class="process-side process-control-panel" aria-label="{% if active_lang == 'en' %}Process controls{% else %}过程控制{% endif %}">
+      <div class="process-control-group">
+        <p class="process-small-label">{% if active_lang == 'en' %}Method{% else %}方法{% endif %}</p>
+        <div class="segmented-control" role="tablist" aria-label="{% if active_lang == 'en' %}Method{% else %}方法{% endif %}">
+          <button type="button" class="segment-btn is-active" data-method="sg-gr">SG-GR</button>
+          <button type="button" class="segment-btn" data-method="sg-gc">SG-GC</button>
+        </div>
+      </div>
+
+      <div class="process-control-group">
+        <p class="process-small-label">{% if active_lang == 'en' %}Stage{% else %}阶段{% endif %}</p>
+        <div class="stage-rail">
+          <button type="button" class="stage-step is-active" data-progress="0">
+            <span>01</span>
+            {% if active_lang == 'en' %}Original Graph{% else %}原始图{% endif %}
+          </button>
+          <button type="button" class="stage-step" data-progress="18">
+            <span>02</span>
+            {% if active_lang == 'en' %}Augmentation{% else %}数据增强{% endif %}
+          </button>
+          <button type="button" class="stage-step" data-progress="42">
+            <span>03</span>
+            {% if active_lang == 'en' %}Warmup{% else %}预热训练{% endif %}
+          </button>
+          <button type="button" class="stage-step" data-progress="62">
+            <span>04</span>
+            {% if active_lang == 'en' %}Mining{% else %}隐藏正样本挖掘{% endif %}
+          </button>
+          <button type="button" class="stage-step" data-progress="84">
+            <span>05</span>
+            {% if active_lang == 'en' %}Correction{% else %}加权修正训练{% endif %}
+          </button>
+          <button type="button" class="stage-step" data-progress="100">
+            <span>06</span>
+            {% if active_lang == 'en' %}Final Space{% else %}收敛表示{% endif %}
+          </button>
+        </div>
+      </div>
+
+      <div class="process-control-group">
+        <p class="process-small-label">{% if active_lang == 'en' %}Progress{% else %}进度{% endif %}</p>
+        <input id="processTimeline" class="process-range" type="range" min="0" max="100" value="0" step="1">
+        <div class="process-actions">
+          <button type="button" class="secondary-btn compact-btn" id="processPlay">{% if active_lang == 'en' %}Play{% else %}播放{% endif %}</button>
+          <button type="button" class="secondary-btn compact-btn" id="processReset">{% if active_lang == 'en' %}Reset{% else %}重置{% endif %}</button>
+        </div>
+      </div>
+
+      <div class="process-legend">
+        <p class="process-small-label">{% if active_lang == 'en' %}Pair Status{% else %}样本关系{% endif %}</p>
+        <span><i class="legend-dot legend-positive"></i>{% if active_lang == 'en' %}Positive{% else %}正样本{% endif %}</span>
+        <span><i class="legend-dot legend-negative"></i>{% if active_lang == 'en' %}Negative{% else %}负样本{% endif %}</span>
+        <span><i class="legend-dot legend-hidden"></i>{% if active_lang == 'en' %}Mined Hidden Positive{% else %}挖掘出的隐藏正样本{% endif %}</span>
+      </div>
+    </aside>
+
+    <section class="process-canvas-panel">
+      <div class="process-canvas-head">
+        <div>
+          <p class="process-stage-kicker" id="processStageKicker">Stage 01</p>
+          <h2 id="processStageTitle">{% if active_lang == 'en' %}Original Graph{% else %}原始图{% endif %}</h2>
+          <p id="processStageCopy">
+            {% if active_lang == 'en' %}
+              The initial representation is still mixed, and many nodes from different classes stay close in space.
+            {% else %}
+              初始表示还比较混杂，不同类别的节点在空间中仍然交织在一起。
+            {% endif %}
+          </p>
+        </div>
+        <div class="process-metric-grid">
+          <div class="process-metric">
+            <span>{% if active_lang == 'en' %}Epoch{% else %}轮次{% endif %}</span>
+            <strong id="metricEpoch">0</strong>
+          </div>
+          <div class="process-metric">
+            <span>{% if active_lang == 'en' %}Mined Pairs{% else %}隐藏正样本{% endif %}</span>
+            <strong id="metricMinedPairs">0</strong>
+          </div>
+          <div class="process-metric">
+            <span>{% if active_lang == 'en' %}Avg Weight{% else %}平均权重{% endif %}</span>
+            <strong id="metricWeight">0.00</strong>
+          </div>
+          <div class="process-metric">
+            <span>{% if active_lang == 'en' %}Compactness{% else %}聚合度{% endif %}</span>
+            <strong id="metricCompactness">0%</strong>
+          </div>
+        </div>
+      </div>
+      <div class="process-canvas-wrap">
+        <canvas id="sgProcessCanvas" width="1024" height="640"></canvas>
+        <div id="processTooltip" class="process-tooltip" hidden></div>
+      </div>
+    </section>
+
+    <aside class="process-side process-inspector">
+      <div class="process-mini-card">
+        <div class="process-mini-head">
+          <span>{% if active_lang == 'en' %}View 1{% else %}增强视图 1{% endif %}</span>
+          <strong id="viewOneStat">drop 0%</strong>
+        </div>
+        <canvas id="viewCanvasOne" width="320" height="190"></canvas>
+      </div>
+      <div class="process-mini-card">
+        <div class="process-mini-head">
+          <span>{% if active_lang == 'en' %}View 2{% else %}增强视图 2{% endif %}</span>
+          <strong id="viewTwoStat">drop 0%</strong>
+        </div>
+        <canvas id="viewCanvasTwo" width="320" height="190"></canvas>
+      </div>
+      <div class="process-mini-card process-pair-card">
+        <div class="process-mini-head">
+          <span>{% if active_lang == 'en' %}Candidate Pairs{% else %}候选样本对{% endif %}</span>
+          <strong id="pairStat">0 / 0</strong>
+        </div>
+        <div class="pair-list" id="pairList"></div>
+      </div>
+    </aside>
+  </section>
+
+  <script src="{% static 'lab/training_process.js' %}" defer></script>
+{% endblock %}

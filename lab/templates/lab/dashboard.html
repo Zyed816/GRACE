@@ -4,6 +4,7 @@
 {% block title %}{% tr 'site.title' %}{% endblock %}
 
 {% block content %}
+  {% current_lang as active_lang %}
   <section class="hero">
     <div class="hero-copy">
       <p class="eyebrow">{% tr 'dashboard.hero_eyebrow' %}</p>
@@ -28,6 +29,29 @@
         <strong>{{ official_results|length }}</strong>
       </div>
     </div>
+  </section>
+
+  <section class="process-entry-card">
+    <div class="process-entry-copy">
+      <p class="panel-kicker">{% if active_lang == 'en' %}Training Process{% else %}训练过程{% endif %}</p>
+      <h2>{% if active_lang == 'en' %}SG-GCL Training Process Visualization{% else %}SG-GCL 训练过程可视化{% endif %}</h2>
+      <p>
+        {% if active_lang == 'en' %}
+          Explore how SG-GR and SG-GC move from graph augmentation, warmup training, hidden positive mining, and weighted correction to the final representation space.
+        {% else %}
+          直观观察 SG-GR 和 SG-GC 从图数据增强、预热训练、隐藏正样本挖掘到加权修正训练的完整过程。
+        {% endif %}
+      </p>
+    </div>
+    <div class="process-entry-flow" aria-hidden="true">
+      <span>Aug</span>
+      <span>Warmup</span>
+      <span>Mining</span>
+      <span>Update</span>
+    </div>
+    <a class="primary-btn process-entry-btn" href="{% url 'lab:training_process_demo' %}">
+      {% if active_lang == 'en' %}Open Visualization{% else %}进入可视化演示{% endif %}
+    </a>
   </section>
 
   <section class="panel-grid">

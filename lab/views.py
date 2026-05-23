@@ -414,6 +414,19 @@ def dashboard(request):
     return render(request, "lab/dashboard.html", _dashboard_context(lang=lang))
 
 
+@require_GET
+def training_process_demo(request):
+    lang = get_ui_language(request)
+    return render(
+        request,
+        "lab/training_process.html",
+        {
+            "back_url": reverse("lab:dashboard"),
+            "lang": lang,
+        },
+    )
+
+
 @require_POST
 def create_method_comparison_run(request):
     lang = get_ui_language(request)

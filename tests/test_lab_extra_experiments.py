@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.test import SimpleTestCase
+from django.urls import reverse
 
 from lab.forms import ComponentAblationForm, EfficiencyForm, SignificanceForm
 from lab.parsers import (
@@ -14,6 +15,15 @@ from lab.parsers import (
     build_significance_summary,
 )
 from lab.services import _run_component_ablation, _run_efficiency, _run_significance
+
+
+class TrainingProcessDemoTests(SimpleTestCase):
+    def test_training_process_page_renders(self):
+        response = self.client.get(reverse("lab:training_process_demo"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "SG-GCL 训练过程可视化")
+        self.assertContains(response, "training_process.js")
 
 
 def write_csv(path, fieldnames, rows):
