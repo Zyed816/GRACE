@@ -17,7 +17,7 @@
       </div>
       <div class="mini-stat">
         <span class="mini-label">{% tr 'dashboard.stat_modules' %}</span>
-        <strong>3</strong>
+        <strong>6</strong>
       </div>
       <div class="mini-stat">
         <span class="mini-label">{% tr 'dashboard.stat_recent_runs' %}</span>
@@ -127,6 +127,105 @@
           {% endif %}
         {% endfor %}
         <button type="submit" class="primary-btn">{% tr 'dashboard.sensitivity_start' %}</button>
+      </form>
+    </article>
+
+    <article class="panel-card">
+      <div class="panel-head">
+        <p class="panel-kicker">04</p>
+        <h2>{% tr 'component_ablation_label' %}</h2>
+        <p>{% tr 'dashboard.ablation_desc' %}</p>
+      </div>
+      <form method="post" action="{% url 'lab:create_component_ablation' %}" class="config-form">
+        {% csrf_token %}
+        {% for field in ablation_form %}
+          {% if field.field.widget.input_type == 'checkbox' %}
+            <div class="field-block checkbox-field{% if field.errors %} has-error{% endif %}">
+              <label class="checkbox-row" for="{{ field.id_for_label }}">
+                {{ field }}
+                <span>{{ field.label }}</span>
+              </label>
+              {% for error in field.errors %}
+                <p class="field-error">{{ error }}</p>
+              {% endfor %}
+            </div>
+          {% else %}
+            <div class="field-block{% if field.errors %} has-error{% endif %}">
+              <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+              {{ field }}
+              {% for error in field.errors %}
+                <p class="field-error">{{ error }}</p>
+              {% endfor %}
+            </div>
+          {% endif %}
+        {% endfor %}
+        <button type="submit" class="primary-btn">{% tr 'dashboard.ablation_start' %}</button>
+      </form>
+    </article>
+
+    <article class="panel-card">
+      <div class="panel-head">
+        <p class="panel-kicker">05</p>
+        <h2>{% tr 'efficiency_label' %}</h2>
+        <p>{% tr 'dashboard.efficiency_desc' %}</p>
+      </div>
+      <form method="post" action="{% url 'lab:create_efficiency' %}" class="config-form">
+        {% csrf_token %}
+        {% for field in efficiency_form %}
+          {% if field.field.widget.input_type == 'checkbox' %}
+            <div class="field-block checkbox-field{% if field.errors %} has-error{% endif %}">
+              <label class="checkbox-row" for="{{ field.id_for_label }}">
+                {{ field }}
+                <span>{{ field.label }}</span>
+              </label>
+              {% for error in field.errors %}
+                <p class="field-error">{{ error }}</p>
+              {% endfor %}
+            </div>
+          {% else %}
+            <div class="field-block{% if field.errors %} has-error{% endif %}">
+              <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+              {{ field }}
+              {% for error in field.errors %}
+                <p class="field-error">{{ error }}</p>
+              {% endfor %}
+            </div>
+          {% endif %}
+        {% endfor %}
+        <button type="submit" class="primary-btn">{% tr 'dashboard.efficiency_start' %}</button>
+      </form>
+    </article>
+
+    <article class="panel-card">
+      <div class="panel-head">
+        <p class="panel-kicker">06</p>
+        <h2>{% tr 'significance_label' %}</h2>
+        <p>{% tr 'dashboard.significance_desc' %}</p>
+      </div>
+      <form method="post" action="{% url 'lab:create_significance' %}" class="config-form">
+        {% csrf_token %}
+        {% for field in significance_form %}
+          {% if field.field.widget.input_type == 'checkbox' %}
+            <div class="field-block checkbox-field{% if field.errors %} has-error{% endif %}">
+              <label class="checkbox-row" for="{{ field.id_for_label }}">
+                {{ field }}
+                <span>{{ field.label }}</span>
+              </label>
+              {% for error in field.errors %}
+                <p class="field-error">{{ error }}</p>
+              {% endfor %}
+            </div>
+          {% else %}
+            <div class="field-block{% if field.errors %} has-error{% endif %}">
+              <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+              {{ field }}
+              {% for error in field.errors %}
+                <p class="field-error">{{ error }}</p>
+              {% endfor %}
+            </div>
+          {% endif %}
+        {% endfor %}
+        <button type="submit" class="primary-btn">{% tr 'dashboard.significance_start' %}</button>
       </form>
     </article>
   </section>

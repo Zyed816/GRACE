@@ -1,0 +1,227 @@
+import csv
+import tempfile
+import unittest
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
+
+from django.test import SimpleTestCase
+
+from lab.forms import ComponentAblationForm, EfficiencyForm, SignificanceForm
+from lab.parsers import (
+    build_component_ablation_summary,
+    build_efficiency_summary,
+    build_significance_summary,
+)
+from lab.services import _run_component_ablation, _run_efficiency, _run_significance
+
+
+def write_csv(path, fieldnames, rows):
+    with Path(path).open("w", encoding="utf-8", newline="") as fh:
+        writer = csv.DictWriter(fh, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+class ExtraExperimentFormTests(SimpleTestCase):
+    def test_new_forms_have_expected_defaults(self):
+        ablation = ComponentAblationForm(prefix="ablation")
+        efficiency = EfficiencyForm(prefix="efficiency")
+        significance = SignificanceForm(prefix="significance")
+
+        self.assertEqual(ablation.fields["methods"].initial, ["ifl-gr", "ifl-gc"])
+        self.assertEqual(efficiency.fields["methods"].initial, ["grace", "gca", "ifl-gr", "ifl-gc"])
+        self.assertEqual(significance.fields["comparison_pairs"].initial, ["sg_gr_vs_grace", "sg_gc_vs_gca"])
+        self.assertEqual(significance.fields["runs"].min_value, 2)
+
+    def test_significance_requires_at_least_two_runs(self):
+        form = SignificanceForm(
+            data={
+                "significance-name": "Sig",
+                "significance-dataset": "Cora",
+                "significance-comparison_pairs": ["sg_gr_vs_grace"],
+                "significance-gpu_id": "0",
+                "significance-runs": "1",
+                "significance-eval_repeats": "3",
+                "significance-std_weight": "0.5",
+                "significance-alpha": "0.05",
+            },
+            prefix="significance",
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("runs", form.errors)
+
+
+class ExtraExperimentParserTests(unittest.TestCase):
+    def test_component_ablation_summary_reads_drop_rows(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            csv_path = Path(tmp) / "extra_ablation_cora_results.csv"
+            write_csv(
+                csv_path,
+                ["stage", "dataset", "method", "variant", "robust_score", "drop_vs_full"],
+                [
+                    {"stage": "summary", "dataset": "Cora", "method": "ifl-gr", "variant": "full", "robust_score": "0.82", "drop_vs_full": ""},
+                    {"stage": "summary", "dataset": "Cora", "method": "ifl-gr", "variant": "no_warmup", "robust_score": "0.81", "drop_vs_full": "0.01"},
+                ],
+            )
+
+            summary = build_component_ablation_summary([csv_path])
+
+        self.assertEqual(summary["summary_rows"], 2)
+        self.assertEqual(summary["max_drop"]["variant"], "no_warmup")
+        self.assertAlmostEqual(summary["max_drop"]["drop_vs_full"], 0.01)
+
+    def test_efficiency_summary_finds_fastest_and_ratios(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            csv_path = Path(tmp) / "efficiency_cora_results.csv"
+            write_csv(
+                csv_path,
+                [
+                    "stage",
+                    "dataset",
+                    "method",
+                    "train_total_sec",
+                    "wall_time_sec",
+                    "time_ratio_vs_grace",
+                    "overhead_ratio_vs_base",
+                ],
+                [
+                    {"stage": "summary", "dataset": "Cora", "method": "grace", "train_total_sec": "3.0", "wall_time_sec": "5.0", "time_ratio_vs_grace": "1.0", "overhead_ratio_vs_base": ""},
+                    {"stage": "summary", "dataset": "Cora", "method": "ifl-gr", "train_total_sec": "4.5", "wall_time_sec": "6.0", "time_ratio_vs_grace": "1.5", "overhead_ratio_vs_base": "1.5"},
+                    {"stage": "summary", "dataset": "Cora", "method": "ifl-gc", "train_total_sec": "6.0", "wall_time_sec": "7.0", "time_ratio_vs_grace": "2.0", "overhead_ratio_vs_base": "1.25"},
+                ],
+            )
+
+            summary = build_efficiency_summary([csv_path])
+
+        self.assertEqual(summary["fastest_method"]["method"], "grace")
+        self.assertAlmostEqual(summary["sggr_ratio"], 1.5)
+        self.assertAlmostEqual(summary["sggc_ratio"], 1.25)
+
+    def test_significance_summary_filters_primary_robust_tests(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            csv_path = Path(tmp) / "significance_tests_summary.csv"
+            fieldnames = [
+                "stage",
+                "dataset",
+                "metric",
+                "baseline_method",
+                "target_method",
+                "mean_delta",
+                "p_value_holm",
+                "significant",
+                "notes",
+            ]
+            write_csv(
+                csv_path,
+                fieldnames,
+                [
+                    {"stage": "test", "dataset": "Cora", "metric": "robust_score", "baseline_method": "grace", "target_method": "ifl-gr", "mean_delta": "0.01", "p_value_holm": "0.01", "significant": "True", "notes": "primary"},
+                    {"stage": "test", "dataset": "Cora", "metric": "F1Mi_mean", "baseline_method": "grace", "target_method": "ifl-gr", "mean_delta": "0.02", "p_value_holm": "0.01", "significant": "True", "notes": "primary"},
+                    {"stage": "test", "dataset": "Cora", "metric": "robust_score", "baseline_method": "grace", "target_method": "gca", "mean_delta": "0.03", "p_value_holm": "0.01", "significant": "True", "notes": "supplementary"},
+                ],
+            )
+
+            summary = build_significance_summary([], summary_csv=csv_path)
+
+        self.assertEqual(summary["primary_tests"], 1)
+        self.assertEqual(summary["significant_tests"], 1)
+        self.assertEqual(summary["best_delta"]["comparison"], "SG-GR vs GRACE")
+
+
+class ExtraExperimentServiceCommandTests(SimpleTestCase):
+    def collect_commands(self, runner, run, summary_patch, summary_value):
+        commands = []
+
+        def fake_run_command(_run, command, label):
+            commands.append((label, command))
+            return ""
+
+        with patch("lab.services._run_command", side_effect=fake_run_command), patch(
+            "lab.services._register_artifact"
+        ), patch(summary_patch, return_value=summary_value):
+            runner(run)
+        return commands
+
+    def test_component_ablation_uses_run_scoped_paths(self):
+        run = SimpleNamespace(
+            pk=123,
+            config={
+                "dataset": "Cora",
+                "methods": ["ifl-gr"],
+                "gpu_id": 0,
+                "runs": 1,
+                "std_weight": 0.5,
+                "continue_on_error": False,
+            },
+        )
+
+        commands = self.collect_commands(
+            _run_component_ablation,
+            run,
+            "lab.services.build_component_ablation_summary",
+            {"summary_rows": 0},
+        )
+
+        self.assertEqual(commands[0][0], "component-ablation")
+        self.assertIn("experiments/component_ablation/run_component_ablation.py", commands[0][1])
+        self.assertIn("results/webapp/run_123/extra_ablation_cora_results.csv", commands[0][1])
+        self.assertEqual(commands[1][0], "component-ablation-plot")
+        self.assertIn("results/webapp/run_123/plots", commands[1][1])
+
+    def test_efficiency_uses_run_scoped_paths(self):
+        run = SimpleNamespace(
+            pk=124,
+            config={
+                "dataset": "Cora",
+                "methods": ["grace", "ifl-gr"],
+                "gpu_id": 0,
+                "runs": 1,
+                "std_weight": 0.5,
+                "continue_on_error": False,
+            },
+        )
+
+        commands = self.collect_commands(
+            _run_efficiency,
+            run,
+            "lab.services.build_efficiency_summary",
+            {"summary_rows": 0},
+        )
+
+        self.assertEqual(commands[0][0], "efficiency")
+        self.assertIn("experiments/efficiency/run_efficiency_experiment.py", commands[0][1])
+        self.assertIn("results/webapp/run_124/efficiency_cora_results.csv", commands[0][1])
+        self.assertEqual(commands[1][0], "efficiency-plot")
+
+    def test_significance_maps_pairs_to_methods_and_run_scoped_paths(self):
+        run = SimpleNamespace(
+            pk=125,
+            config={
+                "dataset": "Cora",
+                "comparison_pairs": ["sg_gr_vs_grace"],
+                "gpu_id": 0,
+                "runs": 2,
+                "eval_repeats": 3,
+                "std_weight": 0.5,
+                "alpha": 0.05,
+                "continue_on_error": False,
+            },
+        )
+
+        commands = self.collect_commands(
+            _run_significance,
+            run,
+            "lab.services.build_significance_summary",
+            {"primary_tests": 0},
+        )
+
+        self.assertEqual(commands[0][0], "significance")
+        self.assertIn("experiments/statistical_significance/run_significance_experiment.py", commands[0][1])
+        self.assertIn("grace", commands[0][1])
+        self.assertIn("ifl-gr", commands[0][1])
+        self.assertNotIn("gca", commands[0][1])
+        self.assertIn("results/webapp/run_125/significance_cora_results.csv", commands[0][1])
+        self.assertEqual(commands[1][0], "significance-analyze")
+        self.assertEqual(commands[2][0], "significance-plot")

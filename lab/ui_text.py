@@ -9,6 +9,9 @@ EXPERIMENT_TYPE_TEXT = {
     "method_comparison": {"zh": "方法比较流水线", "en": "Method Comparison Pipeline"},
     "sampling_bias": {"zh": "采样偏差验证", "en": "Sampling Bias Validation"},
     "sensitivity": {"zh": "超参数敏感性分析", "en": "Sensitivity Analysis"},
+    "component_ablation": {"zh": "组件级消融实验", "en": "Component Ablation"},
+    "efficiency": {"zh": "效率实验", "en": "Efficiency Experiment"},
+    "significance": {"zh": "统计显著性实验", "en": "Statistical Significance"},
 }
 
 STATUS_TEXT = {
@@ -30,6 +33,9 @@ DEFAULT_RUN_NAMES = {
     "method_comparison": {"zh": "方法比较流水线", "en": "Method Comparison Pipeline"},
     "sampling_bias": {"zh": "采样偏差验证", "en": "Sampling Bias Validation"},
     "sensitivity": {"zh": "超参数敏感性分析", "en": "Sensitivity Analysis"},
+    "component_ablation": {"zh": "组件级消融实验", "en": "Component Ablation"},
+    "efficiency": {"zh": "效率实验", "en": "Efficiency Experiment"},
+    "significance": {"zh": "统计显著性实验", "en": "Statistical Significance"},
 }
 
 TEXT = {
@@ -44,6 +50,7 @@ TEXT = {
     "forms.chart_title": {"zh": "图标题", "en": "Plot Title"},
     "forms.methods": {"zh": "Methods", "en": "Methods"},
     "forms.paper_params": {"zh": "Paper Params", "en": "Paper Params"},
+    "forms.comparison_pairs": {"zh": "Comparison Pairs", "en": "Comparison Pairs"},
     "forms.force_grid": {"zh": "force_grid", "en": "force_grid"},
     "forms.continue_on_error": {"zh": "continue_on_error", "en": "continue_on_error"},
     "dashboard.hero_eyebrow": {"zh": "Django 实验系统", "en": "Django Experiment System"},
@@ -53,19 +60,22 @@ TEXT = {
     },
     "dashboard.hero_text": {
         "zh": (
-            "下方三个入口分别复用当前项目中的采样偏差验证、方法比较流水线与超参数敏感性分析脚本。"
+            "下方六个入口分别复用当前项目中的采样偏差验证、方法比较流水线、组件级消融、效率、统计显著性与超参数敏感性分析脚本。"
             "同时，实验室已保存的 results/ 与 logs/ 归档结果也会在这里统一展示，"
             "并与网页端新运行实验共用同一套结果页样式。"
         ),
         "en": (
-            "The three entries below reuse the project's sampling-bias validation, method-comparison pipeline, "
-            "and hyperparameter sensitivity analysis scripts. Archived results under results/ and logs/ are also "
+            "The six entries below reuse the project's sampling-bias, method-comparison, component-ablation, "
+            "efficiency, statistical-significance, and hyperparameter sensitivity scripts. Archived results under results/ and logs/ are also "
             "presented here with the same result-page style used by newly launched web experiments."
         ),
     },
     "sampling_bias_label": {"zh": "采样偏差验证", "en": "Sampling Bias Validation"},
     "method_comparison_label": {"zh": "方法比较流水线", "en": "Method Comparison Pipeline"},
     "sensitivity_label": {"zh": "超参数敏感性分析", "en": "Sensitivity Analysis"},
+    "component_ablation_label": {"zh": "组件级消融实验", "en": "Component Ablation"},
+    "efficiency_label": {"zh": "效率实验", "en": "Efficiency Experiment"},
+    "significance_label": {"zh": "统计显著性实验", "en": "Statistical Significance"},
     "dashboard.stat_datasets": {"zh": "数据集", "en": "Datasets"},
     "dashboard.stat_modules": {"zh": "实验模块", "en": "Experiment Modules"},
     "dashboard.stat_recent_runs": {"zh": "最近实验", "en": "Recent Runs"},
@@ -85,6 +95,21 @@ TEXT = {
         "en": "Run parameter sweeps across methods, generate overview plots and detailed CSV files, and inspect them from a unified detail page.",
     },
     "dashboard.sensitivity_start": {"zh": "启动敏感性实验", "en": "Launch Sensitivity Run"},
+    "dashboard.ablation_desc": {
+        "zh": "对 SG-GR 与 SG-GC 运行 M-off、K-off、w-off 组件消融，并生成稳健性评分和相对完整方法变化图。",
+        "en": "Run M-off, K-off, and w-off component ablations for SG-GR and SG-GC, with robust-score and change plots.",
+    },
+    "dashboard.ablation_start": {"zh": "启动消融实验", "en": "Launch Ablation Run"},
+    "dashboard.efficiency_desc": {
+        "zh": "记录不同方法的训练循环耗时、端到端耗时和相对时间比，评估 SG-GCL 的时间可行性。",
+        "en": "Measure train-loop time, wall time, and relative time ratios to inspect SG-GCL efficiency.",
+    },
+    "dashboard.efficiency_start": {"zh": "启动效率实验", "en": "Launch Efficiency Run"},
+    "dashboard.significance_desc": {
+        "zh": "使用相同 seed 的配对运行检验 SG-GR 与 SG-GC 的主要提升是否稳定显著。",
+        "en": "Use paired-seed runs to test whether the main SG-GR and SG-GC improvements are statistically stable.",
+    },
+    "dashboard.significance_start": {"zh": "启动显著性实验", "en": "Launch Significance Run"},
     "dashboard.official_title": {"zh": "官方结果", "en": "Official Results"},
     "dashboard.official_desc": {
         "zh": "这里展示实验室保存在 results/ 与 logs/ 中的归档结果，并使用与网页新实验一致的详情页样式。",
@@ -159,6 +184,9 @@ TEXT = {
     "message.method_queued": {"zh": "方法比较实验 #{run_id} 已加入队列。", "en": "Method comparison run #{run_id} has been queued."},
     "message.sampling_queued": {"zh": "采样偏差实验 #{run_id} 已加入队列。", "en": "Sampling bias run #{run_id} has been queued."},
     "message.sensitivity_queued": {"zh": "超参数敏感性实验 #{run_id} 已加入队列。", "en": "Sensitivity analysis run #{run_id} has been queued."},
+    "message.ablation_queued": {"zh": "组件级消融实验 #{run_id} 已加入队列。", "en": "Component ablation run #{run_id} has been queued."},
+    "message.efficiency_queued": {"zh": "效率实验 #{run_id} 已加入队列。", "en": "Efficiency run #{run_id} has been queued."},
+    "message.significance_queued": {"zh": "统计显著性实验 #{run_id} 已加入队列。", "en": "Statistical significance run #{run_id} has been queued."},
     "message.not_running": {"zh": "实验 #{run_id} 当前不在运行。", "en": "Run #{run_id} is not running right now."},
     "message.missing_pid": {
         "zh": "实验 #{run_id} 缺少 worker PID 记录，当前无法安全停止。",
@@ -187,6 +215,15 @@ TEXT = {
     "summary.summary_rows": {"zh": "汇总行数", "en": "Summary Rows"},
     "summary.methods": {"zh": "方法列表", "en": "Methods"},
     "summary.params": {"zh": "参数列表", "en": "Params"},
+    "summary.variants": {"zh": "变体数", "en": "Variants"},
+    "summary.max_drop": {"zh": "最大下降", "en": "Max Drop"},
+    "summary.fastest_method": {"zh": "最快方法", "en": "Fastest Method"},
+    "summary.train_total_time": {"zh": "训练总耗时", "en": "Train Total Time"},
+    "summary.sggr_ratio": {"zh": "SG-GR/GRACE", "en": "SG-GR/GRACE"},
+    "summary.sggc_ratio": {"zh": "SG-GC/GCA", "en": "SG-GC/GCA"},
+    "summary.primary_tests": {"zh": "主比较数", "en": "Primary Tests"},
+    "summary.significant_tests": {"zh": "显著比较数", "en": "Significant Tests"},
+    "summary.best_delta": {"zh": "最大正向差值", "en": "Best Delta"},
     "summary.keys_omitted": {"zh": "{count} 个键已省略", "en": "{count} keys omitted"},
     "summary.truncated_note": {"zh": "为页面布局截断显示", "en": "truncated for page layout"},
     "summary.truncated_suffix": {"zh": "[已截断]", "en": "[truncated]"},
@@ -195,6 +232,9 @@ TEXT = {
     "charts.mean_margin": {"zh": "mean_margin 曲线", "en": "Mean Margin Curve"},
     "charts.sensitivity_best": {"zh": "敏感性最佳 robust_score", "en": "Sensitivity Best Robust Score"},
     "charts.sensitivity_series": {"zh": "{label} 的 robust_score 变化", "en": "{label} Robust Score Trend"},
+    "charts.ablation_drop": {"zh": "消融平均下降", "en": "Ablation Mean Drop"},
+    "charts.efficiency_train_time": {"zh": "训练总耗时", "en": "Train Total Time"},
+    "charts.significance_delta": {"zh": "主比较 robust_score 差值", "en": "Primary Robust Score Delta"},
     "official.config_source": {"zh": "来源", "en": "Source"},
     "official.config_location": {"zh": "存放位置", "en": "Location"},
     "official.config_result_type": {"zh": "结果类型", "en": "Result Type"},
@@ -203,6 +243,10 @@ TEXT = {
     "official.location.results": {"zh": "results/（不含 webapp）", "en": "results/ (excluding webapp)"},
     "official.location.logs": {"zh": "logs/（不含 webapp）", "en": "logs/ (excluding webapp)"},
     "official.location.sensitivity": {
+        "zh": "results/ 与 results/plots/（不含 webapp）",
+        "en": "results/ and results/plots/ (excluding webapp)",
+    },
+    "official.location.extra": {
         "zh": "results/ 与 results/plots/（不含 webapp）",
         "en": "results/ and results/plots/ (excluding webapp)",
     },
@@ -219,6 +263,20 @@ EXACT_ARTIFACT_KEYS = {
     "敏感性总览图": "artifact.sensitivity_overview_plot",
     "Sensitivity Analysis Report": "artifact.sensitivity_analysis_report",
     "敏感性分析报告": "artifact.sensitivity_analysis_report",
+    "Component Ablation CSV": "artifact.component_ablation_csv",
+    "Component Ablation Overview Plot": "artifact.component_ablation_overview_plot",
+    "Component Ablation Change Plot": "artifact.component_ablation_change_plot",
+    "Component Ablation Analysis Report": "artifact.component_ablation_analysis_report",
+    "Efficiency CSV": "artifact.efficiency_csv",
+    "Efficiency Train Total Time Plot": "artifact.efficiency_train_total_time_plot",
+    "Efficiency Wall Time Plot": "artifact.efficiency_wall_time_plot",
+    "Efficiency Time Ratio Plot": "artifact.efficiency_time_ratio_plot",
+    "Efficiency Analysis Report": "artifact.efficiency_analysis_report",
+    "Significance CSV": "artifact.significance_csv",
+    "Significance Tests Summary CSV": "artifact.significance_tests_summary_csv",
+    "Significance Mean/Std Plot": "artifact.significance_mean_std_plot",
+    "Significance Paired Delta Plot": "artifact.significance_paired_delta_plot",
+    "Significance Analysis Report": "artifact.significance_analysis_report",
 }
 
 ARTIFACT_TEXT = {
@@ -227,6 +285,20 @@ ARTIFACT_TEXT = {
     "artifact.sampling_bias_curve": {"zh": "采样偏差曲线图", "en": "Sampling Bias Curve"},
     "artifact.sensitivity_overview_plot": {"zh": "敏感性总览图", "en": "Sensitivity Overview Plot"},
     "artifact.sensitivity_analysis_report": {"zh": "敏感性分析报告", "en": "Sensitivity Analysis Report"},
+    "artifact.component_ablation_csv": {"zh": "组件消融 CSV", "en": "Component Ablation CSV"},
+    "artifact.component_ablation_overview_plot": {"zh": "组件消融总览图", "en": "Component Ablation Overview Plot"},
+    "artifact.component_ablation_change_plot": {"zh": "组件消融变化图", "en": "Component Ablation Change Plot"},
+    "artifact.component_ablation_analysis_report": {"zh": "组件消融分析报告", "en": "Component Ablation Analysis Report"},
+    "artifact.efficiency_csv": {"zh": "效率实验 CSV", "en": "Efficiency CSV"},
+    "artifact.efficiency_train_total_time_plot": {"zh": "训练总耗时图", "en": "Train Total Time Plot"},
+    "artifact.efficiency_wall_time_plot": {"zh": "端到端耗时图", "en": "Wall Time Plot"},
+    "artifact.efficiency_time_ratio_plot": {"zh": "时间比值图", "en": "Time Ratio Plot"},
+    "artifact.efficiency_analysis_report": {"zh": "效率分析报告", "en": "Efficiency Analysis Report"},
+    "artifact.significance_csv": {"zh": "显著性实验 CSV", "en": "Significance CSV"},
+    "artifact.significance_tests_summary_csv": {"zh": "显著性检验汇总 CSV", "en": "Significance Tests Summary CSV"},
+    "artifact.significance_mean_std_plot": {"zh": "均值标准差图", "en": "Mean/Std Plot"},
+    "artifact.significance_paired_delta_plot": {"zh": "配对差值图", "en": "Paired Delta Plot"},
+    "artifact.significance_analysis_report": {"zh": "显著性分析报告", "en": "Significance Analysis Report"},
 }
 
 GRID_SEARCH_PATTERN = re.compile(r"^(?P<method>[A-Z-]+) (Grid Search|网格搜索)$")

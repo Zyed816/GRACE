@@ -9,7 +9,14 @@ from django.urls import reverse
 from django.views.decorators.http import require_GET, require_POST
 
 from .constants import METHOD_DISPLAY_ORDER, METHOD_LABELS
-from .forms import MethodComparisonForm, SamplingBiasForm, SensitivityForm
+from .forms import (
+    ComponentAblationForm,
+    EfficiencyForm,
+    MethodComparisonForm,
+    SamplingBiasForm,
+    SignificanceForm,
+    SensitivityForm,
+)
 from .models import ExperimentArtifact, ExperimentRun
 from .official_results import get_official_result, list_official_results
 from .parsers import build_sensitivity_series, preview_csv, read_text_file
@@ -71,7 +78,16 @@ def _serialize_recent_run(run, lang):
     }
 
 
-def _dashboard_context(*, lang, method_form=None, sampling_form=None, sensitivity_form=None):
+def _dashboard_context(
+    *,
+    lang,
+    method_form=None,
+    sampling_form=None,
+    sensitivity_form=None,
+    ablation_form=None,
+    efficiency_form=None,
+    significance_form=None,
+):
     recent_runs = [
         _serialize_recent_run(run, lang)
         for run in ExperimentRun.objects.prefetch_related("artifacts").all()[:8]
@@ -87,6 +103,9 @@ def _dashboard_context(*, lang, method_form=None, sampling_form=None, sensitivit
         "method_form": method_form or MethodComparisonForm(prefix="method", lang=lang),
         "sampling_form": sampling_form or SamplingBiasForm(prefix="sampling", lang=lang),
         "sensitivity_form": sensitivity_form or SensitivityForm(prefix="sensitivity", lang=lang),
+        "ablation_form": ablation_form or ComponentAblationForm(prefix="ablation", lang=lang),
+        "efficiency_form": efficiency_form or EfficiencyForm(prefix="efficiency", lang=lang),
+        "significance_form": significance_form or SignificanceForm(prefix="significance", lang=lang),
         "recent_runs": recent_runs,
         "official_results": official_results,
     }
@@ -142,6 +161,12 @@ def _order_method_rows(method_rows):
             item.get("label", ""),
         ),
     )
+
+
+def _format_float(value, digits=4, suffix=""):
+    if value is None:
+        return "-"
+    return f"{float(value):.{digits}f}{suffix}"
 
 
 def _build_detail_payload(experiment_type, summary, artifacts, lang):
@@ -249,6 +274,43 @@ def _build_detail_payload(experiment_type, summary, artifacts, lang):
             if chart:
                 chart_svgs.append(chart)
 
+        if summary.get("report_text") and not report_blocks:
+            report_blocks.append({"artifact": None, "content": summary["report_text"]})
+    elif experiment_type == ExperimentRun.TYPE_COMPONENT_ABLATION:
+        max_drop = summary.get("max_drop") or {}
+        methods = summary.get("method_labels") or [METHOD_LABELS.get(method, method) for method in summary.get("methods", [])]
+        summary_cards = [
+            {"label": text("summary.summary_rows", lang), "value": str(summary.get("summary_rows", 0))},
+            {"label": text("summary.methods", lang), "value": " / ".join(methods) or "-"},
+            {"label": text("summary.variants", lang), "value": str(summary.get("variant_count", 0))},
+            {
+                "label": text("summary.max_drop", lang),
+                "value": _format_float(max_drop.get("drop_vs_full"), 4),
+            },
+        ]
+        if summary.get("report_text") and not report_blocks:
+            report_blocks.append({"artifact": None, "content": summary["report_text"]})
+    elif experiment_type == ExperimentRun.TYPE_EFFICIENCY:
+        fastest = summary.get("fastest_method") or {}
+        summary_cards = [
+            {"label": text("summary.summary_rows", lang), "value": str(summary.get("summary_rows", 0))},
+            {"label": text("summary.fastest_method", lang), "value": fastest.get("label", "-")},
+            {
+                "label": text("summary.train_total_time", lang),
+                "value": _format_float(fastest.get("train_total_sec"), 2, "s"),
+            },
+            {"label": text("summary.sggr_ratio", lang), "value": _format_float(summary.get("sggr_ratio"), 2, "x")},
+            {"label": text("summary.sggc_ratio", lang), "value": _format_float(summary.get("sggc_ratio"), 2, "x")},
+        ]
+        if summary.get("report_text") and not report_blocks:
+            report_blocks.append({"artifact": None, "content": summary["report_text"]})
+    elif experiment_type == ExperimentRun.TYPE_SIGNIFICANCE:
+        best_delta = summary.get("best_delta") or {}
+        summary_cards = [
+            {"label": text("summary.primary_tests", lang), "value": str(summary.get("primary_tests", 0))},
+            {"label": text("summary.significant_tests", lang), "value": str(summary.get("significant_tests", 0))},
+            {"label": text("summary.best_delta", lang), "value": _format_float(best_delta.get("mean_delta"), 4)},
+        ]
         if summary.get("report_text") and not report_blocks:
             report_blocks.append({"artifact": None, "content": summary["report_text"]})
 
@@ -429,6 +491,86 @@ def create_sensitivity_run(request):
     )
     launch_experiment(run)
     messages.success(request, text("message.sensitivity_queued", lang, run_id=run.pk))
+    return redirect(run)
+
+
+@require_POST
+def create_component_ablation_run(request):
+    lang = get_ui_language(request)
+    form = ComponentAblationForm(request.POST, prefix="ablation", lang=lang)
+    if not form.is_valid():
+        return render(request, "lab/dashboard.html", _dashboard_context(lang=lang, ablation_form=form))
+
+    cleaned = form.cleaned_data
+    run = ExperimentRun.objects.create(
+        name=cleaned["name"],
+        experiment_type=ExperimentRun.TYPE_COMPONENT_ABLATION,
+        dataset=cleaned["dataset"],
+        config={
+            "dataset": cleaned["dataset"],
+            "methods": cleaned["methods"],
+            "gpu_id": cleaned["gpu_id"],
+            "runs": cleaned["runs"],
+            "std_weight": cleaned["std_weight"],
+            "continue_on_error": cleaned["continue_on_error"],
+        },
+    )
+    launch_experiment(run)
+    messages.success(request, text("message.ablation_queued", lang, run_id=run.pk))
+    return redirect(run)
+
+
+@require_POST
+def create_efficiency_run(request):
+    lang = get_ui_language(request)
+    form = EfficiencyForm(request.POST, prefix="efficiency", lang=lang)
+    if not form.is_valid():
+        return render(request, "lab/dashboard.html", _dashboard_context(lang=lang, efficiency_form=form))
+
+    cleaned = form.cleaned_data
+    run = ExperimentRun.objects.create(
+        name=cleaned["name"],
+        experiment_type=ExperimentRun.TYPE_EFFICIENCY,
+        dataset=cleaned["dataset"],
+        config={
+            "dataset": cleaned["dataset"],
+            "methods": cleaned["methods"],
+            "gpu_id": cleaned["gpu_id"],
+            "runs": cleaned["runs"],
+            "std_weight": cleaned["std_weight"],
+            "continue_on_error": cleaned["continue_on_error"],
+        },
+    )
+    launch_experiment(run)
+    messages.success(request, text("message.efficiency_queued", lang, run_id=run.pk))
+    return redirect(run)
+
+
+@require_POST
+def create_significance_run(request):
+    lang = get_ui_language(request)
+    form = SignificanceForm(request.POST, prefix="significance", lang=lang)
+    if not form.is_valid():
+        return render(request, "lab/dashboard.html", _dashboard_context(lang=lang, significance_form=form))
+
+    cleaned = form.cleaned_data
+    run = ExperimentRun.objects.create(
+        name=cleaned["name"],
+        experiment_type=ExperimentRun.TYPE_SIGNIFICANCE,
+        dataset=cleaned["dataset"],
+        config={
+            "dataset": cleaned["dataset"],
+            "comparison_pairs": cleaned["comparison_pairs"],
+            "gpu_id": cleaned["gpu_id"],
+            "runs": cleaned["runs"],
+            "eval_repeats": cleaned["eval_repeats"],
+            "std_weight": cleaned["std_weight"],
+            "alpha": cleaned["alpha"],
+            "continue_on_error": cleaned["continue_on_error"],
+        },
+    )
+    launch_experiment(run)
+    messages.success(request, text("message.significance_queued", lang, run_id=run.pk))
     return redirect(run)
 
 

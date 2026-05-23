@@ -9,11 +9,14 @@ from pathlib import Path
 from django.conf import settings
 from django.utils import timezone
 
-from .constants import METHOD_FILE_SLUG
+from .constants import METHOD_FILE_SLUG, METHOD_LABELS, SIGNIFICANCE_COMPARISON_METHODS
 from .models import ExperimentArtifact, ExperimentRun
 from .parsers import (
+    build_component_ablation_summary,
+    build_efficiency_summary,
     build_method_comparison_summary,
     build_sampling_bias_summary,
+    build_significance_summary,
     build_sensitivity_summary,
 )
 
@@ -192,6 +195,12 @@ def execute_experiment(run_id):
             summary = _run_sampling_bias(run)
         elif run.experiment_type == ExperimentRun.TYPE_SENSITIVITY:
             summary = _run_sensitivity(run)
+        elif run.experiment_type == ExperimentRun.TYPE_COMPONENT_ABLATION:
+            summary = _run_component_ablation(run)
+        elif run.experiment_type == ExperimentRun.TYPE_EFFICIENCY:
+            summary = _run_efficiency(run)
+        elif run.experiment_type == ExperimentRun.TYPE_SIGNIFICANCE:
+            summary = _run_significance(run)
         else:
             raise RuntimeError(f"Unsupported experiment type: {run.experiment_type}")
 
@@ -269,6 +278,12 @@ def _register_artifact(run, label, artifact_type, relative_path, metadata=None):
     )
 
 
+def _ordered_methods(methods):
+    order = ["grace", "gca", "ifl-gr", "ifl-gc"]
+    unique = list(dict.fromkeys(methods))
+    return [method for method in order if method in unique] + [method for method in unique if method not in order]
+
+
 def _run_method_comparison(run):
     config = run.config
     dataset = config["dataset"]
@@ -307,7 +322,7 @@ def _run_method_comparison(run):
     _register_artifact(run, "Unified Results CSV", ExperimentArtifact.TYPE_CSV, out_csv)
     for method_slug in ("iflgr", "gca", "iflgc"):
         grid_file = grid_dir / f"grid_search_{method_slug}_{dataset_slug}_results.csv"
-        method_label = {"iflgr": "IFL-GR", "gca": "GCA", "iflgc": "IFL-GC"}[method_slug]
+        method_label = {"iflgr": "SG-GR", "gca": "GCA", "iflgc": "SG-GC"}[method_slug]
         _register_artifact(run, f"{method_label} Grid Search", ExperimentArtifact.TYPE_CSV, grid_file)
 
     summary = build_method_comparison_summary(BASE_DIR / out_csv)
@@ -413,7 +428,7 @@ def _run_sensitivity(run):
             command.append("--continue_on_error")
 
         _run_command(run, command, f"sensitivity-{method}")
-        method_label = {"iflgr": "IFL-GR", "iflgc": "IFL-GC"}.get(method_slug, method_slug.upper())
+        method_label = {"iflgr": "SG-GR", "iflgc": "SG-GC"}.get(method_slug, method_slug.upper())
         _register_artifact(run, f"{method_label} Sensitivity CSV", ExperimentArtifact.TYPE_CSV, out_csv)
         csv_paths.append(out_csv)
 
@@ -447,6 +462,219 @@ def _run_sensitivity(run):
             "params": params,
             "plot_path": plot_png.as_posix(),
             "report_path": report_md.as_posix(),
+        }
+    )
+    return summary
+
+
+def _run_component_ablation(run):
+    config = run.config
+    dataset = config["dataset"]
+    dataset_slug = dataset.lower()
+    methods = _ordered_methods(config["methods"])
+    run_dir = Path("results") / "webapp" / f"run_{run.pk}"
+    plots_dir = run_dir / "plots"
+    out_csv = run_dir / f"extra_ablation_{dataset_slug}_results.csv"
+
+    command = [
+        sys.executable,
+        "experiments/component_ablation/run_component_ablation.py",
+        "--datasets",
+        dataset,
+        "--methods",
+        *methods,
+        "--gpu_id",
+        str(config["gpu_id"]),
+        "--runs",
+        str(config["runs"]),
+        "--std_weight",
+        str(config["std_weight"]),
+        "--out",
+        out_csv.as_posix(),
+    ]
+    if config.get("continue_on_error"):
+        command.append("--continue_on_error")
+
+    plot_command = [
+        sys.executable,
+        "experiments/component_ablation/plot_component_ablation.py",
+        "--inputs",
+        out_csv.as_posix(),
+        "--out_dir",
+        plots_dir.as_posix(),
+    ]
+
+    _run_command(run, command, "component-ablation")
+    _run_command(run, plot_command, "component-ablation-plot")
+
+    overview_png = plots_dir / "extra_ablation_overview.png"
+    change_png = plots_dir / "extra_ablation_drop_vs_full.png"
+    report_md = plots_dir / "extra_ablation_analysis.md"
+
+    _register_artifact(run, "Component Ablation CSV", ExperimentArtifact.TYPE_CSV, out_csv)
+    _register_artifact(run, "Component Ablation Overview Plot", ExperimentArtifact.TYPE_IMAGE, overview_png)
+    _register_artifact(run, "Component Ablation Change Plot", ExperimentArtifact.TYPE_IMAGE, change_png)
+    _register_artifact(run, "Component Ablation Analysis Report", ExperimentArtifact.TYPE_REPORT, report_md)
+
+    summary = build_component_ablation_summary([BASE_DIR / out_csv], BASE_DIR / report_md)
+    summary.update(
+        {
+            "dataset": dataset,
+            "methods": methods,
+            "method_labels": [METHOD_LABELS.get(method, method) for method in methods],
+            "main_csv": out_csv.as_posix(),
+            "plot_dir": plots_dir.as_posix(),
+        }
+    )
+    return summary
+
+
+def _run_efficiency(run):
+    config = run.config
+    dataset = config["dataset"]
+    dataset_slug = dataset.lower()
+    methods = _ordered_methods(config["methods"])
+    run_dir = Path("results") / "webapp" / f"run_{run.pk}"
+    plots_dir = run_dir / "plots"
+    out_csv = run_dir / f"efficiency_{dataset_slug}_results.csv"
+
+    command = [
+        sys.executable,
+        "experiments/efficiency/run_efficiency_experiment.py",
+        "--datasets",
+        dataset,
+        "--methods",
+        *methods,
+        "--gpu_id",
+        str(config["gpu_id"]),
+        "--runs",
+        str(config["runs"]),
+        "--std_weight",
+        str(config["std_weight"]),
+        "--out",
+        out_csv.as_posix(),
+    ]
+    if config.get("continue_on_error"):
+        command.append("--continue_on_error")
+
+    plot_command = [
+        sys.executable,
+        "experiments/efficiency/plot_efficiency_experiment.py",
+        "--inputs",
+        out_csv.as_posix(),
+        "--out_dir",
+        plots_dir.as_posix(),
+    ]
+
+    _run_command(run, command, "efficiency")
+    _run_command(run, plot_command, "efficiency-plot")
+
+    train_png = plots_dir / "efficiency_train_total_time.png"
+    wall_png = plots_dir / "efficiency_wall_time.png"
+    ratio_png = plots_dir / "efficiency_time_ratio.png"
+    report_md = plots_dir / "efficiency_analysis.md"
+
+    _register_artifact(run, "Efficiency CSV", ExperimentArtifact.TYPE_CSV, out_csv)
+    _register_artifact(run, "Efficiency Train Total Time Plot", ExperimentArtifact.TYPE_IMAGE, train_png)
+    _register_artifact(run, "Efficiency Wall Time Plot", ExperimentArtifact.TYPE_IMAGE, wall_png)
+    _register_artifact(run, "Efficiency Time Ratio Plot", ExperimentArtifact.TYPE_IMAGE, ratio_png)
+    _register_artifact(run, "Efficiency Analysis Report", ExperimentArtifact.TYPE_REPORT, report_md)
+
+    summary = build_efficiency_summary([BASE_DIR / out_csv], BASE_DIR / report_md)
+    summary.update(
+        {
+            "dataset": dataset,
+            "methods": methods,
+            "method_labels": [METHOD_LABELS.get(method, method) for method in methods],
+            "main_csv": out_csv.as_posix(),
+            "plot_dir": plots_dir.as_posix(),
+        }
+    )
+    return summary
+
+
+def _methods_for_significance_pairs(comparison_pairs):
+    methods = []
+    for pair in comparison_pairs:
+        baseline, target = SIGNIFICANCE_COMPARISON_METHODS[pair]
+        methods.extend([baseline, target])
+    return _ordered_methods(methods)
+
+
+def _run_significance(run):
+    config = run.config
+    dataset = config["dataset"]
+    dataset_slug = dataset.lower()
+    comparison_pairs = list(config["comparison_pairs"])
+    methods = _methods_for_significance_pairs(comparison_pairs)
+    run_dir = Path("results") / "webapp" / f"run_{run.pk}"
+    plots_dir = run_dir / "plots"
+    out_csv = run_dir / f"significance_{dataset_slug}_results.csv"
+
+    command = [
+        sys.executable,
+        "experiments/statistical_significance/run_significance_experiment.py",
+        "--datasets",
+        dataset,
+        "--methods",
+        *methods,
+        "--gpu_id",
+        str(config["gpu_id"]),
+        "--runs",
+        str(config["runs"]),
+        "--eval_repeats",
+        str(config["eval_repeats"]),
+        "--std_weight",
+        str(config["std_weight"]),
+        "--out",
+        out_csv.as_posix(),
+    ]
+    if config.get("continue_on_error"):
+        command.append("--continue_on_error")
+
+    analyze_command = [
+        sys.executable,
+        "experiments/statistical_significance/analyze_significance_results.py",
+        "--inputs",
+        out_csv.as_posix(),
+        "--out_dir",
+        plots_dir.as_posix(),
+        "--alpha",
+        str(config["alpha"]),
+    ]
+    plot_command = [
+        sys.executable,
+        "experiments/statistical_significance/plot_significance_results.py",
+        "--inputs",
+        out_csv.as_posix(),
+        "--out_dir",
+        plots_dir.as_posix(),
+    ]
+
+    _run_command(run, command, "significance")
+    _run_command(run, analyze_command, "significance-analyze")
+    _run_command(run, plot_command, "significance-plot")
+
+    summary_csv = plots_dir / "significance_tests_summary.csv"
+    mean_std_png = plots_dir / "significance_mean_std.png"
+    delta_png = plots_dir / "significance_paired_delta.png"
+    report_md = plots_dir / "significance_analysis.md"
+
+    _register_artifact(run, "Significance CSV", ExperimentArtifact.TYPE_CSV, out_csv)
+    _register_artifact(run, "Significance Tests Summary CSV", ExperimentArtifact.TYPE_CSV, summary_csv)
+    _register_artifact(run, "Significance Mean/Std Plot", ExperimentArtifact.TYPE_IMAGE, mean_std_png)
+    _register_artifact(run, "Significance Paired Delta Plot", ExperimentArtifact.TYPE_IMAGE, delta_png)
+    _register_artifact(run, "Significance Analysis Report", ExperimentArtifact.TYPE_REPORT, report_md)
+
+    summary = build_significance_summary([BASE_DIR / out_csv], BASE_DIR / summary_csv, BASE_DIR / report_md)
+    summary.update(
+        {
+            "dataset": dataset,
+            "methods": methods,
+            "comparison_pairs": comparison_pairs,
+            "main_csv": out_csv.as_posix(),
+            "summary_csv": summary_csv.as_posix(),
+            "plot_dir": plots_dir.as_posix(),
         }
     )
     return summary

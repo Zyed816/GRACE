@@ -8,6 +8,9 @@ class ExperimentRun(models.Model):
     TYPE_METHOD_COMPARISON = "method_comparison"
     TYPE_SAMPLING_BIAS = "sampling_bias"
     TYPE_SENSITIVITY = "sensitivity"
+    TYPE_COMPONENT_ABLATION = "component_ablation"
+    TYPE_EFFICIENCY = "efficiency"
+    TYPE_SIGNIFICANCE = "significance"
 
     STATUS_PENDING = "pending"
     STATUS_RUNNING = "running"
@@ -19,6 +22,9 @@ class ExperimentRun(models.Model):
         (TYPE_METHOD_COMPARISON, "方法比较流水线"),
         (TYPE_SAMPLING_BIAS, "采样偏差验证"),
         (TYPE_SENSITIVITY, "超参数敏感性分析"),
+        (TYPE_COMPONENT_ABLATION, "组件级消融实验"),
+        (TYPE_EFFICIENCY, "效率实验"),
+        (TYPE_SIGNIFICANCE, "统计显著性实验"),
     ]
 
     STATUS_CHOICES = [

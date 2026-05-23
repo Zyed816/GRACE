@@ -6,7 +6,14 @@ from django.utils import timezone
 
 from .constants import DATASET_CHOICES, METHOD_LABELS
 from .models import ExperimentArtifact, ExperimentRun
-from .parsers import build_method_comparison_summary, build_sampling_bias_summary, build_sensitivity_summary
+from .parsers import (
+    build_component_ablation_summary,
+    build_efficiency_summary,
+    build_method_comparison_summary,
+    build_sampling_bias_summary,
+    build_significance_summary,
+    build_sensitivity_summary,
+)
 from .ui_text import experiment_type_label, text
 
 
@@ -19,12 +26,19 @@ DATASET_ORDER = {label.lower(): index for index, (_, label) in enumerate(DATASET
 TYPE_ORDER = {
     ExperimentRun.TYPE_SAMPLING_BIAS: 0,
     ExperimentRun.TYPE_METHOD_COMPARISON: 1,
-    ExperimentRun.TYPE_SENSITIVITY: 2,
+    ExperimentRun.TYPE_COMPONENT_ABLATION: 2,
+    ExperimentRun.TYPE_EFFICIENCY: 3,
+    ExperimentRun.TYPE_SIGNIFICANCE: 4,
+    ExperimentRun.TYPE_SENSITIVITY: 5,
 }
 
 
 def _dataset_label(dataset_slug):
     return DATASET_LABELS.get(dataset_slug.lower(), dataset_slug.replace("_", " ").title())
+
+
+def _all_dataset_label(language):
+    return "全部数据集" if language == "zh" else "All Datasets"
 
 
 def _relative_path(path):
@@ -235,10 +249,142 @@ def _sensitivity_entries(language):
     return entries
 
 
+def _component_ablation_entries(language):
+    csv_paths = sorted(RESULTS_DIR.glob("extra_ablation_*_results.csv"))
+    if not csv_paths:
+        return []
+
+    experiment_type = ExperimentRun.TYPE_COMPONENT_ABLATION
+    artifacts = [_artifact("Component Ablation CSV", ExperimentArtifact.TYPE_CSV, path) for path in csv_paths]
+    artifacts.extend(
+        [
+            _artifact("Component Ablation Overview Plot", ExperimentArtifact.TYPE_IMAGE, PLOTS_DIR / "extra_ablation_overview.png"),
+            _artifact("Component Ablation Change Plot", ExperimentArtifact.TYPE_IMAGE, PLOTS_DIR / "extra_ablation_drop_vs_full.png"),
+            _artifact("Component Ablation Analysis Report", ExperimentArtifact.TYPE_REPORT, PLOTS_DIR / "extra_ablation_analysis.md"),
+        ]
+    )
+    artifacts = [artifact for artifact in artifacts if artifact]
+    report_path = PLOTS_DIR / "extra_ablation_analysis.md"
+    summary = build_component_ablation_summary(csv_paths, report_path)
+    summary.update({"dataset": _all_dataset_label(language), "csv_count": len(csv_paths)})
+
+    type_label = experiment_type_label(experiment_type, language)
+    return [
+        {
+            "slug": "component-ablation-all",
+            "title": f"{type_label} / {_all_dataset_label(language)}",
+            "experiment_type": experiment_type,
+            "type_label": type_label,
+            "dataset": _all_dataset_label(language),
+            "dataset_slug": "all",
+            "updated_at": _updated_at([(BASE_DIR / artifact["relative_path"]).resolve() for artifact in artifacts]),
+            "summary": summary,
+            "config": _official_config(
+                language,
+                location_key="official.location.extra",
+                dataset=_all_dataset_label(language),
+                experiment_type=experiment_type,
+                artifacts=artifacts,
+            ),
+            "artifacts": artifacts,
+        }
+    ]
+
+
+def _efficiency_entries(language):
+    csv_paths = sorted(RESULTS_DIR.glob("efficiency_*_results.csv"))
+    if not csv_paths:
+        return []
+
+    experiment_type = ExperimentRun.TYPE_EFFICIENCY
+    artifacts = [_artifact("Efficiency CSV", ExperimentArtifact.TYPE_CSV, path) for path in csv_paths]
+    artifacts.extend(
+        [
+            _artifact("Efficiency Train Total Time Plot", ExperimentArtifact.TYPE_IMAGE, PLOTS_DIR / "efficiency_train_total_time.png"),
+            _artifact("Efficiency Wall Time Plot", ExperimentArtifact.TYPE_IMAGE, PLOTS_DIR / "efficiency_wall_time.png"),
+            _artifact("Efficiency Time Ratio Plot", ExperimentArtifact.TYPE_IMAGE, PLOTS_DIR / "efficiency_time_ratio.png"),
+            _artifact("Efficiency Analysis Report", ExperimentArtifact.TYPE_REPORT, PLOTS_DIR / "efficiency_analysis.md"),
+        ]
+    )
+    artifacts = [artifact for artifact in artifacts if artifact]
+    report_path = PLOTS_DIR / "efficiency_analysis.md"
+    summary = build_efficiency_summary(csv_paths, report_path)
+    summary.update({"dataset": _all_dataset_label(language), "csv_count": len(csv_paths)})
+
+    type_label = experiment_type_label(experiment_type, language)
+    return [
+        {
+            "slug": "efficiency-all",
+            "title": f"{type_label} / {_all_dataset_label(language)}",
+            "experiment_type": experiment_type,
+            "type_label": type_label,
+            "dataset": _all_dataset_label(language),
+            "dataset_slug": "all",
+            "updated_at": _updated_at([(BASE_DIR / artifact["relative_path"]).resolve() for artifact in artifacts]),
+            "summary": summary,
+            "config": _official_config(
+                language,
+                location_key="official.location.extra",
+                dataset=_all_dataset_label(language),
+                experiment_type=experiment_type,
+                artifacts=artifacts,
+            ),
+            "artifacts": artifacts,
+        }
+    ]
+
+
+def _significance_entries(language):
+    csv_paths = sorted(RESULTS_DIR.glob("significance_*_results.csv"))
+    if not csv_paths:
+        return []
+
+    experiment_type = ExperimentRun.TYPE_SIGNIFICANCE
+    summary_csv = PLOTS_DIR / "significance_tests_summary.csv"
+    report_path = PLOTS_DIR / "significance_analysis.md"
+    artifacts = [_artifact("Significance CSV", ExperimentArtifact.TYPE_CSV, path) for path in csv_paths]
+    artifacts.extend(
+        [
+            _artifact("Significance Tests Summary CSV", ExperimentArtifact.TYPE_CSV, summary_csv),
+            _artifact("Significance Mean/Std Plot", ExperimentArtifact.TYPE_IMAGE, PLOTS_DIR / "significance_mean_std.png"),
+            _artifact("Significance Paired Delta Plot", ExperimentArtifact.TYPE_IMAGE, PLOTS_DIR / "significance_paired_delta.png"),
+            _artifact("Significance Analysis Report", ExperimentArtifact.TYPE_REPORT, report_path),
+        ]
+    )
+    artifacts = [artifact for artifact in artifacts if artifact]
+    summary = build_significance_summary(csv_paths, summary_csv if summary_csv.exists() else None, report_path)
+    summary.update({"dataset": _all_dataset_label(language), "csv_count": len(csv_paths)})
+
+    type_label = experiment_type_label(experiment_type, language)
+    return [
+        {
+            "slug": "significance-all",
+            "title": f"{type_label} / {_all_dataset_label(language)}",
+            "experiment_type": experiment_type,
+            "type_label": type_label,
+            "dataset": _all_dataset_label(language),
+            "dataset_slug": "all",
+            "updated_at": _updated_at([(BASE_DIR / artifact["relative_path"]).resolve() for artifact in artifacts]),
+            "summary": summary,
+            "config": _official_config(
+                language,
+                location_key="official.location.extra",
+                dataset=_all_dataset_label(language),
+                experiment_type=experiment_type,
+                artifacts=artifacts,
+            ),
+            "artifacts": artifacts,
+        }
+    ]
+
+
 def list_official_results(language="zh"):
     entries = [
         *_sampling_bias_entries(language),
         *_method_comparison_entries(language),
+        *_component_ablation_entries(language),
+        *_efficiency_entries(language),
+        *_significance_entries(language),
         *_sensitivity_entries(language),
     ]
     return sorted(
