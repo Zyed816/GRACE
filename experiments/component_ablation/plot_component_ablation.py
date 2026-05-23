@@ -25,9 +25,9 @@ METHOD_LABELS = {
 VARIANT_ORDER = ["full", "no_warmup", "single_mining", "uniform_weight"]
 VARIANT_LABELS = {
     "full": "Full",
-    "no_warmup": "w/o Warmup",
-    "single_mining": "w/o Dynamic Update",
-    "uniform_weight": "w/o Semantic Weight",
+    "no_warmup": "M-off",
+    "single_mining": "K-off",
+    "uniform_weight": "w-off",
 }
 VARIANT_COLORS = {
     "full": "#4E79A7",
@@ -196,14 +196,14 @@ def make_panel_plot(summary_df, metric, err_metric, ylabel, title, out_base, dpi
         raise RuntimeError("No dataset/method summary rows available for plotting.")
 
     fig, axes = plt.subplots(
-        nrows=len(datasets),
-        ncols=len(methods),
-        figsize=(4.5 * len(methods), 2.85 * len(datasets)),
+        nrows=len(methods),
+        ncols=len(datasets),
+        figsize=(3.2 * len(datasets), 2.85 * len(methods)),
         squeeze=False,
     )
 
-    for row_idx, dataset in enumerate(datasets):
-        for col_idx, method in enumerate(methods):
+    for row_idx, method in enumerate(methods):
+        for col_idx, dataset in enumerate(datasets):
             ax = axes[row_idx][col_idx]
             subset = summary_df[(summary_df["dataset"] == dataset) & (summary_df["method"] == method)].copy()
             draw_variant_bars(
@@ -213,13 +213,13 @@ def make_panel_plot(summary_df, metric, err_metric, ylabel, title, out_base, dpi
                 err_metric=err_metric,
                 baseline_zero=baseline_zero,
             )
-            ax.set_title(f"{dataset} / {METHOD_LABELS.get(method, method)}")
             if col_idx == 0:
-                ax.set_ylabel(ylabel)
-            if metric == "drop_vs_full":
+                ax.set_ylabel(f"{METHOD_LABELS.get(method, method)}\n{ylabel}")
+            if row_idx == len(methods) - 1:
+                ax.set_xlabel(dataset)
+            if metric in {"drop_vs_full", "delta_vs_full"}:
                 ax.axhline(0.0, color="#303030", linewidth=0.8)
 
-    fig.suptitle(title, fontsize=13, fontweight="bold", y=1.01)
     fig.tight_layout()
     png_path = out_base.with_suffix(".png")
     pdf_path = out_base.with_suffix(".pdf")
@@ -344,10 +344,10 @@ def main():
 
     drop_png, drop_pdf = make_panel_plot(
         summary_df=summary_df,
-        metric="drop_vs_full",
+        metric="delta_vs_full",
         err_metric=None,
-        ylabel="Drop vs Full (pp)",
-        title="SG-GCL Component Ablation: Drop vs Full",
+        ylabel="Change vs Full (%)",
+        title="",
         out_base=out_dir / "extra_ablation_drop_vs_full",
         dpi=args.dpi,
         baseline_zero=False,

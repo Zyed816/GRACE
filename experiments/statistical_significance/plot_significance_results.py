@@ -16,15 +16,14 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from experiments.statistical_significance.analyze_significance_results import COMPARISONS
 from experiments.statistical_significance.run_significance_experiment import DATASET_CHOICES, METHOD_CHOICES
 
 
 METHOD_LABELS = {
     "grace": "GRACE",
     "gca": "GCA",
-    "ifl-gr": "IFL-GR",
-    "ifl-gc": "IFL-GC",
+    "ifl-gr": "SG-GR",
+    "ifl-gc": "SG-GC",
 }
 METHOD_COLORS = {
     "grace": "#4E79A7",
@@ -37,6 +36,10 @@ METRIC_LABELS = {
     "F1Mi_mean": "Micro-F1",
     "F1Ma_mean": "Macro-F1",
 }
+PRIMARY_COMPARISONS = [
+    ("grace", "ifl-gr", "SG-GR\nvs GRACE"),
+    ("gca", "ifl-gc", "SG-GC\nvs GCA"),
+]
 
 
 def resolve_input_paths(repo_root, explicit_inputs):
@@ -127,7 +130,16 @@ def make_mean_std_plot(df, out_dir, dpi):
                 legend_handles.append(bars[0])
                 legend_labels.append(METHOD_LABELS[method])
 
-        ax.set_title(METRIC_LABELS[metric])
+        ax.text(
+            0.5,
+            1.03,
+            METRIC_LABELS[metric],
+            transform=ax.transAxes,
+            ha="center",
+            va="bottom",
+            fontsize=9.5,
+            fontweight="semibold",
+        )
         ax.set_xticks(x)
         ax.set_xticklabels(datasets, rotation=20, ha="right")
         ax.set_ylabel("Score (%)")
@@ -137,7 +149,7 @@ def make_mean_std_plot(df, out_dir, dpi):
         ax.spines["right"].set_visible(False)
 
     fig.legend(legend_handles, legend_labels, loc="upper center", ncol=len(legend_handles), frameon=False)
-    fig.tight_layout(rect=[0.0, 0.0, 1.0, 0.90])
+    fig.tight_layout(rect=[0.0, 0.0, 1.0, 0.86])
     png = out_dir / "significance_mean_std.png"
     pdf = out_dir / "significance_mean_std.pdf"
     fig.savefig(png, dpi=dpi)
@@ -153,19 +165,17 @@ def make_delta_plot(df, out_dir, dpi):
     run_df["robust_score"] = pd.to_numeric(run_df["robust_score"], errors="coerce")
 
     datasets = [item for item in DATASET_CHOICES if item in set(run_df["dataset"].astype(str))]
-    comparison_labels = [
-        f"{METHOD_LABELS[target]}-{METHOD_LABELS[base]}"
-        for base, target, _kind in COMPARISONS
-    ]
+    comparison_labels = [label for _base, _target, label in PRIMARY_COMPARISONS]
     x = np.arange(len(comparison_labels), dtype=float)
 
-    fig, axes = plt.subplots(2, 2, figsize=(8.8, 5.2), sharey=True)
-    axes = axes.ravel()
-    for ax_idx, (ax, dataset) in enumerate(zip(axes, datasets)):
+    panel_stats = {}
+    y_values = [0.0]
+    for dataset in datasets:
         dataset_df = run_df[run_df["dataset"].astype(str) == dataset]
         means = []
         errors = []
-        for base, target, _kind in COMPARISONS:
+        significant_flags = []
+        for base, target, _label in PRIMARY_COMPARISONS:
             base_df = dataset_df[dataset_df["method"].astype(str) == base].set_index("run_idx")
             target_df = dataset_df[dataset_df["method"].astype(str) == target].set_index("run_idx")
             shared = sorted(set(base_df.index) & set(target_df.index), key=lambda item: int(float(item)))
@@ -175,36 +185,84 @@ def make_delta_plot(df, out_dir, dpi):
                 t = pd.to_numeric(pd.Series([target_df.loc[run_idx, "robust_score"]]), errors="coerce").iloc[0]
                 if pd.notna(b) and pd.notna(t):
                     deltas.append((float(t) - float(b)) * 100.0)
-            means.append(float(np.mean(deltas)) if deltas else np.nan)
-            errors.append(float(np.std(deltas, ddof=0)) if len(deltas) > 1 else 0.0)
 
-        bars = ax.bar(x, means, yerr=errors, color="#5B8C85", edgecolor="white", linewidth=0.45, capsize=2.2)
+            mean = float(np.mean(deltas)) if deltas else np.nan
+            error = float(np.std(deltas, ddof=0)) if len(deltas) > 1 else 0.0
+            means.append(mean)
+            errors.append(error)
+            if not np.isnan(mean):
+                y_values.extend([mean - error, mean + error])
+
+            test_df = df[
+                (df["stage"] == "test")
+                & (df["dataset"].astype(str) == dataset)
+                & (df["metric"].astype(str) == "robust_score")
+                & (df["baseline_method"].astype(str) == base)
+                & (df["target_method"].astype(str) == target)
+            ]
+            is_significant = (
+                not test_df.empty
+                and str(test_df.iloc[0].get("significant", "")).lower() == "true"
+                and mean > 0
+            )
+            significant_flags.append(is_significant)
+        panel_stats[dataset] = {
+            "means": means,
+            "errors": errors,
+            "significant": significant_flags,
+        }
+
+    finite_y = [value for value in y_values if np.isfinite(value)]
+    y_low = min(finite_y)
+    y_high = max(finite_y)
+    y_span = max(y_high - y_low, 1.0)
+    y_lim = (y_low - y_span * 0.22, y_high + y_span * 0.28)
+    star_offset = y_span * 0.06
+
+    fig, axes = plt.subplots(2, 2, figsize=(8.8, 5.2), sharey=True)
+    axes = axes.ravel()
+    for ax_idx, (ax, dataset) in enumerate(zip(axes, datasets)):
+        stats = panel_stats[dataset]
+        means = stats["means"]
+        errors = stats["errors"]
+        colors = [METHOD_COLORS[target] for _base, target, _label in PRIMARY_COMPARISONS]
+        bars = ax.bar(
+            x,
+            means,
+            yerr=errors,
+            color=colors,
+            edgecolor="white",
+            linewidth=0.45,
+            capsize=2.2,
+        )
         ax.axhline(0.0, color="black", linewidth=0.75)
-        ax.set_title(f"({chr(ord('a') + ax_idx)}) {dataset}", loc="left")
+        ax.text(
+            0.03,
+            0.96,
+            dataset,
+            transform=ax.transAxes,
+            ha="left",
+            va="top",
+            fontsize=9.5,
+            fontweight="semibold",
+        )
         ax.set_xticks(x)
-        ax.set_xticklabels(comparison_labels, rotation=25, ha="right")
-        ax.set_ylabel("Robust Score Delta (pp)" if ax_idx % 2 == 0 else "")
+        ax.set_xticklabels(comparison_labels, rotation=0, ha="center")
+        ax.set_ylabel("Robust Score Change vs Baseline (%)" if ax_idx % 2 == 0 else "")
         ax.grid(axis="y", color="#d9dde3", linewidth=0.6, alpha=0.9)
         ax.set_axisbelow(True)
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
+        ax.set_ylim(*y_lim)
 
-        test_df = df[
-            (df["stage"] == "test")
-            & (df["dataset"].astype(str) == dataset)
-            & (df["metric"].astype(str) == "robust_score")
-        ]
-        for bar_idx, (base, target, _kind) in enumerate(COMPARISONS):
-            match = test_df[
-                (test_df["baseline_method"].astype(str) == base)
-                & (test_df["target_method"].astype(str) == target)
-            ]
-            if match.empty or str(match.iloc[0].get("significant", "")) != "True":
+        for bar_idx, is_significant in enumerate(stats["significant"]):
+            if not is_significant:
                 continue
             height = means[bar_idx]
             if np.isnan(height):
                 continue
-            ax.text(bar_idx, height + (1.0 if height >= 0 else -1.0), "*", ha="center", va="center", fontsize=12)
+            y_pos = height + errors[bar_idx] + star_offset
+            ax.text(bar_idx, y_pos, "*", ha="center", va="center", fontsize=12)
 
     for ax in axes[len(datasets) :]:
         ax.set_visible(False)

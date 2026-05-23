@@ -172,6 +172,8 @@ python experiments/component_ablation/plot_component_ablation.py
 
 ```text
 results/efficiency_<dataset>_results.csv
+results/plots/efficiency_train_total_time.png
+results/plots/efficiency_train_total_time.pdf
 results/plots/efficiency_wall_time.png
 results/plots/efficiency_wall_time.pdf
 results/plots/efficiency_time_ratio.png

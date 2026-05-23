@@ -200,15 +200,18 @@ def make_panel_plot(summary_df, metric, err_metric, ylabel, title, out_base, dpi
     if not datasets:
         raise RuntimeError("No dataset summary rows available for plotting.")
 
+    ncols = 2 if len(datasets) > 1 else 1
+    nrows = (len(datasets) + ncols - 1) // ncols
     fig, axes = plt.subplots(
-        nrows=len(datasets),
-        ncols=1,
-        figsize=(6.2, 2.85 * len(datasets)),
+        nrows=nrows,
+        ncols=ncols,
+        figsize=(4.8 * ncols, 2.9 * nrows),
         squeeze=False,
     )
 
-    for row_idx, dataset in enumerate(datasets):
-        ax = axes[row_idx][0]
+    for idx, dataset in enumerate(datasets):
+        row_idx, col_idx = divmod(idx, ncols)
+        ax = axes[row_idx][col_idx]
         subset = summary_df[summary_df["dataset"] == dataset].copy()
         draw_method_bars(
             ax,
@@ -222,7 +225,10 @@ def make_panel_plot(summary_df, metric, err_metric, ylabel, title, out_base, dpi
         if metric == "time_ratio_vs_grace":
             ax.axhline(1.0, color="#303030", linewidth=0.8)
 
-    fig.suptitle(title, fontsize=13, fontweight="bold", y=1.01)
+    for idx in range(len(datasets), nrows * ncols):
+        row_idx, col_idx = divmod(idx, ncols)
+        axes[row_idx][col_idx].set_visible(False)
+
     fig.tight_layout()
     png_path = out_base.with_suffix(".png")
     pdf_path = out_base.with_suffix(".pdf")
@@ -307,6 +313,18 @@ def main():
 
     configure_plot_style()
     generated = []
+
+    train_png, train_pdf = make_panel_plot(
+        summary_df=summary_df,
+        metric="train_total_sec",
+        err_metric="train_total_std_sec",
+        ylabel="Train Total Time (s)",
+        title="",
+        out_base=out_dir / "efficiency_train_total_time",
+        dpi=args.dpi,
+        baseline_zero=True,
+    )
+    generated.extend([train_png, train_pdf])
 
     wall_png, wall_pdf = make_panel_plot(
         summary_df=summary_df,

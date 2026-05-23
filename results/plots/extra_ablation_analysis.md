@@ -1,15 +1,25 @@
 # SG-GCL Component Ablation Analysis
 
 ## Data Status
-- `results\extra_ablation_cora_results.csv`: status=ok, rows=8, summary_rows=4
+- `results\extra_ablation_citeseer_results.csv`: status=ok, rows=32, summary_rows=8
+- `results\extra_ablation_cora_results.csv`: status=ok, rows=32, summary_rows=8
+- `results\extra_ablation_dblp_results.csv`: status=ok, rows=32, summary_rows=8
+- `results\extra_ablation_pubmed_results.csv`: status=ok, rows=32, summary_rows=8
 
 ## Component Impact
-- w/o Warmup: mean drop=0.0047, max drop=0.0047, positive drops=1/1.
-- w/o Dynamic Update: mean drop=-0.0053, max drop=-0.0053, positive drops=0/1.
-- w/o Semantic Weight: mean drop=-0.0004, max drop=-0.0004, positive drops=0/1.
+- M-off: mean drop=0.0014, max drop=0.0152, positive drops=5/8.
+- K-off: mean drop=-0.0017, max drop=0.0052, positive drops=3/8.
+- w-off: mean drop=0.0010, max drop=0.0091, positive drops=4/8.
 
 ## Dataset And Method Details
-- Cora / SG-GR: full robust=0.8195; w/o Warmup robust=0.8147, drop=+0.0047; w/o Dynamic Update robust=0.8248, drop=-0.0053; w/o Semantic Weight robust=0.8198, drop=-0.0004.
+- Cora / SG-GR: full robust=0.8206; M-off robust=0.8196, drop=+0.0010; K-off robust=0.8285, drop=-0.0079; w-off robust=0.8176, drop=+0.0030.
+- Cora / SG-GC: full robust=0.8230; M-off robust=0.8280, drop=-0.0050; K-off robust=0.8236, drop=-0.0006; w-off robust=0.8248, drop=-0.0018.
+- CiteSeer / SG-GR: full robust=0.7099; M-off robust=0.7086, drop=+0.0013; K-off robust=0.7122, drop=-0.0023; w-off robust=0.7109, drop=-0.0011.
+- CiteSeer / SG-GC: full robust=0.7132; M-off robust=0.6981, drop=+0.0152; K-off robust=0.7080, drop=+0.0052; w-off robust=0.7106, drop=+0.0026.
+- PubMed / SG-GR: full robust=0.7968; M-off robust=0.7979, drop=-0.0010; K-off robust=0.7965, drop=+0.0003; w-off robust=0.7982, drop=-0.0013.
+- PubMed / SG-GC: full robust=0.7935; M-off robust=0.8033, drop=-0.0097; K-off robust=0.8003, drop=-0.0067; w-off robust=0.7964, drop=-0.0029.
+- DBLP / SG-GR: full robust=0.7153; M-off robust=0.7070, drop=+0.0083; K-off robust=0.7109, drop=+0.0044; w-off robust=0.7062, drop=+0.0091.
+- DBLP / SG-GC: full robust=0.7029; M-off robust=0.7018, drop=+0.0011; K-off robust=0.7089, drop=-0.0060; w-off robust=0.7027, drop=+0.0002.
 
 ## Generated Files
 - `results\plots\extra_ablation_overview.png`

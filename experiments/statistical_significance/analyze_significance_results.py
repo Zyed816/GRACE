@@ -30,9 +30,13 @@ METRICS = ["robust_score", "F1Mi_mean", "F1Ma_mean"]
 METHOD_LABELS = {
     "grace": "GRACE",
     "gca": "GCA",
-    "ifl-gr": "IFL-GR",
-    "ifl-gc": "IFL-GC",
+    "ifl-gr": "SG-GR",
+    "ifl-gc": "SG-GC",
 }
+PRIMARY_COMPARISON_ORDER = [
+    ("grace", "ifl-gr"),
+    ("gca", "ifl-gc"),
+]
 
 
 def read_rows(path):
@@ -250,41 +254,66 @@ def apply_holm(test_rows, alpha):
 
 def build_report(all_test_rows, output_summary):
     lines = [
-        "# Statistical Significance Analysis",
+        "# 统计显著性实验说明与结果",
         "",
-        "## Rule",
-        "- Primary test: paired Wilcoxon signed-rank test over shared training seeds.",
-        "- Holm-Bonferroni correction is applied within each metric.",
-        "- A method is reported as significantly better only when adjusted p < 0.05 and mean delta > 0.",
+        "## 实验说明",
         "",
-        "## Results",
+        "本实验用于判断 SG-GCL 的提升是否稳定，而不是只由个别随机种子造成。实验只关注两组主要比较：SG-GR vs GRACE，以及 SG-GC vs GCA。",
+        "",
+        "每组比较都使用相同 seed 下的配对结果。本文先计算目标方法和基线方法的差值，即 `目标方法 robust_score - 基线方法 robust_score`。差值为正表示目标方法更好，差值为负表示目标方法更差。",
+        "",
+        "p 值用于判断这种差值是否可能只是随机波动造成的。简单来说，在“两个方法没有稳定差异”的假设下，p 值表示观察到当前差异或更明显差异的可能性。p 值越小，说明当前差异越不像随机波动。由于同时进行了多组比较，本文使用 Holm 方法对 p 值进行校正。",
+        "",
+        "判断规则为：只有当 Holm 校正后的 p 值小于0.05，并且平均差值大于0时，才认为目标方法显著优于基线方法。图中的星号 `*` 也表示这个含义。没有星号表示未达到“显著优于”的标准。",
+        "",
+        "## 主要结果",
     ]
 
     if not all_test_rows:
         lines.append("- No valid paired test rows were generated.")
     else:
+        primary_robust_rows = [
+            row
+            for row in all_test_rows
+            if row.get("notes") == "primary" and row.get("metric") == "robust_score"
+        ]
+        comparison_rank = {
+            pair: idx for idx, pair in enumerate(PRIMARY_COMPARISON_ORDER)
+        }
         ordered = sorted(
-            all_test_rows,
+            primary_robust_rows,
             key=lambda row: (
                 DATASET_CHOICES.index(row["dataset"]) if row["dataset"] in DATASET_CHOICES else 99,
-                METRICS.index(row["metric"]) if row["metric"] in METRICS else 99,
-                row["baseline_method"],
-                row["target_method"],
+                comparison_rank.get((row["baseline_method"], row["target_method"]), 99),
             ),
         )
         for row in ordered:
-            sig_text = "significant" if row["significant"] == "True" else "not significant"
+            sig_text = "是" if row["significant"] == "True" else "否"
+            star_text = "（*）" if row["significant"] == "True" else ""
+            mean_delta = float(row["mean_delta"])
             lines.append(
                 "- "
-                f"{row['dataset']} {row['metric']} "
+                f"{row['dataset']} "
                 f"{METHOD_LABELS.get(row['target_method'], row['target_method'])} vs "
                 f"{METHOD_LABELS.get(row['baseline_method'], row['baseline_method'])}: "
-                f"delta={float(row['mean_delta']):+.4f}, "
-                f"p_holm={float(row['p_value_holm']):.4f}, "
-                f"{sig_text}."
+                f"平均差值={mean_delta:+.4f}（约{mean_delta * 100:+.2f}%）, "
+                f"Holm校正p值={float(row['p_value_holm']):.4f}, "
+                f"显著优于={sig_text}{star_text}。"
             )
 
-    lines.extend(["", "## Generated Files", f"- `{output_summary.as_posix()}`"])
+    lines.extend(
+        [
+            "",
+            "## 结果解读",
+            "",
+            "- Cora 和 PubMed 上，两组主要比较均达到显著优于，说明 SG-GCL 在这两个数据集上的提升比较稳定。",
+            "- DBLP 上，SG-GR 显著优于 GRACE，但 SG-GC 没有显著优于 GCA，说明该数据集上 SG-GR 更稳定。",
+            "- CiteSeer 上，两组主要比较都没有体现出 SG 方法显著优于基线方法，不能强行解释为稳定提升。",
+            "",
+            "## 生成文件",
+            f"- `{output_summary.as_posix()}`",
+        ]
+    )
     return "\n".join(lines) + "\n"
 
 
