@@ -10,19 +10,21 @@ import pandas as pd
 from matplotlib.lines import Line2D
 
 
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+
 METHOD_FILE_SLUG = {
     "ifl-gr": "iflgr",
     "ifl-gc": "iflgc",
 }
 
 METHOD_LABELS = {
-    "ifl-gr": "IFL-GR",
-    "ifl-gc": "IFL-GC",
+    "ifl-gr": "SG-GR",
+    "ifl-gc": "SG-GC",
 }
 
 METHOD_COLORS = {
-    "ifl-gr": "#1B4E8A",
-    "ifl-gc": "#B21F35",
+    "ifl-gr": "#59A14F",
+    "ifl-gc": "#E15759",
 }
 
 METHOD_MARKERS = {
@@ -77,7 +79,7 @@ NUMERIC_COLUMNS = [
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Plot IFL-GR / IFL-GC sensitivity-analysis CSV files and generate a short report."
+        description="Plot SG-GR / SG-GC sensitivity-analysis CSV files and generate a short report."
     )
     parser.add_argument("--dataset", type=str, default="Cora")
     parser.add_argument(
@@ -119,6 +121,13 @@ def resolve_input_paths(grace_dir, dataset, methods, explicit_inputs):
             os.path.join(grace_dir, "results", f"sensitivity_{method_slug}_{slug}_results.csv")
         )
     return paths
+
+
+def project_relpath(path):
+    try:
+        return os.path.relpath(path, PROJECT_ROOT)
+    except ValueError:
+        return os.fspath(path)
 
 
 def load_summary_rows(csv_path):
@@ -165,20 +174,21 @@ def format_value(param_name, value):
 
 
 def configure_plot_style():
+    plt.rcdefaults()
     plt.rcParams.update(
         {
             "font.family": "serif",
-            "font.serif": ["Times New Roman", "STIXGeneral", "DejaVu Serif", "STSong"],
+            "font.serif": ["Times New Roman", "Times", "DejaVu Serif"],
             "mathtext.fontset": "stix",
-            "font.size": 10,
-            "axes.labelsize": 10,
-            "axes.titlesize": 11,
+            "font.size": 9,
+            "axes.labelsize": 9.5,
+            "axes.titlesize": 10,
             "axes.titleweight": "semibold",
-            "axes.edgecolor": "#202124",
-            "axes.linewidth": 0.9,
-            "xtick.labelsize": 8.5,
-            "ytick.labelsize": 8.5,
-            "legend.fontsize": 9,
+            "axes.edgecolor": "#303030",
+            "axes.linewidth": 0.8,
+            "xtick.labelsize": 8,
+            "ytick.labelsize": 8,
+            "legend.fontsize": 8.5,
             "figure.facecolor": "white",
             "axes.facecolor": "white",
             "savefig.facecolor": "white",
@@ -217,17 +227,16 @@ def robust_score_limits(summary_df):
 
 
 def style_axis(ax, show_ylabel=False):
-    ax.grid(axis="y", alpha=0.22, linestyle="--", linewidth=0.65)
-    ax.grid(axis="x", alpha=0.10, linestyle=":", linewidth=0.5)
+    ax.grid(axis="y", color="#d9dde3", linewidth=0.6, alpha=0.85)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
-    ax.tick_params(axis="both", direction="out", length=3.5, width=0.8)
+    ax.set_axisbelow(True)
+    ax.tick_params(axis="both", direction="out", length=3.2, width=0.8, colors="#303030")
     if show_ylabel:
         ax.set_ylabel("Robust Score (%)")
 
 
 def draw_robust_param_axis(ax, summary_df, methods, param_name, y_limits=None, show_ylabel=False):
-    ax.set_title(PARAM_LABELS[param_name], pad=4)
     ax.set_xlabel(PARAM_LABELS[param_name])
     style_axis(ax, show_ylabel=show_ylabel)
 
@@ -304,7 +313,6 @@ def make_plot(dataset, methods, summary_df, out_path):
     for row_idx, (metric_col, metric_spec) in enumerate(METRIC_SPECS.items()):
         for col_idx, param_name in enumerate(PARAM_ORDER):
             ax = axes[row_idx][col_idx]
-            ax.set_title(PARAM_LABELS[param_name], fontsize=12, fontweight="semibold")
             style_axis(ax, show_ylabel=col_idx == 0)
 
             has_any_data = False
@@ -407,11 +415,10 @@ def make_plot(dataset, methods, summary_df, out_path):
             loc="upper center",
             ncol=len(legend_map),
             frameon=False,
-            bbox_to_anchor=(0.5, 1.02),
+            bbox_to_anchor=(0.5, 1.01),
         )
 
-    fig.suptitle(f"{dataset} Sensitivity Analysis (Robust Score)", fontsize=14, fontweight="bold", y=1.08)
-    fig.tight_layout()
+    fig.tight_layout(rect=[0.0, 0.0, 1.0, 0.94])
     fig.savefig(out_path, dpi=220, bbox_inches="tight")
     plt.close(fig)
 
@@ -469,10 +476,10 @@ def make_combined_robust_plot(grace_dir, datasets, methods, out_dir, dpi):
         fig.text(
             (left + right) * 0.5,
             top + 0.026,
-            dataset,
+            f"({chr(ord('a') + index)}) {dataset}",
             ha="center",
             va="bottom",
-            fontsize=14,
+            fontsize=10.5,
             fontweight="semibold",
         )
 
@@ -506,9 +513,9 @@ def make_combined_robust_plot(grace_dir, datasets, methods, out_dir, dpi):
         loc="upper center",
         bbox_to_anchor=(0.5, 0.975),
         ncol=len(legend_handles),
-        frameon=True,
-        fancybox=False,
-        edgecolor="#C7CBD1",
+        frameon=False,
+        handlelength=1.6,
+        columnspacing=1.6,
     )
 
     png_path = os.path.join(out_dir, "ifl_sensitivity_robust_overview.png")
@@ -574,14 +581,14 @@ def build_report(dataset, input_infos, summary_df, out_png):
     lines = [
         f"# {dataset} Sensitivity Analysis",
         "",
-        f"- Plot: `{os.path.relpath(out_png)}`",
+        f"- Plot: `{project_relpath(out_png)}`",
         "",
         "## Data Status",
     ]
 
     for info in input_infos:
         lines.append(
-            f"- `{os.path.relpath(info['path'])}`: status={info['status']}, "
+            f"- `{project_relpath(info['path'])}`: status={info['status']}, "
             f"rows={info['all_rows']}, summary_rows={info['summary_rows']}"
         )
 
@@ -607,8 +614,7 @@ def build_report(dataset, input_infos, summary_df, out_png):
 
 def main():
     args = parse_args()
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    grace_dir = os.path.abspath(os.path.join(script_dir, "..", ".."))
+    grace_dir = PROJECT_ROOT
     out_dir = os.path.join(grace_dir, args.out_dir)
     os.makedirs(out_dir, exist_ok=True)
     configure_plot_style()

@@ -12,10 +12,10 @@
 - GRACE uses its baseline repeated runs directly.
 
 ## Winner Snapshot
-- Cora: best Robust Score = IFL-GR (0.8394); best Micro-F1 = IFL-GR (0.8424); best Macro-F1 = IFL-GC (0.8292).
-- CiteSeer: best Robust Score = IFL-GC (0.7149); best Micro-F1 = GCA (0.7188); best Macro-F1 = IFL-GC (0.6516).
-- PubMed: best Robust Score = IFL-GC (0.7961); best Micro-F1 = IFL-GC (0.7973); best Macro-F1 = IFL-GC (0.7968).
-- DBLP: best Robust Score = IFL-GR (0.7221); best Micro-F1 = IFL-GR (0.7247); best Macro-F1 = IFL-GC (0.6448).
+- Cora: best Robust Score = SG-GR (0.8394); best Micro-F1 = SG-GR (0.8424); best Macro-F1 = SG-GC (0.8292).
+- CiteSeer: best Robust Score = SG-GC (0.7149); best Micro-F1 = GCA (0.7188); best Macro-F1 = SG-GC (0.6516).
+- PubMed: best Robust Score = SG-GC (0.7961); best Micro-F1 = SG-GC (0.7973); best Macro-F1 = SG-GC (0.7968).
+- DBLP: best Robust Score = SG-GR (0.7221); best Micro-F1 = SG-GR (0.7247); best Macro-F1 = SG-GC (0.6448).
 
 ## Generated Files
 - `D:/dissertation/openSourceCode/GRACE/results/plots/method_comparison_best_verified_summary.csv`

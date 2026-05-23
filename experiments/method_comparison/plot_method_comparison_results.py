@@ -17,8 +17,8 @@ METHOD_ORDER = ["grace", "gca", "ifl-gr", "ifl-gc"]
 METHOD_LABELS = {
     "grace": "GRACE",
     "gca": "GCA",
-    "ifl-gr": "IFL-GR",
-    "ifl-gc": "IFL-GC",
+    "ifl-gr": "SG-GR",
+    "ifl-gc": "SG-GC",
 }
 METHOD_COLORS = {
     "grace": "#4E79A7",
@@ -28,7 +28,7 @@ METHOD_COLORS = {
 }
 
 DATASET_ORDER = ["Cora", "CiteSeer", "PubMed", "DBLP"]
-OVERVIEW_DATASET_ORDER = ["Cora", "CiteSeer", "DBLP", "PubMed"]
+OVERVIEW_DATASET_ORDER = DATASET_ORDER
 DATASET_SLUG_TO_LABEL = {
     "cora": "Cora",
     "citeseer": "CiteSeer",
@@ -262,7 +262,7 @@ def configure_plot_style():
             "axes.titlesize": 10,
             "axes.titleweight": "semibold",
             "axes.edgecolor": "#303030",
-            "axes.linewidth": 0.7,
+            "axes.linewidth": 0.8,
             "xtick.labelsize": 8.2,
             "ytick.labelsize": 8.2,
             "xtick.major.size": 3.0,
@@ -341,7 +341,7 @@ def annotate_bars(ax, bars, values):
 
 
 def make_metric_plot(summary_df, metric_name, out_dir, dpi, annotate):
-    value_col, _err_col = metric_value_columns(metric_name)
+    value_col, err_col = metric_value_columns(metric_name)
     metric_spec = METRIC_SPECS[metric_name]
 
     datasets = [d for d in DATASET_ORDER if d in set(summary_df["dataset"].astype(str))]
@@ -351,6 +351,7 @@ def make_metric_plot(summary_df, metric_name, out_dir, dpi, annotate):
     fig, ax = plt.subplots(figsize=(7.0, 4.2))
 
     all_values = []
+    all_errors = []
     legend_handles = []
     legend_labels = []
 
@@ -359,6 +360,7 @@ def make_metric_plot(summary_df, metric_name, out_dir, dpi, annotate):
         subset = subset.set_index(subset["dataset"].astype(str)).reindex(datasets)
 
         values = to_plot_units(subset[value_col].to_numpy(dtype=float))
+        errors = to_plot_units(subset[err_col].fillna(0.0).to_numpy(dtype=float)) if err_col in subset else None
         positions = x + (idx - 1.5) * width
 
         bars = ax.bar(
@@ -367,26 +369,50 @@ def make_metric_plot(summary_df, metric_name, out_dir, dpi, annotate):
             width=width,
             label=METHOD_LABELS[method],
             color=METHOD_COLORS[method],
+            edgecolor="white",
+            linewidth=0.45,
+            yerr=errors,
+            capsize=2.2 if errors is not None else 0,
+            error_kw={
+                "elinewidth": 0.65,
+                "capthick": 0.65,
+                "ecolor": "#3b3b3b",
+            },
         )
 
         if annotate:
             annotate_bars(ax, bars, values)
 
         all_values.append(values)
+        all_errors.append(errors if errors is not None else np.zeros_like(values))
         legend_handles.append(bars[0])
         legend_labels.append(METHOD_LABELS[method])
 
-    lower, upper = compute_axis_limits(np.array(all_values), np.zeros_like(np.array(all_values)), metric_name)
+    lower, upper = compute_axis_limits(np.array(all_values), np.array(all_errors), metric_name)
     ax.set_ylim(lower, upper)
     if metric_name == "delta_vs_grace":
-        ax.axhline(0.0, color="black", linewidth=0.8)
+        ax.axhline(0.0, color="#303030", linewidth=0.8)
 
     ax.set_xticks(x)
     ax.set_xticklabels(datasets)
     ax.set_ylabel(metric_axis_label(metric_name))
-    ax.set_title(metric_spec["label"])
-    ax.legend(legend_handles, legend_labels, loc="upper right", frameon=True)
-    fig.tight_layout()
+    ax.grid(axis="y", color="#d9dde3", linewidth=0.6, alpha=0.9)
+    ax.set_axisbelow(True)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.tick_params(axis="both", colors="#303030", pad=2)
+    ax.margins(x=0.04)
+    ax.legend(
+        legend_handles,
+        legend_labels,
+        loc="upper center",
+        bbox_to_anchor=(0.5, 1.12),
+        ncol=len(legend_handles),
+        frameon=False,
+        handlelength=1.6,
+        columnspacing=1.6,
+    )
+    fig.tight_layout(rect=[0.0, 0.0, 1.0, 0.93])
 
     png_path = out_dir / f"{metric_spec['file_stem']}.png"
     pdf_path = out_dir / f"{metric_spec['file_stem']}.pdf"
@@ -462,7 +488,19 @@ def make_overview_plot(summary_df, out_dir, dpi):
         ax.set_ylim(lower, upper)
         ax.set_xticks(x)
         ax.set_xticklabels(metric_labels)
-        ax.set_title(f"({chr(ord('a') + panel_idx)}) {dataset}", loc="left", pad=4)
+        ax.annotate(
+            f"({chr(ord('a') + panel_idx)}) {dataset}",
+            xy=(0.0, 1.0),
+            xycoords="axes fraction",
+            xytext=(0, 7),
+            textcoords="offset points",
+            transform=ax.transAxes,
+            ha="left",
+            va="bottom",
+            fontsize=9.5,
+            fontweight="semibold",
+            annotation_clip=False,
+        )
         ax.set_ylabel("Score (%)" if panel_idx % 2 == 0 else "")
         ax.yaxis.set_major_locator(MaxNLocator(nbins=5))
         ax.grid(axis="y", color="#d9dde3", linewidth=0.6, alpha=0.9)
@@ -487,7 +525,7 @@ def make_overview_plot(summary_df, out_dir, dpi):
             columnspacing=1.6,
         )
 
-    fig.tight_layout(rect=[0.0, 0.0, 1.0, 0.91], w_pad=1.3, h_pad=1.45)
+    fig.tight_layout(rect=[0.0, 0.0, 1.0, 0.90], w_pad=1.3, h_pad=2.05)
 
     png_path = out_dir / "method_comparison_overview.png"
     pdf_path = out_dir / "method_comparison_overview.pdf"
