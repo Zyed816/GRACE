@@ -10,6 +10,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.patches import Patch
 from matplotlib.ticker import MaxNLocator
 
 
@@ -26,6 +27,15 @@ METHOD_COLORS = {
     "ifl-gr": "#59A14F",
     "ifl-gc": "#E15759",
 }
+METHOD_HATCHES = {
+    "grace": "//",
+    "gca": "\\" * 2,
+    "ifl-gr": "xx",
+    "ifl-gc": "--",
+}
+METHOD_HATCH_COLOR = "#4A4A4A"
+METHOD_HATCH_LINEWIDTH = 0.35
+METHOD_BAR_EDGE_COLOR = "white"
 
 DATASET_ORDER = ["Cora", "CiteSeer", "PubMed", "DBLP"]
 OVERVIEW_DATASET_ORDER = DATASET_ORDER
@@ -278,6 +288,8 @@ def configure_plot_style():
             "ps.fonttype": 42,
         }
     )
+    if "hatch.linewidth" in plt.rcParams:
+        plt.rcParams["hatch.linewidth"] = METHOD_HATCH_LINEWIDTH
 
 
 def metric_value_columns(metric_name):
@@ -340,6 +352,30 @@ def annotate_bars(ax, bars, values):
         )
 
 
+def method_legend_handle(method):
+    return Patch(
+        facecolor=METHOD_COLORS[method],
+        edgecolor=METHOD_HATCH_COLOR,
+        linewidth=0.45,
+        hatch=METHOD_HATCHES[method],
+        label=METHOD_LABELS[method],
+    )
+
+
+def add_method_hatch_overlay(ax, positions, values, width, method, zorder):
+    ax.bar(
+        positions,
+        values,
+        width=width,
+        facecolor="none",
+        edgecolor=METHOD_HATCH_COLOR,
+        linewidth=0.0,
+        hatch=METHOD_HATCHES[method],
+        label="_nolegend_",
+        zorder=zorder,
+    )
+
+
 def make_metric_plot(summary_df, metric_name, out_dir, dpi, annotate):
     value_col, err_col = metric_value_columns(metric_name)
     metric_spec = METRIC_SPECS[metric_name]
@@ -369,7 +405,7 @@ def make_metric_plot(summary_df, metric_name, out_dir, dpi, annotate):
             width=width,
             label=METHOD_LABELS[method],
             color=METHOD_COLORS[method],
-            edgecolor="white",
+            edgecolor=METHOD_BAR_EDGE_COLOR,
             linewidth=0.45,
             yerr=errors,
             capsize=2.2 if errors is not None else 0,
@@ -379,13 +415,14 @@ def make_metric_plot(summary_df, metric_name, out_dir, dpi, annotate):
                 "ecolor": "#3b3b3b",
             },
         )
+        add_method_hatch_overlay(ax, positions, values, width, method, zorder=bars[0].get_zorder() + 0.1)
 
         if annotate:
             annotate_bars(ax, bars, values)
 
         all_values.append(values)
         all_errors.append(errors if errors is not None else np.zeros_like(values))
-        legend_handles.append(bars[0])
+        legend_handles.append(method_legend_handle(method))
         legend_labels.append(METHOD_LABELS[method])
 
     lower, upper = compute_axis_limits(np.array(all_values), np.array(all_errors), metric_name)
@@ -463,7 +500,7 @@ def make_overview_plot(summary_df, out_dir, dpi):
                 values,
                 width=width,
                 color=METHOD_COLORS[method],
-                edgecolor="white",
+                edgecolor=METHOD_BAR_EDGE_COLOR,
                 linewidth=0.45,
                 alpha=0.94,
                 yerr=errors,
@@ -475,8 +512,9 @@ def make_overview_plot(summary_df, out_dir, dpi):
                 },
                 label=METHOD_LABELS[method],
             )
+            add_method_hatch_overlay(ax, positions, values, width, method, zorder=bars[0].get_zorder() + 0.1)
             if len(legend_handles) < len(METHOD_ORDER):
-                legend_handles.append(bars[0])
+                legend_handles.append(method_legend_handle(method))
                 legend_labels.append(METHOD_LABELS[method])
 
             all_values.append(values)
