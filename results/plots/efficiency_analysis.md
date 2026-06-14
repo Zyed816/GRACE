@@ -15,8 +15,8 @@
 ## Generated Files
 - `results\plots\efficiency_train_total_time.png`
 - `results\plots\efficiency_train_total_time.pdf`
+- `results\plots\efficiency_train_total_time.svg`
 - `results\plots\efficiency_wall_time.png`
 - `results\plots\efficiency_wall_time.pdf`
-- `results\plots\efficiency_time_ratio.png`
-- `results\plots\efficiency_time_ratio.pdf`
+- `results\plots\efficiency_wall_time.svg`
 - `results\plots\efficiency_analysis.md`

@@ -1,17 +1,31 @@
 import argparse
 import math
 import os
+import sys
 from pathlib import Path
 
 import matplotlib
 
 matplotlib.use("Agg")
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib.patches import Patch
 from matplotlib.ticker import MaxNLocator
+
+from experiments.plotting_common import (
+    DEFAULT_FIGURE_FORMATS,
+    add_panel_label_below,
+    apply_common_vector_settings,
+    normalize_formats,
+    panel_label,
+    save_figure_formats,
+)
 
 
 METHOD_ORDER = ["grace", "gca", "ifl-gr", "ifl-gc"]
@@ -39,6 +53,7 @@ METHOD_BAR_EDGE_COLOR = "white"
 
 DATASET_ORDER = ["Cora", "CiteSeer", "PubMed", "DBLP"]
 OVERVIEW_DATASET_ORDER = DATASET_ORDER
+OVERVIEW_METRIC_LABELS = ["robust_score", "Micro-F1", "Macro-F1"]
 DATASET_SLUG_TO_LABEL = {
     "cora": "Cora",
     "citeseer": "CiteSeer",
@@ -60,11 +75,11 @@ NUMERIC_COLUMNS = [
 
 METRIC_SPECS = {
     "robust_score": {
-        "label": "Robust Score",
+        "label": "robust_score",
         "err_col": "robust_score_std",
         "file_stem": "method_comparison_robust_score",
         "report_note": (
-            "Robust Score combines mean performance and stability, and is therefore "
+            "robust_score combines mean performance and stability, and is therefore "
             "well suited to summarize the overall effectiveness of each method."
         ),
     },
@@ -130,6 +145,12 @@ def parse_args():
         type=int,
         default=320,
         help="Raster output dpi.",
+    )
+    parser.add_argument(
+        "--formats",
+        nargs="+",
+        default=DEFAULT_FIGURE_FORMATS,
+        help="Figure formats to save. Default: png pdf svg.",
     )
     parser.add_argument(
         "--annotate",
@@ -288,6 +309,7 @@ def configure_plot_style():
             "ps.fonttype": 42,
         }
     )
+    apply_common_vector_settings(plt)
     if "hatch.linewidth" in plt.rcParams:
         plt.rcParams["hatch.linewidth"] = METHOD_HATCH_LINEWIDTH
 
@@ -306,8 +328,8 @@ def to_plot_units(values):
 
 def metric_axis_label(metric_name):
     if metric_name == "delta_vs_grace":
-        return "Delta vs GRACE (pp)"
-    return f"{METRIC_SPECS[metric_name]['label']} (%)"
+        return "相对GRACE变化（百分点）"
+    return "分数（%）"
 
 
 def compute_axis_limits(value_matrix, err_matrix, metric_name):
@@ -376,7 +398,7 @@ def add_method_hatch_overlay(ax, positions, values, width, method, zorder):
     )
 
 
-def make_metric_plot(summary_df, metric_name, out_dir, dpi, annotate):
+def make_metric_plot(summary_df, metric_name, out_dir, dpi, annotate, formats):
     value_col, err_col = metric_value_columns(metric_name)
     metric_spec = METRIC_SPECS[metric_name]
 
@@ -451,19 +473,16 @@ def make_metric_plot(summary_df, metric_name, out_dir, dpi, annotate):
     )
     fig.tight_layout(rect=[0.0, 0.0, 1.0, 0.93])
 
-    png_path = out_dir / f"{metric_spec['file_stem']}.png"
-    pdf_path = out_dir / f"{metric_spec['file_stem']}.pdf"
-    fig.savefig(png_path, dpi=dpi)
-    fig.savefig(pdf_path)
+    saved_paths = save_figure_formats(fig, out_dir / metric_spec["file_stem"], formats, dpi=dpi)
     plt.close(fig)
 
-    return png_path, pdf_path
+    return saved_paths
 
 
-def make_overview_plot(summary_df, out_dir, dpi):
+def make_overview_plot(summary_df, out_dir, dpi, formats):
     overview_metrics = ["robust_score", "F1Mi_mean", "F1Ma_mean"]
     datasets = [d for d in OVERVIEW_DATASET_ORDER if d in set(summary_df["dataset"].astype(str))]
-    metric_labels = ["Robust", "Micro-F1", "Macro-F1"]
+    metric_labels = OVERVIEW_METRIC_LABELS
     x = np.arange(len(overview_metrics), dtype=float)
     width = 0.15
 
@@ -526,20 +545,8 @@ def make_overview_plot(summary_df, out_dir, dpi):
         ax.set_ylim(lower, upper)
         ax.set_xticks(x)
         ax.set_xticklabels(metric_labels)
-        ax.annotate(
-            f"({chr(ord('a') + panel_idx)}) {dataset}",
-            xy=(0.0, 1.0),
-            xycoords="axes fraction",
-            xytext=(0, 7),
-            textcoords="offset points",
-            transform=ax.transAxes,
-            ha="left",
-            va="bottom",
-            fontsize=9.5,
-            fontweight="semibold",
-            annotation_clip=False,
-        )
-        ax.set_ylabel("Score (%)" if panel_idx % 2 == 0 else "")
+        add_panel_label_below(ax, panel_label(panel_idx, dataset), y=-0.27, fontsize=9.5)
+        ax.set_ylabel("分数（%）")
         ax.yaxis.set_major_locator(MaxNLocator(nbins=5))
         ax.grid(axis="y", color="#d9dde3", linewidth=0.6, alpha=0.9)
         ax.set_axisbelow(True)
@@ -563,14 +570,17 @@ def make_overview_plot(summary_df, out_dir, dpi):
             columnspacing=1.6,
         )
 
-    fig.tight_layout(rect=[0.0, 0.0, 1.0, 0.90], w_pad=1.3, h_pad=2.05)
+    fig.tight_layout(rect=[0.0, 0.03, 1.0, 0.90], w_pad=1.3, h_pad=3.0)
 
-    png_path = out_dir / "method_comparison_overview.png"
-    pdf_path = out_dir / "method_comparison_overview.pdf"
-    fig.savefig(png_path, dpi=dpi, pad_inches=0.04)
-    fig.savefig(pdf_path, pad_inches=0.04)
+    saved_paths = save_figure_formats(
+        fig,
+        out_dir / "method_comparison_overview",
+        formats,
+        dpi=dpi,
+        pad_inches=0.04,
+    )
     plt.close(fig)
-    return png_path, pdf_path
+    return saved_paths
 
 
 def build_report(summary_df, generated_files):
@@ -601,7 +611,7 @@ def build_report(summary_df, generated_files):
         best_macro = dataset_df.sort_values("F1Ma_mean", ascending=False).iloc[0]
         lines.append(
             "- "
-            f"{dataset}: best Robust Score = {METHOD_LABELS[str(best_robust['method'])]} "
+            f"{dataset}: best robust_score = {METHOD_LABELS[str(best_robust['method'])]} "
             f"({best_robust['robust_score_mean']:.4f}); "
             f"best Micro-F1 = {METHOD_LABELS[str(best_micro['method'])]} "
             f"({best_micro['F1Mi_mean']:.4f}); "
@@ -623,6 +633,7 @@ def build_report(summary_df, generated_files):
 
 def main():
     args = parse_args()
+    args.formats = normalize_formats(args.formats)
     script_dir = Path(__file__).resolve().parent
     repo_root = script_dir.parent.parent.resolve()
     out_dir = (repo_root / args.out_dir).resolve()
@@ -639,18 +650,19 @@ def main():
     summary_df.to_csv(summary_csv, index=False, encoding="utf-8")
 
     generated_files = [summary_csv]
-    overview_png, overview_pdf = make_overview_plot(summary_df, out_dir, args.dpi)
-    generated_files.extend([overview_png, overview_pdf])
+    generated_files.extend(make_overview_plot(summary_df, out_dir, args.dpi, args.formats))
 
     for metric_name in args.metrics:
-        png_path, pdf_path = make_metric_plot(
+        generated_files.extend(
+            make_metric_plot(
             summary_df=summary_df,
             metric_name=metric_name,
             out_dir=out_dir,
             dpi=args.dpi,
             annotate=args.annotate,
+            formats=args.formats,
+            )
         )
-        generated_files.extend([png_path, pdf_path])
 
     report_path = out_dir / "method_comparison_visualization_notes.md"
     report_path.write_text(build_report(summary_df, generated_files), encoding="utf-8")

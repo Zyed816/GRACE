@@ -59,7 +59,7 @@ class SamplingBiasForm(StyledFormMixin, forms.Form):
         label="Plot Title",
         max_length=160,
         required=False,
-        initial="Experiment 1: Violation Rate and Margin",
+        initial="采样偏差实验",
     )
 
     def _apply_localized_text(self):
@@ -68,7 +68,7 @@ class SamplingBiasForm(StyledFormMixin, forms.Form):
         self.fields["dataset"].label = text("forms.dataset", self.ui_lang)
         self.fields["method"].label = text("forms.method", self.ui_lang)
         self.fields["title"].label = text("forms.chart_title", self.ui_lang)
-        self.fields["title"].initial = "Experiment 1: Violation Rate and Margin"
+        self.fields["title"].initial = "采样偏差实验"
 
 
 class SensitivityForm(StyledFormMixin, forms.Form):

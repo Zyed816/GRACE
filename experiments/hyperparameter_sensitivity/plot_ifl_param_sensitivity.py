@@ -1,16 +1,29 @@
 import argparse
 import os
+import sys
+from pathlib import Path
 
 import matplotlib
 
 matplotlib.use("Agg")
 
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
 import matplotlib.pyplot as plt
 import pandas as pd
 from matplotlib.lines import Line2D
 
+from experiments.plotting_common import (
+    DEFAULT_FIGURE_FORMATS,
+    add_panel_label_below,
+    apply_common_vector_settings,
+    normalize_formats,
+    panel_label,
+    save_figure_formats,
+)
 
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 METHOD_FILE_SLUG = {
     "ifl-gr": "iflgr",
@@ -31,6 +44,8 @@ METHOD_MARKERS = {
     "ifl-gr": "o",
     "ifl-gc": "s",
 }
+ROBUST_SCORE_YLABEL = "稳健性评分robust_score（%）"
+ANCHOR_LABEL = "观测点"
 
 PARAM_ORDER = ["t_s", "M", "K"]
 PARAM_LABELS = {
@@ -38,6 +53,11 @@ PARAM_LABELS = {
     "M": "M",
     "K": "K",
 }
+PARAM_EFFECT_SPECS = [
+    {"param": "t_s", "file_stem": "ifl_sensitivity_ts_effect"},
+    {"param": "M", "file_stem": "ifl_sensitivity_M_effect"},
+    {"param": "K", "file_stem": "ifl_sensitivity_K_effect"},
+]
 
 DATASET_ORDER = ["Cora", "CiteSeer", "DBLP", "PubMed"]
 DATASET_SLUG_TO_LABEL = {
@@ -49,7 +69,7 @@ DATASET_SLUG_TO_LABEL = {
 
 METRIC_SPECS = {
     "robust_score": {
-        "label": "Robust Score",
+        "label": "robust_score",
         "err_col": "robust_score_std",
     },
 }
@@ -94,9 +114,15 @@ def parse_args():
     parser.add_argument(
         "--combined",
         action="store_true",
-        help="Create one 2x2 Robust Score overview for all selected datasets.",
+        help="Create 2x2 robust_score overview figures for all selected datasets.",
     )
     parser.add_argument("--dpi", type=int, default=320, help="Raster output dpi.")
+    parser.add_argument(
+        "--formats",
+        nargs="+",
+        default=DEFAULT_FIGURE_FORMATS,
+        help="Figure formats to save. Default: png pdf svg.",
+    )
     return parser.parse_args()
 
 
@@ -197,6 +223,7 @@ def configure_plot_style():
             "ps.fonttype": 42,
         }
     )
+    apply_common_vector_settings(plt)
 
 
 def robust_score_limits(summary_df):
@@ -233,7 +260,7 @@ def style_axis(ax, show_ylabel=False):
     ax.set_axisbelow(True)
     ax.tick_params(axis="both", direction="out", length=3.2, width=0.8, colors="#303030")
     if show_ylabel:
-        ax.set_ylabel("Robust Score (%)")
+        ax.set_ylabel(ROBUST_SCORE_YLABEL)
 
 
 def draw_robust_param_axis(ax, summary_df, methods, param_name, y_limits=None, show_ylabel=False):
@@ -298,7 +325,7 @@ def draw_robust_param_axis(ax, summary_df, methods, param_name, y_limits=None, s
         ax.set_ylim(*y_limits)
 
 
-def make_plot(dataset, methods, summary_df, out_path):
+def make_plot(dataset, methods, summary_df, out_base, formats, dpi):
     fig, axes = plt.subplots(
         nrows=len(METRIC_SPECS),
         ncols=len(PARAM_ORDER),
@@ -333,7 +360,7 @@ def make_plot(dataset, methods, summary_df, out_path):
                 if row_idx == len(METRIC_SPECS) - 1:
                     ax.set_xlabel(PARAM_LABELS[param_name])
                 if col_idx == 0:
-                    ax.set_ylabel(f"{metric_spec['label']} (%)")
+                    ax.set_ylabel(ROBUST_SCORE_YLABEL)
                 continue
 
             for method in methods:
@@ -402,7 +429,7 @@ def make_plot(dataset, methods, summary_df, out_path):
             if row_idx == len(METRIC_SPECS) - 1:
                 ax.set_xlabel(PARAM_LABELS[param_name])
             if col_idx == 0:
-                ax.set_ylabel(f"{metric_spec['label']} (%)")
+                ax.set_ylabel(ROBUST_SCORE_YLABEL)
 
     if legend_map:
         handles = [
@@ -419,8 +446,9 @@ def make_plot(dataset, methods, summary_df, out_path):
         )
 
     fig.tight_layout(rect=[0.0, 0.0, 1.0, 0.94])
-    fig.savefig(out_path, dpi=220, bbox_inches="tight")
+    saved_paths = save_figure_formats(fig, out_base, formats, dpi=dpi)
     plt.close(fig)
+    return saved_paths
 
 
 def load_dataset_summary(grace_dir, dataset, methods):
@@ -505,7 +533,7 @@ def make_combined_robust_plot(grace_dir, datasets, methods, out_dir, dpi):
             markeredgecolor="white",
             linestyle="",
             markersize=10,
-            label="Anchor",
+            label=ANCHOR_LABEL,
         )
     )
     fig.legend(
@@ -524,6 +552,75 @@ def make_combined_robust_plot(grace_dir, datasets, methods, out_dir, dpi):
     fig.savefig(pdf_path)
     plt.close(fig)
     return png_path, pdf_path
+
+
+def make_combined_param_effect_plot(grace_dir, datasets, methods, out_dir, dpi, formats, spec):
+    datasets = [normalize_dataset_name(dataset) for dataset in datasets]
+    fig, axes = plt.subplots(2, 2, figsize=(8.8, 6.2), squeeze=False)
+    axes = axes.ravel()
+
+    for index, dataset in enumerate(datasets[:4]):
+        ax = axes[index]
+        _, summary_df = load_dataset_summary(grace_dir, dataset, methods)
+        draw_robust_param_axis(
+            ax,
+            summary_df,
+            methods,
+            spec["param"],
+            y_limits=robust_score_limits(summary_df),
+            show_ylabel=True,
+        )
+        add_panel_label_below(ax, panel_label(index, dataset), y=-0.40, fontsize=10.5)
+
+    for ax in axes[len(datasets[:4]) :]:
+        ax.set_visible(False)
+
+    legend_handles = [
+        Line2D(
+            [],
+            [],
+            color=METHOD_COLORS[method],
+            marker=METHOD_MARKERS[method],
+            linewidth=1.8,
+            markersize=5.5,
+            label=METHOD_LABELS[method],
+        )
+        for method in methods
+    ]
+    legend_handles.append(
+        Line2D(
+            [],
+            [],
+            marker="*",
+            color="#374151",
+            markerfacecolor="#374151",
+            markeredgecolor="white",
+            linestyle="",
+            markersize=10,
+            label=ANCHOR_LABEL,
+        )
+    )
+    fig.legend(
+        handles=legend_handles,
+        loc="upper center",
+        bbox_to_anchor=(0.5, 0.99),
+        ncol=len(legend_handles),
+        frameon=False,
+        handlelength=1.6,
+        columnspacing=1.6,
+    )
+
+    fig.tight_layout(rect=[0.0, 0.08, 1.0, 0.93], w_pad=1.3, h_pad=3.8)
+    saved_paths = save_figure_formats(fig, Path(out_dir) / spec["file_stem"], formats, dpi=dpi)
+    plt.close(fig)
+    return saved_paths
+
+
+def make_combined_param_effect_plots(grace_dir, datasets, methods, out_dir, dpi, formats):
+    generated = []
+    for spec in PARAM_EFFECT_SPECS:
+        generated.extend(make_combined_param_effect_plot(grace_dir, datasets, methods, out_dir, dpi, formats, spec))
+    return generated
 
 
 def summarize_one_group(group_df):
@@ -614,21 +711,23 @@ def build_report(dataset, input_infos, summary_df, out_png):
 
 def main():
     args = parse_args()
+    args.formats = normalize_formats(args.formats)
     grace_dir = PROJECT_ROOT
     out_dir = os.path.join(grace_dir, args.out_dir)
     os.makedirs(out_dir, exist_ok=True)
     configure_plot_style()
 
     if args.combined:
-        png_path, pdf_path = make_combined_robust_plot(
+        generated_paths = make_combined_param_effect_plots(
             grace_dir=grace_dir,
             datasets=args.datasets,
             methods=args.methods,
             out_dir=out_dir,
             dpi=args.dpi,
+            formats=args.formats,
         )
-        print(f"[plot] saved combined figure: {png_path}")
-        print(f"[plot] saved combined figure: {pdf_path}")
+        for path in generated_paths:
+            print(f"[plot] saved combined figure: {path}")
         return
 
     input_paths = resolve_input_paths(grace_dir, args.dataset, args.methods, args.inputs)
@@ -642,15 +741,17 @@ def main():
 
     merged_summary = pd.concat(summary_frames, ignore_index=True) if summary_frames else pd.DataFrame()
     dataset_slug = args.dataset.lower()
-    png_path = os.path.join(out_dir, f"{dataset_slug}_ifl_sensitivity_overview.png")
+    out_base = os.path.join(out_dir, f"{dataset_slug}_ifl_sensitivity_overview")
     report_path = os.path.join(out_dir, f"{dataset_slug}_ifl_sensitivity_analysis.md")
 
-    make_plot(args.dataset, args.methods, merged_summary, png_path)
+    saved_paths = make_plot(args.dataset, args.methods, merged_summary, out_base, args.formats, args.dpi)
+    png_path = next((path for path in saved_paths if Path(path).suffix == ".png"), saved_paths[0])
     report = build_report(args.dataset, input_infos, merged_summary, png_path)
     with open(report_path, "w", encoding="utf-8") as f:
         f.write(report)
 
-    print(f"[plot] saved figure: {png_path}")
+    for path in saved_paths:
+        print(f"[plot] saved figure: {path}")
     print(f"[plot] saved report: {report_path}")
 
 

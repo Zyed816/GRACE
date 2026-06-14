@@ -278,6 +278,13 @@ def _register_artifact(run, label, artifact_type, relative_path, metadata=None):
     )
 
 
+def _register_image_pair(run, label, base_path):
+    png_path = Path(base_path).with_suffix(".png")
+    svg_path = Path(base_path).with_suffix(".svg")
+    _register_artifact(run, label, ExperimentArtifact.TYPE_IMAGE, png_path)
+    _register_artifact(run, f"{label} SVG", ExperimentArtifact.TYPE_IMAGE, svg_path)
+
+
 def _ordered_methods(methods):
     order = ["grace", "gca", "ifl-gr", "ifl-gc"]
     unique = list(dict.fromkeys(methods))
@@ -368,6 +375,10 @@ def _run_sampling_bias(run):
         plot_path.as_posix(),
         "--title",
         config.get("title") or f"{dataset} / {method} sampling bias curves",
+        "--formats",
+        "png",
+        "pdf",
+        "svg",
     ]
 
     _run_command(run, train_command, "sampling-train")
@@ -375,6 +386,7 @@ def _run_sampling_bias(run):
 
     _register_artifact(run, "Sampling Bias CSV", ExperimentArtifact.TYPE_CSV, csv_path)
     _register_artifact(run, "Sampling Bias Curve", ExperimentArtifact.TYPE_IMAGE, plot_path)
+    _register_artifact(run, "Sampling Bias Curve SVG", ExperimentArtifact.TYPE_IMAGE, plot_path.with_suffix(".svg"))
 
     summary = build_sampling_bias_summary(BASE_DIR / csv_path)
     summary.update(
@@ -433,6 +445,7 @@ def _run_sensitivity(run):
         csv_paths.append(out_csv)
 
     plot_png = plots_dir / f"{dataset_slug}_ifl_sensitivity_overview.png"
+    plot_svg = plots_dir / f"{dataset_slug}_ifl_sensitivity_overview.svg"
     report_md = plots_dir / f"{dataset_slug}_ifl_sensitivity_analysis.md"
     plot_command = [
         sys.executable,
@@ -449,6 +462,7 @@ def _run_sensitivity(run):
     _run_command(run, plot_command, "sensitivity-plot")
 
     _register_artifact(run, "Sensitivity Overview Plot", ExperimentArtifact.TYPE_IMAGE, plot_png)
+    _register_artifact(run, "Sensitivity Overview Plot SVG", ExperimentArtifact.TYPE_IMAGE, plot_svg)
     _register_artifact(run, "Sensitivity Analysis Report", ExperimentArtifact.TYPE_REPORT, report_md)
 
     summary = build_sensitivity_summary(
@@ -507,13 +521,12 @@ def _run_component_ablation(run):
     _run_command(run, command, "component-ablation")
     _run_command(run, plot_command, "component-ablation-plot")
 
-    overview_png = plots_dir / "extra_ablation_overview.png"
-    change_png = plots_dir / "extra_ablation_drop_vs_full.png"
     report_md = plots_dir / "extra_ablation_analysis.md"
 
     _register_artifact(run, "Component Ablation CSV", ExperimentArtifact.TYPE_CSV, out_csv)
-    _register_artifact(run, "Component Ablation Overview Plot", ExperimentArtifact.TYPE_IMAGE, overview_png)
-    _register_artifact(run, "Component Ablation Change Plot", ExperimentArtifact.TYPE_IMAGE, change_png)
+    _register_image_pair(run, "Component Ablation M Effect Plot", plots_dir / "extra_ablation_warmup_M_effect")
+    _register_image_pair(run, "Component Ablation K Effect Plot", plots_dir / "extra_ablation_update_K_effect")
+    _register_image_pair(run, "Component Ablation w Effect Plot", plots_dir / "extra_ablation_weight_w_effect")
     _register_artifact(run, "Component Ablation Analysis Report", ExperimentArtifact.TYPE_REPORT, report_md)
 
     summary = build_component_ablation_summary([BASE_DIR / out_csv], BASE_DIR / report_md)
@@ -570,14 +583,16 @@ def _run_efficiency(run):
     _run_command(run, plot_command, "efficiency-plot")
 
     train_png = plots_dir / "efficiency_train_total_time.png"
+    train_svg = plots_dir / "efficiency_train_total_time.svg"
     wall_png = plots_dir / "efficiency_wall_time.png"
-    ratio_png = plots_dir / "efficiency_time_ratio.png"
+    wall_svg = plots_dir / "efficiency_wall_time.svg"
     report_md = plots_dir / "efficiency_analysis.md"
 
     _register_artifact(run, "Efficiency CSV", ExperimentArtifact.TYPE_CSV, out_csv)
     _register_artifact(run, "Efficiency Train Total Time Plot", ExperimentArtifact.TYPE_IMAGE, train_png)
+    _register_artifact(run, "Efficiency Train Total Time Plot SVG", ExperimentArtifact.TYPE_IMAGE, train_svg)
     _register_artifact(run, "Efficiency Wall Time Plot", ExperimentArtifact.TYPE_IMAGE, wall_png)
-    _register_artifact(run, "Efficiency Time Ratio Plot", ExperimentArtifact.TYPE_IMAGE, ratio_png)
+    _register_artifact(run, "Efficiency Wall Time Plot SVG", ExperimentArtifact.TYPE_IMAGE, wall_svg)
     _register_artifact(run, "Efficiency Analysis Report", ExperimentArtifact.TYPE_REPORT, report_md)
 
     summary = build_efficiency_summary([BASE_DIR / out_csv], BASE_DIR / report_md)
@@ -657,13 +672,17 @@ def _run_significance(run):
 
     summary_csv = plots_dir / "significance_tests_summary.csv"
     mean_std_png = plots_dir / "significance_mean_std.png"
+    mean_std_svg = plots_dir / "significance_mean_std.svg"
     delta_png = plots_dir / "significance_paired_delta.png"
+    delta_svg = plots_dir / "significance_paired_delta.svg"
     report_md = plots_dir / "significance_analysis.md"
 
     _register_artifact(run, "Significance CSV", ExperimentArtifact.TYPE_CSV, out_csv)
     _register_artifact(run, "Significance Tests Summary CSV", ExperimentArtifact.TYPE_CSV, summary_csv)
     _register_artifact(run, "Significance Mean/Std Plot", ExperimentArtifact.TYPE_IMAGE, mean_std_png)
+    _register_artifact(run, "Significance Mean/Std Plot SVG", ExperimentArtifact.TYPE_IMAGE, mean_std_svg)
     _register_artifact(run, "Significance Paired Delta Plot", ExperimentArtifact.TYPE_IMAGE, delta_png)
+    _register_artifact(run, "Significance Paired Delta Plot SVG", ExperimentArtifact.TYPE_IMAGE, delta_svg)
     _register_artifact(run, "Significance Analysis Report", ExperimentArtifact.TYPE_REPORT, report_md)
 
     summary = build_significance_summary([BASE_DIR / out_csv], BASE_DIR / summary_csv, BASE_DIR / report_md)

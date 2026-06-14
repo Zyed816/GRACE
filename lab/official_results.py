@@ -65,6 +65,14 @@ def _artifact(label, artifact_type, path, metadata=None):
     }
 
 
+def _image_pair_artifacts(label, base_path):
+    base = Path(base_path)
+    return [
+        _artifact(label, ExperimentArtifact.TYPE_IMAGE, base.with_suffix(".png")),
+        _artifact(f"{label} SVG", ExperimentArtifact.TYPE_IMAGE, base.with_suffix(".svg")),
+    ]
+
+
 def _method_key_from_slug(method_slug):
     return {
         "iflgr": "ifl-gr",
@@ -148,6 +156,7 @@ def _sampling_bias_entries(language):
         artifacts = [
             _artifact("Sampling Bias CSV", ExperimentArtifact.TYPE_CSV, csv_path),
             _artifact("Sampling Bias Curve", ExperimentArtifact.TYPE_IMAGE, plot_path),
+            _artifact("Sampling Bias Curve SVG", ExperimentArtifact.TYPE_IMAGE, plot_path.with_suffix(".svg")),
         ]
         artifacts = [artifact for artifact in artifacts if artifact]
 
@@ -209,9 +218,10 @@ def _sensitivity_entries(language):
             artifacts.append(_artifact(f"{method_label} Sensitivity CSV", ExperimentArtifact.TYPE_CSV, csv_path))
         artifacts.extend(
             [
-                _artifact("Sensitivity Overview Plot", ExperimentArtifact.TYPE_IMAGE, plot_path),
-                _artifact("Sensitivity Analysis Report", ExperimentArtifact.TYPE_REPORT, report_path),
-            ]
+            _artifact("Sensitivity Overview Plot", ExperimentArtifact.TYPE_IMAGE, plot_path),
+            _artifact("Sensitivity Overview Plot SVG", ExperimentArtifact.TYPE_IMAGE, plot_path.with_suffix(".svg")),
+            _artifact("Sensitivity Analysis Report", ExperimentArtifact.TYPE_REPORT, report_path),
+        ]
         )
         artifacts = [artifact for artifact in artifacts if artifact]
 
@@ -246,7 +256,51 @@ def _sensitivity_entries(language):
             }
         )
 
+    entries.extend(_sensitivity_combined_entries(language, sorted(RESULTS_DIR.glob("sensitivity_*_results.csv"))))
     return entries
+
+
+def _sensitivity_combined_entries(language, csv_paths):
+    if not csv_paths:
+        return []
+
+    experiment_type = ExperimentRun.TYPE_SENSITIVITY
+    plot_specs = [
+        ("Sensitivity t_s Effect Plot", PLOTS_DIR / "ifl_sensitivity_ts_effect"),
+        ("Sensitivity M Effect Plot", PLOTS_DIR / "ifl_sensitivity_M_effect"),
+        ("Sensitivity K Effect Plot", PLOTS_DIR / "ifl_sensitivity_K_effect"),
+    ]
+    artifacts = []
+    for label, base_path in plot_specs:
+        artifacts.extend(_image_pair_artifacts(label, base_path))
+    artifacts = [artifact for artifact in artifacts if artifact]
+    if not artifacts:
+        return []
+
+    summary = build_sensitivity_summary(csv_paths)
+    summary.update({"dataset": _all_dataset_label(language), "csv_count": len(csv_paths)})
+
+    type_label = experiment_type_label(experiment_type, language)
+    return [
+        {
+            "slug": "sensitivity-all",
+            "title": f"{type_label} / {_all_dataset_label(language)}",
+            "experiment_type": experiment_type,
+            "type_label": type_label,
+            "dataset": _all_dataset_label(language),
+            "dataset_slug": "all",
+            "updated_at": _updated_at([(BASE_DIR / artifact["relative_path"]).resolve() for artifact in artifacts]),
+            "summary": summary,
+            "config": _official_config(
+                language,
+                location_key="official.location.sensitivity",
+                dataset=_all_dataset_label(language),
+                experiment_type=experiment_type,
+                artifacts=artifacts,
+            ),
+            "artifacts": artifacts,
+        }
+    ]
 
 
 def _component_ablation_entries(language):
@@ -258,11 +312,12 @@ def _component_ablation_entries(language):
     artifacts = [_artifact("Component Ablation CSV", ExperimentArtifact.TYPE_CSV, path) for path in csv_paths]
     artifacts.extend(
         [
-            _artifact("Component Ablation Overview Plot", ExperimentArtifact.TYPE_IMAGE, PLOTS_DIR / "extra_ablation_overview.png"),
-            _artifact("Component Ablation Change Plot", ExperimentArtifact.TYPE_IMAGE, PLOTS_DIR / "extra_ablation_drop_vs_full.png"),
             _artifact("Component Ablation Analysis Report", ExperimentArtifact.TYPE_REPORT, PLOTS_DIR / "extra_ablation_analysis.md"),
         ]
     )
+    artifacts.extend(_image_pair_artifacts("Component Ablation M Effect Plot", PLOTS_DIR / "extra_ablation_warmup_M_effect"))
+    artifacts.extend(_image_pair_artifacts("Component Ablation K Effect Plot", PLOTS_DIR / "extra_ablation_update_K_effect"))
+    artifacts.extend(_image_pair_artifacts("Component Ablation w Effect Plot", PLOTS_DIR / "extra_ablation_weight_w_effect"))
     artifacts = [artifact for artifact in artifacts if artifact]
     report_path = PLOTS_DIR / "extra_ablation_analysis.md"
     summary = build_component_ablation_summary(csv_paths, report_path)
@@ -300,12 +355,11 @@ def _efficiency_entries(language):
     artifacts = [_artifact("Efficiency CSV", ExperimentArtifact.TYPE_CSV, path) for path in csv_paths]
     artifacts.extend(
         [
-            _artifact("Efficiency Train Total Time Plot", ExperimentArtifact.TYPE_IMAGE, PLOTS_DIR / "efficiency_train_total_time.png"),
-            _artifact("Efficiency Wall Time Plot", ExperimentArtifact.TYPE_IMAGE, PLOTS_DIR / "efficiency_wall_time.png"),
-            _artifact("Efficiency Time Ratio Plot", ExperimentArtifact.TYPE_IMAGE, PLOTS_DIR / "efficiency_time_ratio.png"),
             _artifact("Efficiency Analysis Report", ExperimentArtifact.TYPE_REPORT, PLOTS_DIR / "efficiency_analysis.md"),
         ]
     )
+    artifacts.extend(_image_pair_artifacts("Efficiency Train Total Time Plot", PLOTS_DIR / "efficiency_train_total_time"))
+    artifacts.extend(_image_pair_artifacts("Efficiency Wall Time Plot", PLOTS_DIR / "efficiency_wall_time"))
     artifacts = [artifact for artifact in artifacts if artifact]
     report_path = PLOTS_DIR / "efficiency_analysis.md"
     summary = build_efficiency_summary(csv_paths, report_path)
@@ -346,11 +400,11 @@ def _significance_entries(language):
     artifacts.extend(
         [
             _artifact("Significance Tests Summary CSV", ExperimentArtifact.TYPE_CSV, summary_csv),
-            _artifact("Significance Mean/Std Plot", ExperimentArtifact.TYPE_IMAGE, PLOTS_DIR / "significance_mean_std.png"),
-            _artifact("Significance Paired Delta Plot", ExperimentArtifact.TYPE_IMAGE, PLOTS_DIR / "significance_paired_delta.png"),
             _artifact("Significance Analysis Report", ExperimentArtifact.TYPE_REPORT, report_path),
         ]
     )
+    artifacts.extend(_image_pair_artifacts("Significance Mean/Std Plot", PLOTS_DIR / "significance_mean_std"))
+    artifacts.extend(_image_pair_artifacts("Significance Paired Delta Plot", PLOTS_DIR / "significance_paired_delta"))
     artifacts = [artifact for artifact in artifacts if artifact]
     summary = build_significance_summary(csv_paths, summary_csv if summary_csv.exists() else None, report_path)
     summary.update({"dataset": _all_dataset_label(language), "csv_count": len(csv_paths)})

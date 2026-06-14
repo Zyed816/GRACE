@@ -7,13 +7,21 @@ import matplotlib
 
 matplotlib.use("Agg")
 
-import matplotlib.pyplot as plt
-import pandas as pd
-
-
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
+
+import matplotlib.pyplot as plt
+import pandas as pd
+
+from experiments.plotting_common import (
+    DEFAULT_FIGURE_FORMATS,
+    add_panel_label_below,
+    apply_common_vector_settings,
+    normalize_formats,
+    panel_label,
+    save_figure_formats,
+)
 
 
 DATASET_ORDER = ["Cora", "CiteSeer", "PubMed", "DBLP"]
@@ -35,6 +43,27 @@ VARIANT_COLORS = {
     "single_mining": "#59A14F",
     "uniform_weight": "#E15759",
 }
+ROBUST_SCORE_YLABEL = "稳健性评分robust_score（%）"
+EFFECT_SPECS = [
+    {
+        "variant": "no_warmup",
+        "file_stem": "extra_ablation_warmup_M_effect",
+        "label": "M-off",
+        "legend_label": "M-off",
+    },
+    {
+        "variant": "single_mining",
+        "file_stem": "extra_ablation_update_K_effect",
+        "label": "K-off",
+        "legend_label": "K-off",
+    },
+    {
+        "variant": "uniform_weight",
+        "file_stem": "extra_ablation_weight_w_effect",
+        "label": "w-off",
+        "legend_label": "w-off",
+    },
+]
 
 NUMERIC_COLUMNS = [
     "num_runs",
@@ -63,6 +92,12 @@ def parse_args():
     parser.add_argument("--inputs", nargs="+", default=None, help="Optional explicit ablation CSV files.")
     parser.add_argument("--out_dir", type=str, default=os.path.join("results", "plots"))
     parser.add_argument("--dpi", type=int, default=320)
+    parser.add_argument(
+        "--formats",
+        nargs="+",
+        default=DEFAULT_FIGURE_FORMATS,
+        help="Figure formats to save. Default: png pdf svg.",
+    )
     return parser.parse_args()
 
 
@@ -138,6 +173,7 @@ def configure_plot_style():
             "ps.fonttype": 42,
         }
     )
+    apply_common_vector_settings(plt)
 
 
 def available_ordered(values, preferred_order):
@@ -165,6 +201,32 @@ def axis_score_limits(values, errors=None, baseline_zero=True):
     return low - span * 0.25, high + span * 0.25
 
 
+def local_score_limits(values, errors=None, min_span=4.0):
+    values = pd.to_numeric(pd.Series(values), errors="coerce").dropna()
+    if values.empty:
+        return (0.0, 1.0)
+
+    if errors is not None:
+        errors = pd.to_numeric(pd.Series(errors), errors="coerce").fillna(0.0)
+        low = float((values.reset_index(drop=True) - errors.reset_index(drop=True)).min())
+        high = float((values.reset_index(drop=True) + errors.reset_index(drop=True)).max())
+    else:
+        low = float(values.min())
+        high = float(values.max())
+
+    span = max(high - low, 1e-6)
+    pad = max(span * 0.35, 0.5)
+    lower = max(0.0, low - pad)
+    upper = min(100.0, high + pad)
+
+    if upper - lower < min_span:
+        extra = (min_span - (upper - lower)) * 0.5
+        lower = max(0.0, lower - extra)
+        upper = min(100.0, upper + extra)
+
+    return lower, upper
+
+
 def draw_variant_bars(ax, subset, metric, err_metric=None, baseline_zero=True):
     ordered_variants = [variant for variant in VARIANT_ORDER if variant in set(subset["variant"])]
     if not ordered_variants:
@@ -187,6 +249,113 @@ def draw_variant_bars(ax, subset, metric, err_metric=None, baseline_zero=True):
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
     ax.set_ylim(*axis_score_limits(values, errors=errors, baseline_zero=baseline_zero))
+
+
+def draw_effect_axis(ax, subset, variant, y_limits):
+    ordered_methods = [method for method in METHOD_ORDER if method in set(subset["method"])]
+    if not ordered_methods:
+        ax.text(0.5, 0.5, "No data", ha="center", va="center", transform=ax.transAxes)
+        return []
+
+    variants = ["full", variant]
+    width = 0.34
+    x = list(range(len(ordered_methods)))
+    handles = []
+    for idx, item in enumerate(variants):
+        item_df = subset[subset["variant"] == item].set_index("method").reindex(ordered_methods)
+        values = item_df["robust_score"].astype(float).to_numpy() * 100.0
+        errors = (
+            item_df["robust_score_std"].astype(float).fillna(0.0).to_numpy() * 100.0
+            if "robust_score_std" in item_df.columns
+            else None
+        )
+        positions = [pos + (idx - 0.5) * width for pos in x]
+        bars = ax.bar(
+            positions,
+            values,
+            width=width,
+            yerr=errors,
+            capsize=2.4 if errors is not None else 0,
+            color=VARIANT_COLORS[item],
+            edgecolor="white",
+            linewidth=0.45,
+            label=VARIANT_LABELS[item],
+        )
+        handles.append(bars[0])
+
+    ax.set_xticks(x)
+    ax.set_xticklabels([METHOD_LABELS.get(method, method) for method in ordered_methods])
+    ax.set_ylabel(ROBUST_SCORE_YLABEL)
+    ax.set_ylim(*y_limits)
+    ax.grid(axis="y", color="#d9dde3", linewidth=0.6, alpha=0.85)
+    ax.set_axisbelow(True)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.tick_params(axis="both", colors="#303030", pad=2)
+    return handles
+
+
+def effect_axis_limits(summary_df, variant):
+    subset = summary_df[summary_df["variant"].isin(["full", variant])].copy()
+    values = pd.to_numeric(subset["robust_score"], errors="coerce") * 100.0
+    errors = (
+        pd.to_numeric(subset["robust_score_std"], errors="coerce").fillna(0.0) * 100.0
+        if "robust_score_std" in subset.columns
+        else None
+    )
+    return local_score_limits(values, errors=errors)
+
+
+def make_effect_plot(summary_df, spec, out_dir, dpi, formats):
+    datasets = available_ordered(summary_df["dataset"].dropna().astype(str), DATASET_ORDER)
+    if not datasets:
+        raise RuntimeError("No dataset summary rows available for plotting.")
+
+    ncols = 2 if len(datasets) > 1 else 1
+    nrows = (len(datasets) + ncols - 1) // ncols
+    fig, axes = plt.subplots(
+        nrows=nrows,
+        ncols=ncols,
+        figsize=(4.4 * ncols, 3.15 * nrows),
+        squeeze=False,
+    )
+    legend_handles = []
+    legend_labels = []
+
+    for idx, dataset in enumerate(datasets):
+        row_idx, col_idx = divmod(idx, ncols)
+        ax = axes[row_idx][col_idx]
+        subset = summary_df[
+            (summary_df["dataset"] == dataset)
+            & (summary_df["variant"].isin(["full", spec["variant"]]))
+        ].copy()
+        y_limits = effect_axis_limits(subset, spec["variant"])
+        handles = draw_effect_axis(ax, subset, spec["variant"], y_limits)
+        add_panel_label_below(ax, panel_label(idx, dataset), y=-0.24, fontsize=10)
+        if handles and not legend_handles:
+            legend_handles = handles
+            legend_labels = ["Full", spec["legend_label"]]
+
+    for idx in range(len(datasets), nrows * ncols):
+        row_idx, col_idx = divmod(idx, ncols)
+        axes[row_idx][col_idx].set_visible(False)
+
+    if legend_handles:
+        fig.legend(
+            legend_handles,
+            legend_labels,
+            loc="upper center",
+            bbox_to_anchor=(0.5, 0.99),
+            ncol=len(legend_handles),
+            frameon=False,
+            handlelength=1.5,
+            columnspacing=1.4,
+        )
+
+    fig.tight_layout(rect=[0.0, 0.04, 1.0, 0.93], w_pad=1.2, h_pad=2.7)
+    saved_paths = save_figure_formats(fig, out_dir / spec["file_stem"], formats, dpi=dpi)
+    plt.close(fig)
+    return saved_paths
 
 
 def make_panel_plot(summary_df, metric, err_metric, ylabel, title, out_base, dpi, baseline_zero=True):
@@ -309,6 +478,7 @@ def build_report(input_infos, summary_df, generated_files):
 
 def main():
     args = parse_args()
+    args.formats = normalize_formats(args.formats)
     out_dir = Path(args.out_dir)
     if not out_dir.is_absolute():
         out_dir = PROJECT_ROOT / out_dir
@@ -330,29 +500,8 @@ def main():
     configure_plot_style()
     generated = []
 
-    overview_png, overview_pdf = make_panel_plot(
-        summary_df=summary_df,
-        metric="robust_score",
-        err_metric="robust_score_std",
-        ylabel="Robust Score (%)",
-        title="SG-GCL Component Ablation: Robust Score",
-        out_base=out_dir / "extra_ablation_overview",
-        dpi=args.dpi,
-        baseline_zero=True,
-    )
-    generated.extend([overview_png, overview_pdf])
-
-    drop_png, drop_pdf = make_panel_plot(
-        summary_df=summary_df,
-        metric="delta_vs_full",
-        err_metric=None,
-        ylabel="Change vs Full (%)",
-        title="",
-        out_base=out_dir / "extra_ablation_drop_vs_full",
-        dpi=args.dpi,
-        baseline_zero=False,
-    )
-    generated.extend([drop_png, drop_pdf])
+    for spec in EFFECT_SPECS:
+        generated.extend(make_effect_plot(summary_df, spec, out_dir, args.dpi, args.formats))
 
     report_path = out_dir / "extra_ablation_analysis.md"
     report_path.write_text(

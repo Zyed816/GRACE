@@ -1,0 +1,168 @@
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+import matplotlib
+
+matplotlib.use("Agg")
+
+import matplotlib.pyplot as plt
+import pandas as pd
+
+
+class PlotRedrawContractTests(unittest.TestCase):
+    def test_shared_helpers_save_png_pdf_svg_without_rasterizing_svg(self):
+        from experiments.plotting_common import normalize_formats, save_figure_formats
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fig, ax = plt.subplots()
+            ax.plot([0, 1], [0, 1])
+
+            paths = save_figure_formats(
+                fig,
+                Path(tmp) / "demo_plot",
+                normalize_formats([".PNG", "pdf", "svg", "svg"]),
+                dpi=120,
+            )
+            plt.close(fig)
+
+            suffixes = [path.suffix for path in paths]
+            self.assertEqual(suffixes, [".png", ".pdf", ".svg"])
+            for path in paths:
+                self.assertTrue(path.exists(), path)
+                self.assertGreater(path.stat().st_size, 0)
+
+            svg_text = paths[-1].read_text(encoding="utf-8")
+            self.assertNotIn("<image", svg_text.lower())
+
+    def test_panel_label_uses_chinese_parentheses_and_dataset_name(self):
+        from experiments.plotting_common import panel_label
+
+        self.assertEqual(panel_label(0, "Cora"), "（a）Cora")
+        self.assertEqual(panel_label(3, "DBLP"), "（d）DBLP")
+
+    def test_component_ablation_effect_specs_use_requested_file_names(self):
+        from experiments.component_ablation.plot_component_ablation import EFFECT_SPECS
+
+        stems = [spec["file_stem"] for spec in EFFECT_SPECS]
+
+        self.assertEqual(
+            stems,
+            [
+                "extra_ablation_warmup_M_effect",
+                "extra_ablation_update_K_effect",
+                "extra_ablation_weight_w_effect",
+            ],
+        )
+
+    def test_sensitivity_effect_specs_use_requested_file_names(self):
+        from experiments.hyperparameter_sensitivity.plot_ifl_param_sensitivity import PARAM_EFFECT_SPECS
+
+        stems = [spec["file_stem"] for spec in PARAM_EFFECT_SPECS]
+
+        self.assertEqual(
+            stems,
+            [
+                "ifl_sensitivity_ts_effect",
+                "ifl_sensitivity_M_effect",
+                "ifl_sensitivity_K_effect",
+            ],
+        )
+
+    def test_sampling_bias_legend_uses_raw_metric_names(self):
+        from plot.plot import LEGEND_LABELS
+
+        self.assertEqual(LEGEND_LABELS["violation"], "violation_rate")
+        self.assertEqual(LEGEND_LABELS["margin"], "mean_margin")
+
+    def test_method_overview_uses_robust_score_metric_label(self):
+        from experiments.method_comparison.plot_method_comparison_results import OVERVIEW_METRIC_LABELS
+
+        self.assertEqual(OVERVIEW_METRIC_LABELS[0], "robust_score")
+
+    def test_ablation_effect_uses_stable_score_label_and_local_y_limits(self):
+        from experiments.component_ablation.plot_component_ablation import (
+            ROBUST_SCORE_YLABEL,
+            effect_axis_limits,
+        )
+
+        summary_df = pd.DataFrame(
+            [
+                {"dataset": "Cora", "method": "ifl-gr", "variant": "full", "robust_score": 0.790, "robust_score_std": 0.001},
+                {"dataset": "Cora", "method": "ifl-gr", "variant": "uniform_weight", "robust_score": 0.775, "robust_score_std": 0.001},
+                {"dataset": "Cora", "method": "ifl-gc", "variant": "full", "robust_score": 0.787, "robust_score_std": 0.001},
+                {"dataset": "Cora", "method": "ifl-gc", "variant": "uniform_weight", "robust_score": 0.772, "robust_score_std": 0.001},
+            ]
+        )
+
+        lower, upper = effect_axis_limits(summary_df, "uniform_weight")
+
+        self.assertEqual(ROBUST_SCORE_YLABEL, "稳健性评分robust_score（%）")
+        self.assertGreaterEqual(lower, 75.0)
+        self.assertLessEqual(upper, 81.0)
+
+    def test_ablation_effect_plot_scales_each_dataset_panel_locally(self):
+        from experiments.component_ablation import plot_component_ablation as ablation_plot
+
+        rows = []
+        for dataset, base in [("Cora", 0.790), ("DBLP", 0.710)]:
+            for method in ["ifl-gr", "ifl-gc"]:
+                rows.append(
+                    {
+                        "dataset": dataset,
+                        "method": method,
+                        "variant": "full",
+                        "robust_score": base,
+                        "robust_score_std": 0.001,
+                    }
+                )
+                rows.append(
+                    {
+                        "dataset": dataset,
+                        "method": method,
+                        "variant": "uniform_weight",
+                        "robust_score": base - 0.012,
+                        "robust_score_std": 0.001,
+                    }
+                )
+        summary_df = pd.DataFrame(rows)
+        observed_limits = []
+        original_draw = ablation_plot.draw_effect_axis
+        ablation_plot.configure_plot_style()
+
+        def capture_limits(ax, subset, variant, y_limits):
+            observed_limits.append(y_limits)
+            return original_draw(ax, subset, variant, y_limits)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(ablation_plot, "draw_effect_axis", side_effect=capture_limits):
+                ablation_plot.make_effect_plot(
+                    summary_df,
+                    ablation_plot.EFFECT_SPECS[-1],
+                    Path(tmp),
+                    dpi=80,
+                    formats=["png"],
+                )
+
+        self.assertEqual(len(observed_limits), 2)
+        self.assertNotEqual(observed_limits[0], observed_limits[1])
+        self.assertLess(observed_limits[0][0] - observed_limits[1][0], 10.0)
+
+    def test_significance_delta_ylabel_uses_stable_score_wording(self):
+        from experiments.statistical_significance.plot_significance_results import DELTA_YLABEL
+
+        self.assertEqual(DELTA_YLABEL, "相对基线稳健性评分\nrobust_score变化")
+
+    def test_sensitivity_labels_use_stable_score_and_observation_point(self):
+        from experiments.hyperparameter_sensitivity.plot_ifl_param_sensitivity import (
+            ANCHOR_LABEL,
+            ROBUST_SCORE_YLABEL,
+        )
+
+        self.assertEqual(ROBUST_SCORE_YLABEL, "稳健性评分robust_score（%）")
+        self.assertEqual(ANCHOR_LABEL, "观测点")
+
+
+if __name__ == "__main__":
+    unittest.main()

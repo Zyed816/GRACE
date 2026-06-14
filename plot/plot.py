@@ -1,4 +1,5 @@
 import argparse
+import sys
 from pathlib import Path
 
 import matplotlib
@@ -12,6 +13,19 @@ except ImportError:  # Keep plotting usable in lighter Python environments.
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = SCRIPT_DIR.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from experiments.plotting_common import (
+    DEFAULT_FIGURE_FORMATS,
+    add_panel_label_below,
+    apply_common_vector_settings,
+    normalize_formats,
+    panel_label,
+    save_figure_paths,
+)
+
 DATASET_LABELS = {
     "cora": "Cora",
     "citeseer": "CiteSeer",
@@ -20,9 +34,12 @@ DATASET_LABELS = {
 }
 COMBINED_ORDER = ["cora", "citeseer", "pubmed", "dblp"]
 REQUIRED_COLUMNS = ["epoch", "violation_rate", "mean_margin"]
-DEFAULT_FORMATS = ["png", "pdf", "tiff"]
 VIOLATION_COLOR = "#C2185B"
 MARGIN_COLOR = "#1976D2"
+LEGEND_LABELS = {
+    "violation": "violation_rate",
+    "margin": "mean_margin",
+}
 
 
 def dataset_slug(dataset):
@@ -115,11 +132,9 @@ def combined_output_paths(args):
 
 
 def configure_style():
-    matplotlib.rcParams["font.family"] = "STIXGeneral"
+    apply_common_vector_settings(matplotlib)
     matplotlib.rcParams["font.size"] = 14
     matplotlib.rcParams["axes.linewidth"] = 1.4
-    matplotlib.rcParams["pdf.fonttype"] = 42
-    matplotlib.rcParams["ps.fonttype"] = 42
     matplotlib.rcParams["figure.facecolor"] = "white"
     matplotlib.rcParams["axes.facecolor"] = "white"
 
@@ -180,7 +195,7 @@ def draw_metric_panel(
         y1_smooth,
         color=VIOLATION_COLOR,
         linewidth=smooth_width,
-        label="Violation Rate",
+        label=LEGEND_LABELS["violation"],
         zorder=3,
     )
     line2, = ax2.plot(
@@ -188,15 +203,16 @@ def draw_metric_panel(
         y2_smooth,
         color=MARGIN_COLOR,
         linewidth=smooth_width,
-        label="Mean Margin",
+        label=LEGEND_LABELS["margin"],
         zorder=3,
     )
 
-    ax1.set_title(title, fontsize=title_size, pad=10 if compact else 14)
+    if title:
+        ax1.set_title(title, fontsize=title_size, pad=10 if compact else 14)
     if show_xlabel:
         ax1.set_xlabel("Epoch", fontsize=label_size, labelpad=7)
-    ax1.set_ylabel("Violation Rate", fontsize=label_size, color=VIOLATION_COLOR, labelpad=8)
-    ax2.set_ylabel("Mean Margin", fontsize=label_size, color=MARGIN_COLOR, labelpad=9)
+    ax1.set_ylabel("违例率violation_rate", fontsize=label_size, color=VIOLATION_COLOR, labelpad=8)
+    ax2.set_ylabel("边界距mean_margin", fontsize=label_size, color=MARGIN_COLOR, labelpad=9)
 
     ax1.set_xlim(float(x.min()), float(x.max()))
     ax1.set_ylim(*padded_limits(y1))
@@ -258,10 +274,7 @@ def plot_one(csv_path, slug, title, args, plt):
 
     fig.subplots_adjust(left=0.12, right=0.88, bottom=0.14, top=0.88)
 
-    saved_paths = output_paths_for(csv_path, slug, args)
-    for output_path in saved_paths:
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        fig.savefig(output_path, dpi=600, facecolor="white")
+    saved_paths = save_figure_paths(fig, output_paths_for(csv_path, slug, args), dpi=args.dpi)
 
     if args.show:
         plt.show()
@@ -294,11 +307,17 @@ def plot_combined(args, plt):
         lines = draw_metric_panel(
             ax1,
             data,
-            title,
+            "",
             args,
             compact=True,
             show_legend=False,
             show_xlabel=show_xlabel,
+        )
+        add_panel_label_below(
+            ax1,
+            panel_label(index, title),
+            y=-0.34 if show_xlabel else -0.22,
+            fontsize=15,
         )
         if legend_lines is None:
             legend_lines = lines
@@ -318,12 +337,9 @@ def plot_combined(args, plt):
         legend.get_frame().set_linewidth(0.8)
         legend.get_frame().set_alpha(0.94)
 
-    fig.subplots_adjust(left=0.075, right=0.925, bottom=0.075, top=0.92, wspace=0.36, hspace=0.34)
+    fig.subplots_adjust(left=0.075, right=0.925, bottom=0.12, top=0.92, wspace=0.36, hspace=0.42)
 
-    saved_paths = combined_output_paths(args)
-    for output_path in saved_paths:
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        fig.savefig(output_path, dpi=600, facecolor="white")
+    saved_paths = save_figure_paths(fig, combined_output_paths(args), dpi=args.dpi)
 
     if args.show:
         plt.show()
@@ -405,8 +421,14 @@ def parse_args():
     parser.add_argument(
         "--formats",
         nargs="+",
-        default=DEFAULT_FORMATS,
-        help="Output formats used when --out has no suffix. Default: png pdf tiff.",
+        default=DEFAULT_FIGURE_FORMATS,
+        help="Output formats used when --out has no suffix. Default: png pdf svg.",
+    )
+    parser.add_argument(
+        "--dpi",
+        type=int,
+        default=600,
+        help="Raster output dpi.",
     )
     parser.add_argument(
         "--smooth-window",
@@ -429,14 +451,9 @@ def parse_args():
 
 
 def normalize_formats(formats):
-    normalized = []
-    for fmt in formats:
-        fmt = fmt.strip().lower().lstrip(".")
-        if fmt and fmt not in normalized:
-            normalized.append(fmt)
-    if not normalized:
-        raise ValueError("At least one output format is required.")
-    return normalized
+    from experiments.plotting_common import normalize_formats as _normalize_formats
+
+    return _normalize_formats(formats)
 
 
 def main():

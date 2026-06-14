@@ -22,8 +22,13 @@
 - DBLP / SG-GC: full robust=0.7029; M-off robust=0.7018, drop=+0.0011; K-off robust=0.7089, drop=-0.0060; w-off robust=0.7027, drop=+0.0002.
 
 ## Generated Files
-- `results\plots\extra_ablation_overview.png`
-- `results\plots\extra_ablation_overview.pdf`
-- `results\plots\extra_ablation_drop_vs_full.png`
-- `results\plots\extra_ablation_drop_vs_full.pdf`
+- `results\plots\extra_ablation_warmup_M_effect.png`
+- `results\plots\extra_ablation_warmup_M_effect.pdf`
+- `results\plots\extra_ablation_warmup_M_effect.svg`
+- `results\plots\extra_ablation_update_K_effect.png`
+- `results\plots\extra_ablation_update_K_effect.pdf`
+- `results\plots\extra_ablation_update_K_effect.svg`
+- `results\plots\extra_ablation_weight_w_effect.png`
+- `results\plots\extra_ablation_weight_w_effect.pdf`
+- `results\plots\extra_ablation_weight_w_effect.svg`
 - `results\plots\extra_ablation_analysis.md`

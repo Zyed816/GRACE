@@ -7,14 +7,23 @@ import matplotlib
 
 matplotlib.use("Agg")
 
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from experiments.plotting_common import (
+    DEFAULT_FIGURE_FORMATS,
+    add_panel_label_below,
+    apply_common_vector_settings,
+    normalize_formats,
+    panel_label,
+    save_figure_formats,
+)
 
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-if PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, PROJECT_ROOT)
 
 from experiments.statistical_significance.run_significance_experiment import DATASET_CHOICES, METHOD_CHOICES
 
@@ -32,10 +41,11 @@ METHOD_COLORS = {
     "ifl-gc": "#E15759",
 }
 METRIC_LABELS = {
-    "robust_score": "Robust Score",
+    "robust_score": "robust_score",
     "F1Mi_mean": "Micro-F1",
     "F1Ma_mean": "Macro-F1",
 }
+DELTA_YLABEL = "相对基线稳健性评分\nrobust_score变化"
 PRIMARY_COMPARISONS = [
     ("grace", "ifl-gr", "SG-GR\nvs GRACE"),
     ("gca", "ifl-gc", "SG-GC\nvs GCA"),
@@ -85,9 +95,10 @@ def configure_plot_style():
             "ps.fonttype": 42,
         }
     )
+    apply_common_vector_settings(plt)
 
 
-def make_mean_std_plot(df, out_dir, dpi):
+def make_mean_std_plot(df, out_dir, dpi, formats):
     run_df = df[df["stage"] == "run"].copy()
     if run_df.empty:
         raise RuntimeError("No run rows available for mean/std plot.")
@@ -150,15 +161,12 @@ def make_mean_std_plot(df, out_dir, dpi):
 
     fig.legend(legend_handles, legend_labels, loc="upper center", ncol=len(legend_handles), frameon=False)
     fig.tight_layout(rect=[0.0, 0.0, 1.0, 0.86])
-    png = out_dir / "significance_mean_std.png"
-    pdf = out_dir / "significance_mean_std.pdf"
-    fig.savefig(png, dpi=dpi)
-    fig.savefig(pdf)
+    saved_paths = save_figure_formats(fig, out_dir / "significance_mean_std", formats, dpi=dpi)
     plt.close(fig)
-    return png, pdf
+    return saved_paths
 
 
-def make_delta_plot(df, out_dir, dpi):
+def make_delta_plot(df, out_dir, dpi, formats):
     run_df = df[df["stage"] == "run"].copy()
     if run_df.empty:
         raise RuntimeError("No run rows available for delta plot.")
@@ -236,19 +244,10 @@ def make_delta_plot(df, out_dir, dpi):
             capsize=2.2,
         )
         ax.axhline(0.0, color="black", linewidth=0.75)
-        ax.text(
-            0.03,
-            0.96,
-            dataset,
-            transform=ax.transAxes,
-            ha="left",
-            va="top",
-            fontsize=9.5,
-            fontweight="semibold",
-        )
+        add_panel_label_below(ax, panel_label(ax_idx, dataset), y=-0.25, fontsize=9.5)
         ax.set_xticks(x)
         ax.set_xticklabels(comparison_labels, rotation=0, ha="center")
-        ax.set_ylabel("Robust Score Change vs Baseline (%)" if ax_idx % 2 == 0 else "")
+        ax.set_ylabel(DELTA_YLABEL if ax_idx % 2 == 0 else "")
         ax.grid(axis="y", color="#d9dde3", linewidth=0.6, alpha=0.9)
         ax.set_axisbelow(True)
         ax.spines["top"].set_visible(False)
@@ -267,13 +266,10 @@ def make_delta_plot(df, out_dir, dpi):
     for ax in axes[len(datasets) :]:
         ax.set_visible(False)
 
-    fig.tight_layout()
-    png = out_dir / "significance_paired_delta.png"
-    pdf = out_dir / "significance_paired_delta.pdf"
-    fig.savefig(png, dpi=dpi)
-    fig.savefig(pdf)
+    fig.tight_layout(rect=[0.04, 0.04, 1.0, 1.0], w_pad=1.2, h_pad=2.5)
+    saved_paths = save_figure_formats(fig, out_dir / "significance_paired_delta", formats, dpi=dpi)
     plt.close(fig)
-    return png, pdf
+    return saved_paths
 
 
 def parse_args():
@@ -281,11 +277,18 @@ def parse_args():
     parser.add_argument("--inputs", nargs="+", default=None)
     parser.add_argument("--out_dir", type=str, default=os.path.join("results", "plots"))
     parser.add_argument("--dpi", type=int, default=320)
+    parser.add_argument(
+        "--formats",
+        nargs="+",
+        default=DEFAULT_FIGURE_FORMATS,
+        help="Figure formats to save. Default: png pdf svg.",
+    )
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
+    args.formats = normalize_formats(args.formats)
     repo_root = Path(PROJECT_ROOT)
     out_dir = (repo_root / args.out_dir).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -297,8 +300,8 @@ def main():
     df = load_rows(input_paths)
 
     generated = []
-    generated.extend(make_mean_std_plot(df, out_dir, args.dpi))
-    generated.extend(make_delta_plot(df, out_dir, args.dpi))
+    generated.extend(make_mean_std_plot(df, out_dir, args.dpi, args.formats))
+    generated.extend(make_delta_plot(df, out_dir, args.dpi, args.formats))
     for path in generated:
         print(f"[significance-plot] saved: {path}")
 
