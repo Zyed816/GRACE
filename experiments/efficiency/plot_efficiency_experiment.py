@@ -141,14 +141,14 @@ def configure_plot_style():
         {
             "font.family": "serif",
             "font.serif": ["Times New Roman", "Times", "DejaVu Serif"],
-            "font.size": 9,
-            "axes.labelsize": 9.5,
-            "axes.titlesize": 10,
+            "font.size": 11,
+            "axes.labelsize": 12,
+            "axes.titlesize": 12,
             "axes.titleweight": "semibold",
             "axes.edgecolor": "#303030",
             "axes.linewidth": 0.8,
-            "xtick.labelsize": 8,
-            "ytick.labelsize": 8,
+            "xtick.labelsize": 10.5,
+            "ytick.labelsize": 10.5,
             "legend.fontsize": 8.5,
             "figure.facecolor": "white",
             "axes.facecolor": "white",
@@ -202,7 +202,7 @@ def draw_method_bars(ax, subset, metric, err_metric=None, baseline_zero=True):
     colors = [METHOD_COLORS.get(method, "#777777") for method in ordered_methods]
     ax.bar(x, values, yerr=errors, capsize=2.5 if errors is not None else 0, color=colors, edgecolor="white")
     ax.set_xticks(list(x))
-    ax.set_xticklabels([METHOD_LABELS.get(method, method) for method in ordered_methods], rotation=20, ha="right")
+    ax.set_xticklabels([METHOD_LABELS.get(method, method) for method in ordered_methods], rotation=20, ha="center")
     ax.grid(axis="y", color="#d9dde3", linewidth=0.6, alpha=0.85)
     ax.set_axisbelow(True)
     ax.spines["top"].set_visible(False)
@@ -332,7 +332,7 @@ def main():
             summary_df=summary_df,
             metric="train_total_sec",
             err_metric="train_total_std_sec",
-            ylabel="训练时间train_total_time",
+            ylabel="训练时间",
             title="",
             out_base=out_dir / "efficiency_train_total_time",
             dpi=args.dpi,
@@ -346,7 +346,7 @@ def main():
             summary_df=summary_df,
             metric="wall_time_sec",
             err_metric="wall_time_std_sec",
-            ylabel="端到端时间wall_time",
+            ylabel="端到端时间",
             title="",
             out_base=out_dir / "efficiency_wall_time",
             dpi=args.dpi,
