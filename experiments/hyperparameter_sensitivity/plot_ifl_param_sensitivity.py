@@ -44,7 +44,7 @@ METHOD_MARKERS = {
     "ifl-gr": "o",
     "ifl-gc": "s",
 }
-ROBUST_SCORE_YLABEL = "稳健性评分robust_score（%）"
+ROBUST_SCORE_YLABEL = "robust_score（%）"
 ANCHOR_LABEL = "观测点"
 
 PARAM_ORDER = ["t_s", "M", "K"]
@@ -206,14 +206,14 @@ def configure_plot_style():
             "font.family": "serif",
             "font.serif": ["Times New Roman", "Times", "DejaVu Serif"],
             "mathtext.fontset": "stix",
-            "font.size": 9,
-            "axes.labelsize": 9.5,
-            "axes.titlesize": 10,
+            "font.size": 11,
+            "axes.labelsize": 12,
+            "axes.titlesize": 12,
             "axes.titleweight": "semibold",
             "axes.edgecolor": "#303030",
             "axes.linewidth": 0.8,
-            "xtick.labelsize": 8,
-            "ytick.labelsize": 8,
+            "xtick.labelsize": 10.5,
+            "ytick.labelsize": 10.5,
             "legend.fontsize": 8.5,
             "figure.facecolor": "white",
             "axes.facecolor": "white",
@@ -264,7 +264,12 @@ def style_axis(ax, show_ylabel=False):
 
 
 def draw_robust_param_axis(ax, summary_df, methods, param_name, y_limits=None, show_ylabel=False):
-    ax.set_xlabel(PARAM_LABELS[param_name])
+    # For the t_s figure, move the x-axis label slightly upward so that
+    # it has more visual separation from the panel label, e.g., "(a) Cora".
+    if param_name == "t_s":
+        ax.set_xlabel(PARAM_LABELS[param_name], labelpad=-3)
+    else:
+        ax.set_xlabel(PARAM_LABELS[param_name])
     style_axis(ax, show_ylabel=show_ylabel)
 
     has_any_data = False
@@ -570,7 +575,11 @@ def make_combined_param_effect_plot(grace_dir, datasets, methods, out_dir, dpi, 
             y_limits=robust_score_limits(summary_df),
             show_ylabel=True,
         )
-        add_panel_label_below(ax, panel_label(index, dataset), y=-0.40, fontsize=10.5)
+        # Keep the t_s panel label only slightly lower. Do not use a very
+        # large negative y value together with a larger bottom margin, because
+        # tight_layout may compress the 2x2 axes and make the whole figure messy.
+        panel_label_y = -0.52 if spec["param"] == "t_s" else -0.40
+        add_panel_label_below(ax, panel_label(index, dataset), y=panel_label_y, fontsize=10.5)
 
     for ax in axes[len(datasets[:4]) :]:
         ax.set_visible(False)
@@ -610,7 +619,9 @@ def make_combined_param_effect_plot(grace_dir, datasets, methods, out_dir, dpi, 
         columnspacing=1.6,
     )
 
-    fig.tight_layout(rect=[0.0, 0.08, 1.0, 0.93], w_pad=1.3, h_pad=3.8)
+    # Use a moderate vertical padding. A very large h_pad or bottom margin
+    # can make the first and second rows too far apart or compress the axes.
+    fig.tight_layout(rect=[0.0, 0.08, 1.0, 0.93], w_pad=1.3, h_pad=2.0)
     svg_paths = []
     if "svg" in formats:
         svg_dir = Path(out_dir).parent / "plot"
