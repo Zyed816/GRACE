@@ -36,8 +36,8 @@ METHOD_LABELS = {
 }
 
 METHOD_COLORS = {
-    "ifl-gr": "#59A14F",
-    "ifl-gc": "#E15759",
+    "ifl-gr": "#73B86E",
+    "ifl-gc": "#7A6E9F",
 }
 
 METHOD_MARKERS = {
@@ -611,7 +611,15 @@ def make_combined_param_effect_plot(grace_dir, datasets, methods, out_dir, dpi, 
     )
 
     fig.tight_layout(rect=[0.0, 0.08, 1.0, 0.93], w_pad=1.3, h_pad=3.8)
-    saved_paths = save_figure_formats(fig, Path(out_dir) / spec["file_stem"], formats, dpi=dpi)
+    svg_paths = []
+    if "svg" in formats:
+        svg_dir = Path(out_dir).parent / "plot"
+        svg_paths = save_figure_formats(fig, svg_dir / spec["file_stem"], ["svg"], dpi=dpi)
+    other_formats = [f for f in formats if f != "svg"]
+    other_paths = []
+    if other_formats:
+        other_paths = save_figure_formats(fig, Path(out_dir) / spec["file_stem"], other_formats, dpi=dpi)
+    saved_paths = svg_paths + other_paths
     plt.close(fig)
     return saved_paths
 

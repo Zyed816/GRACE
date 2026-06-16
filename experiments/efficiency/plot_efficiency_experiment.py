@@ -33,10 +33,10 @@ METHOD_LABELS = {
     "ifl-gc": "SG-GC",
 }
 METHOD_COLORS = {
-    "grace": "#4E79A7",
-    "gca": "#F28E2B",
-    "ifl-gr": "#59A14F",
-    "ifl-gc": "#E15759",
+    "grace": "#42567A",
+    "gca": "#348380",
+    "ifl-gr": "#73B86E",
+    "ifl-gc": "#7A6E9F",
 }
 NUMERIC_COLUMNS = [
     "num_runs",

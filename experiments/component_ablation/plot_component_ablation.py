@@ -39,10 +39,10 @@ VARIANT_LABELS = {
     "uniform_weight": "w-off",
 }
 VARIANT_COLORS = {
-    "full": "#4E79A7",
-    "no_warmup": "#F28E2B",
-    "single_mining": "#59A14F",
-    "uniform_weight": "#E15759",
+    "full": "#42567A",
+    "no_warmup": "#348380",
+    "single_mining": "#73B86E",
+    "uniform_weight": "#7A6E9F",
 }
 VARIANT_HATCHES = {
     "full": "//",
