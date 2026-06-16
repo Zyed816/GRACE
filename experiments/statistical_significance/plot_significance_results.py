@@ -95,11 +95,13 @@ def configure_plot_style():
         {
             "font.family": "serif",
             "font.serif": ["Times New Roman", "Times", "DejaVu Serif"],
-            "font.size": 8.5,
-            "axes.labelsize": 9,
-            "axes.titlesize": 10,
+            "font.size": 11,
+            "axes.labelsize": 12,
+            "axes.titlesize": 12,
             "axes.edgecolor": "#303030",
             "axes.linewidth": 0.7,
+            "xtick.labelsize": 10.5,
+            "ytick.labelsize": 10.5,
             "legend.fontsize": 8.0,
             "figure.facecolor": "white",
             "axes.facecolor": "white",
@@ -359,7 +361,7 @@ def make_comparison_delta_plot(df, spec, out_dir, dpi, formats):
     ax.axhline(0.0, color="black", linewidth=0.75)
     ax.set_xticks(x)
     ax.set_xticklabels(datasets)
-    ax.set_ylabel("相对基线稳健性评分robust_score变化")
+    ax.set_ylabel("robust_score（%）")
     ax.set_ylim(*y_lim)
     ax.grid(axis="y", color="#d9dde3", linewidth=0.6, alpha=0.9)
     ax.set_axisbelow(True)
