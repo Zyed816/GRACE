@@ -52,7 +52,7 @@ VARIANT_HATCHES = {
 }
 VARIANT_HATCH_COLOR = "#4A4A4A"
 VARIANT_HATCH_LINEWIDTH = 0.35
-ROBUST_SCORE_YLABEL = "稳健性评分robust_score（%）"
+ROBUST_SCORE_YLABEL = "robust_score（%）"
 EFFECT_SPECS = [
     {
         "variant": "no_warmup",
@@ -186,14 +186,14 @@ def configure_plot_style():
         {
             "font.family": "serif",
             "font.serif": ["Times New Roman", "Times", "DejaVu Serif"],
-            "font.size": 9,
-            "axes.labelsize": 9.5,
-            "axes.titlesize": 10,
+            "font.size": 11,
+            "axes.labelsize": 12,
+            "axes.titlesize": 12,
             "axes.titleweight": "semibold",
             "axes.edgecolor": "#303030",
             "axes.linewidth": 0.8,
-            "xtick.labelsize": 8,
-            "ytick.labelsize": 8,
+            "xtick.labelsize": 10.5,
+            "ytick.labelsize": 10.5,
             "legend.fontsize": 8.5,
             "figure.facecolor": "white",
             "axes.facecolor": "white",
