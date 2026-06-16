@@ -654,13 +654,6 @@ def main():
         for spec in EFFECT_SPECS:
             generated.extend(make_effect_plot(summary_df, spec, out_dir, args.dpi, args.formats))
 
-    report_path = out_dir / "extra_ablation_analysis.md"
-    report_path.write_text(
-        build_report(input_infos, summary_df, generated + [report_path]),
-        encoding="utf-8",
-    )
-    generated.append(report_path)
-
     for path in generated:
         print(f"[plot] saved: {path}")
 

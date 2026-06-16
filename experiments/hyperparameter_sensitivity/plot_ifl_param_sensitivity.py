@@ -750,17 +750,11 @@ def main():
     merged_summary = pd.concat(summary_frames, ignore_index=True) if summary_frames else pd.DataFrame()
     dataset_slug = args.dataset.lower()
     out_base = os.path.join(out_dir, f"{dataset_slug}_ifl_sensitivity_overview")
-    report_path = os.path.join(out_dir, f"{dataset_slug}_ifl_sensitivity_analysis.md")
 
     saved_paths = make_plot(args.dataset, args.methods, merged_summary, out_base, args.formats, args.dpi)
-    png_path = next((path for path in saved_paths if Path(path).suffix == ".png"), saved_paths[0])
-    report = build_report(args.dataset, input_infos, merged_summary, png_path)
-    with open(report_path, "w", encoding="utf-8") as f:
-        f.write(report)
 
     for path in saved_paths:
         print(f"[plot] saved figure: {path}")
-    print(f"[plot] saved report: {report_path}")
 
 
 if __name__ == "__main__":

@@ -355,13 +355,6 @@ def main():
         )
     )
 
-    report_path = out_dir / "efficiency_analysis.md"
-    report_path.write_text(
-        build_report(input_infos, summary_df, generated + [report_path]),
-        encoding="utf-8",
-    )
-    generated.append(report_path)
-
     for path in generated:
         print(f"[plot] saved: {path}")
 

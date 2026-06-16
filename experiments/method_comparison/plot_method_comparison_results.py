@@ -652,10 +652,7 @@ def main():
 
     summary_df = build_plot_summary(input_paths)
 
-    summary_csv = out_dir / "method_comparison_best_verified_summary.csv"
-    summary_df.to_csv(summary_csv, index=False, encoding="utf-8")
-
-    generated_files = [summary_csv]
+    generated_files = []
     if not args.skip_overview:
         generated_files.extend(make_overview_plot(summary_df, out_dir, args.dpi, args.formats))
 
@@ -671,13 +668,7 @@ def main():
             )
         )
 
-    report_path = out_dir / "method_comparison_visualization_notes.md"
-    report_path.write_text(build_report(summary_df, generated_files), encoding="utf-8")
-    generated_files.append(report_path)
-
-    print(f"[plot] saved summary: {summary_csv}")
-    print(f"[plot] saved report: {report_path}")
-    for path in generated_files[1:]:
+    for path in generated_files:
         print(f"[plot] saved figure/file: {path}")
 
 
