@@ -40,6 +40,18 @@ LEGEND_LABELS = {
     "violation": "violation_rate",
     "margin": "mean_margin",
 }
+CURVE_STYLES = {
+    "violation": {
+        "linestyle": "-",
+        "marker": "o",
+        "markevery": 18,
+    },
+    "margin": {
+        "linestyle": "--",
+        "marker": "s",
+        "markevery": 18,
+    },
+}
 
 
 def dataset_slug(dataset):
@@ -186,15 +198,42 @@ def draw_metric_panel(
     tick_size = 12 if compact else 15
     raw_width = 1.0 if compact else 1.2
     smooth_width = 2.2 if compact else 2.6
+    marker_size = 4.2 if compact else 5.0
+    marker_edge_width = 0.8 if compact else 0.9
+    violation_style = CURVE_STYLES["violation"]
+    margin_style = CURVE_STYLES["margin"]
 
-    ax1.plot(x, y1, color=VIOLATION_COLOR, linewidth=raw_width, alpha=0.22, zorder=1)
-    ax2.plot(x, y2, color=MARGIN_COLOR, linewidth=raw_width, alpha=0.22, zorder=1)
+    ax1.plot(
+        x,
+        y1,
+        color=VIOLATION_COLOR,
+        linewidth=raw_width,
+        linestyle=violation_style["linestyle"],
+        alpha=0.22,
+        zorder=1,
+    )
+    ax2.plot(
+        x,
+        y2,
+        color=MARGIN_COLOR,
+        linewidth=raw_width,
+        linestyle=margin_style["linestyle"],
+        alpha=0.22,
+        zorder=1,
+    )
 
     line1, = ax1.plot(
         x,
         y1_smooth,
         color=VIOLATION_COLOR,
         linewidth=smooth_width,
+        linestyle=violation_style["linestyle"],
+        marker=violation_style["marker"],
+        markevery=violation_style["markevery"],
+        markersize=marker_size,
+        markerfacecolor="white",
+        markeredgecolor=VIOLATION_COLOR,
+        markeredgewidth=marker_edge_width,
         label=LEGEND_LABELS["violation"],
         zorder=3,
     )
@@ -203,6 +242,13 @@ def draw_metric_panel(
         y2_smooth,
         color=MARGIN_COLOR,
         linewidth=smooth_width,
+        linestyle=margin_style["linestyle"],
+        marker=margin_style["marker"],
+        markevery=margin_style["markevery"],
+        markersize=marker_size,
+        markerfacecolor="white",
+        markeredgecolor=MARGIN_COLOR,
+        markeredgewidth=marker_edge_width,
         label=LEGEND_LABELS["margin"],
         zorder=3,
     )

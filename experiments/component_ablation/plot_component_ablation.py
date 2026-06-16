@@ -13,6 +13,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 import matplotlib.pyplot as plt
 import pandas as pd
+from matplotlib.patches import Patch
 
 from experiments.plotting_common import (
     DEFAULT_FIGURE_FORMATS,
@@ -43,6 +44,14 @@ VARIANT_COLORS = {
     "single_mining": "#59A14F",
     "uniform_weight": "#E15759",
 }
+VARIANT_HATCHES = {
+    "full": "//",
+    "no_warmup": "\\\\",
+    "single_mining": "xx",
+    "uniform_weight": "--",
+}
+VARIANT_HATCH_COLOR = "#4A4A4A"
+VARIANT_HATCH_LINEWIDTH = 0.35
 ROBUST_SCORE_YLABEL = "稳健性评分robust_score（%）"
 EFFECT_SPECS = [
     {
@@ -50,19 +59,35 @@ EFFECT_SPECS = [
         "file_stem": "extra_ablation_warmup_M_effect",
         "label": "M-off",
         "legend_label": "M-off",
+        "module_label": "预热训练",
+        "suffix": "warmup_M_effect",
     },
     {
         "variant": "single_mining",
         "file_stem": "extra_ablation_update_K_effect",
         "label": "K-off",
         "legend_label": "K-off",
+        "module_label": "更新次数",
+        "suffix": "update_K_effect",
     },
     {
         "variant": "uniform_weight",
         "file_stem": "extra_ablation_weight_w_effect",
         "label": "w-off",
         "legend_label": "w-off",
+        "module_label": "权重",
+        "suffix": "weight_w_effect",
     },
+]
+METHOD_EFFECT_SPECS = [
+    {
+        **spec,
+        "method": method,
+        "file_stem": f"extra_ablation_{METHOD_FILE_SLUG}_{spec['suffix']}",
+        "figure_label": f"{METHOD_LABELS[method]}方法{spec['module_label']}消融实验结果图",
+    }
+    for spec in EFFECT_SPECS
+    for method, METHOD_FILE_SLUG in [("ifl-gr", "sggr"), ("ifl-gc", "sggc")]
 ]
 
 NUMERIC_COLUMNS = [
@@ -97,6 +122,11 @@ def parse_args():
         nargs="+",
         default=DEFAULT_FIGURE_FORMATS,
         help="Figure formats to save. Default: png pdf svg.",
+    )
+    parser.add_argument(
+        "--split-by-method",
+        action="store_true",
+        help="Save one dataset-grouped ablation figure for each method and ablated module.",
     )
     return parser.parse_args()
 
@@ -174,6 +204,8 @@ def configure_plot_style():
         }
     )
     apply_common_vector_settings(plt)
+    if "hatch.linewidth" in plt.rcParams:
+        plt.rcParams["hatch.linewidth"] = VARIANT_HATCH_LINEWIDTH
 
 
 def available_ordered(values, preferred_order):
@@ -227,6 +259,30 @@ def local_score_limits(values, errors=None, min_span=4.0):
     return lower, upper
 
 
+def variant_legend_handle(variant):
+    return Patch(
+        facecolor=VARIANT_COLORS[variant],
+        edgecolor=VARIANT_HATCH_COLOR,
+        linewidth=0.45,
+        hatch=VARIANT_HATCHES[variant],
+        label=VARIANT_LABELS[variant],
+    )
+
+
+def add_variant_hatch_overlay(ax, positions, values, width, variant, zorder):
+    ax.bar(
+        positions,
+        values,
+        width=width,
+        facecolor="none",
+        edgecolor=VARIANT_HATCH_COLOR,
+        linewidth=0.0,
+        hatch=VARIANT_HATCHES[variant],
+        label="_nolegend_",
+        zorder=zorder,
+    )
+
+
 def draw_variant_bars(ax, subset, metric, err_metric=None, baseline_zero=True):
     ordered_variants = [variant for variant in VARIANT_ORDER if variant in set(subset["variant"])]
     if not ordered_variants:
@@ -241,7 +297,9 @@ def draw_variant_bars(ax, subset, metric, err_metric=None, baseline_zero=True):
 
     x = range(len(ordered_variants))
     colors = [VARIANT_COLORS[variant] for variant in ordered_variants]
-    ax.bar(x, values, yerr=errors, capsize=2.5 if errors is not None else 0, color=colors, edgecolor="white")
+    bars = ax.bar(x, values, yerr=errors, capsize=2.5 if errors is not None else 0, color=colors, edgecolor="white")
+    for pos, value, variant, bar in zip(x, values, ordered_variants, bars):
+        add_variant_hatch_overlay(ax, [pos], [value], bar.get_width(), variant, zorder=bar.get_zorder() + 0.1)
     ax.set_xticks(list(x))
     ax.set_xticklabels([VARIANT_LABELS[variant] for variant in ordered_variants], rotation=28, ha="right")
     ax.grid(axis="y", color="#d9dde3", linewidth=0.6, alpha=0.85)
@@ -281,7 +339,8 @@ def draw_effect_axis(ax, subset, variant, y_limits):
             linewidth=0.45,
             label=VARIANT_LABELS[item],
         )
-        handles.append(bars[0])
+        add_variant_hatch_overlay(ax, positions, values, width, item, zorder=bars[0].get_zorder() + 0.1)
+        handles.append(variant_legend_handle(item))
 
     ax.set_xticks(x)
     ax.set_xticklabels([METHOD_LABELS.get(method, method) for method in ordered_methods])
@@ -356,6 +415,95 @@ def make_effect_plot(summary_df, spec, out_dir, dpi, formats):
     saved_paths = save_figure_formats(fig, out_dir / spec["file_stem"], formats, dpi=dpi)
     plt.close(fig)
     return saved_paths
+
+
+def draw_method_effect_axis(ax, summary_df, spec, y_limits):
+    method = spec["method"]
+    variant = spec["variant"]
+    datasets = [dataset for dataset in DATASET_ORDER if dataset in set(summary_df["dataset"].astype(str))]
+    variants = ["full", variant]
+    x = list(range(len(datasets)))
+    width = 0.34
+    handles = []
+
+    for idx, item in enumerate(variants):
+        values = []
+        errors = []
+        for dataset in datasets:
+            row = summary_df[
+                (summary_df["dataset"].astype(str) == dataset)
+                & (summary_df["method"].astype(str) == method)
+                & (summary_df["variant"].astype(str) == item)
+            ]
+            if row.empty:
+                values.append(float("nan"))
+                errors.append(0.0)
+                continue
+            values.append(float(row.iloc[0]["robust_score"]) * 100.0)
+            if "robust_score_std" in row.columns:
+                errors.append(float(row.iloc[0]["robust_score_std"]) * 100.0)
+            else:
+                errors.append(0.0)
+
+        positions = [pos + (idx - 0.5) * width for pos in x]
+        bars = ax.bar(
+            positions,
+            values,
+            width=width,
+            yerr=errors,
+            capsize=2.4,
+            color=VARIANT_COLORS[item],
+            edgecolor="white",
+            linewidth=0.45,
+            label=VARIANT_LABELS[item],
+        )
+        add_variant_hatch_overlay(ax, positions, values, width, item, zorder=bars[0].get_zorder() + 0.1)
+        handles.append(variant_legend_handle(item))
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(datasets)
+    ax.set_ylabel(ROBUST_SCORE_YLABEL)
+    ax.set_ylim(*y_limits)
+    ax.grid(axis="y", color="#d9dde3", linewidth=0.6, alpha=0.85)
+    ax.set_axisbelow(True)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.tick_params(axis="both", colors="#303030", pad=2)
+    return handles, ["Full", spec["legend_label"]]
+
+
+def make_method_effect_plot(summary_df, spec, out_dir, dpi, formats):
+    subset = summary_df[
+        (summary_df["method"].astype(str) == spec["method"])
+        & (summary_df["variant"].astype(str).isin(["full", spec["variant"]]))
+    ].copy()
+    if subset.empty:
+        raise RuntimeError(f"No rows available for {spec['method']} / {spec['variant']}.")
+
+    y_limits = effect_axis_limits(subset, spec["variant"])
+    fig, ax = plt.subplots(figsize=(7.2, 4.2))
+    handles, labels = draw_method_effect_axis(ax, summary_df, spec, y_limits)
+    ax.legend(
+        handles,
+        labels,
+        loc="upper center",
+        bbox_to_anchor=(0.5, 1.13),
+        ncol=len(handles),
+        frameon=False,
+        handlelength=1.5,
+        columnspacing=1.4,
+    )
+    fig.tight_layout(rect=[0.0, 0.0, 1.0, 0.91])
+    saved_paths = save_figure_formats(fig, out_dir / spec["file_stem"], formats, dpi=dpi)
+    plt.close(fig)
+    return saved_paths
+
+
+def make_method_effect_plots(summary_df, out_dir, dpi, formats):
+    generated = []
+    for spec in METHOD_EFFECT_SPECS:
+        generated.extend(make_method_effect_plot(summary_df, spec, out_dir, dpi, formats))
+    return generated
 
 
 def make_panel_plot(summary_df, metric, err_metric, ylabel, title, out_base, dpi, baseline_zero=True):
@@ -500,8 +648,11 @@ def main():
     configure_plot_style()
     generated = []
 
-    for spec in EFFECT_SPECS:
-        generated.extend(make_effect_plot(summary_df, spec, out_dir, args.dpi, args.formats))
+    if args.split_by_method:
+        generated.extend(make_method_effect_plots(summary_df, out_dir, args.dpi, args.formats))
+    else:
+        for spec in EFFECT_SPECS:
+            generated.extend(make_effect_plot(summary_df, spec, out_dir, args.dpi, args.formats))
 
     report_path = out_dir / "extra_ablation_analysis.md"
     report_path.write_text(

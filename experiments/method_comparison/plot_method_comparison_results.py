@@ -54,6 +54,7 @@ METHOD_BAR_EDGE_COLOR = "white"
 DATASET_ORDER = ["Cora", "CiteSeer", "PubMed", "DBLP"]
 OVERVIEW_DATASET_ORDER = DATASET_ORDER
 OVERVIEW_METRIC_LABELS = ["robust_score", "Micro-F1", "Macro-F1"]
+REQUESTED_METRIC_NAMES = ["robust_score", "F1Mi_mean", "F1Ma_mean"]
 DATASET_SLUG_TO_LABEL = {
     "cora": "Cora",
     "citeseer": "CiteSeer",
@@ -136,9 +137,14 @@ def parse_args():
     parser.add_argument(
         "--metrics",
         nargs="+",
-        default=["robust_score", "F1Mi_mean", "F1Ma_mean", "delta_vs_grace"],
+        default=REQUESTED_METRIC_NAMES,
         choices=list(METRIC_SPECS.keys()),
         help="Metrics to visualize.",
+    )
+    parser.add_argument(
+        "--skip-overview",
+        action="store_true",
+        help="Skip the 2x2 overview figure and only save the requested metric figures.",
     )
     parser.add_argument(
         "--dpi",
@@ -329,7 +335,7 @@ def to_plot_units(values):
 def metric_axis_label(metric_name):
     if metric_name == "delta_vs_grace":
         return "相对GRACE变化（百分点）"
-    return "分数（%）"
+    return f"{METRIC_SPECS[metric_name]['label']}（%）"
 
 
 def compute_axis_limits(value_matrix, err_matrix, metric_name):
@@ -650,7 +656,8 @@ def main():
     summary_df.to_csv(summary_csv, index=False, encoding="utf-8")
 
     generated_files = [summary_csv]
-    generated_files.extend(make_overview_plot(summary_df, out_dir, args.dpi, args.formats))
+    if not args.skip_overview:
+        generated_files.extend(make_overview_plot(summary_df, out_dir, args.dpi, args.formats))
 
     for metric_name in args.metrics:
         generated_files.extend(

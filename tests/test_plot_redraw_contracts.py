@@ -76,10 +76,25 @@ class PlotRedrawContractTests(unittest.TestCase):
         self.assertEqual(LEGEND_LABELS["violation"], "violation_rate")
         self.assertEqual(LEGEND_LABELS["margin"], "mean_margin")
 
+    def test_sampling_bias_curves_have_print_friendly_line_styles(self):
+        from plot.plot import CURVE_STYLES
+
+        violation = CURVE_STYLES["violation"]
+        margin = CURVE_STYLES["margin"]
+
+        self.assertNotEqual(violation["linestyle"], margin["linestyle"])
+        self.assertNotEqual(violation["marker"], margin["marker"])
+        self.assertGreater(violation["markevery"], 0)
+        self.assertGreater(margin["markevery"], 0)
+
     def test_method_overview_uses_robust_score_metric_label(self):
-        from experiments.method_comparison.plot_method_comparison_results import OVERVIEW_METRIC_LABELS
+        from experiments.method_comparison.plot_method_comparison_results import (
+            OVERVIEW_METRIC_LABELS,
+            REQUESTED_METRIC_NAMES,
+        )
 
         self.assertEqual(OVERVIEW_METRIC_LABELS[0], "robust_score")
+        self.assertEqual(REQUESTED_METRIC_NAMES, ["robust_score", "F1Mi_mean", "F1Ma_mean"])
 
     def test_ablation_effect_uses_stable_score_label_and_local_y_limits(self):
         from experiments.component_ablation.plot_component_ablation import (
@@ -148,6 +163,44 @@ class PlotRedrawContractTests(unittest.TestCase):
         self.assertEqual(len(observed_limits), 2)
         self.assertNotEqual(observed_limits[0], observed_limits[1])
         self.assertLess(observed_limits[0][0] - observed_limits[1][0], 10.0)
+
+    def test_ablation_method_split_specs_cover_each_method_and_module(self):
+        from experiments.component_ablation.plot_component_ablation import METHOD_EFFECT_SPECS
+
+        stems = [spec["file_stem"] for spec in METHOD_EFFECT_SPECS]
+
+        self.assertEqual(
+            stems,
+            [
+                "extra_ablation_sggr_warmup_M_effect",
+                "extra_ablation_sggc_warmup_M_effect",
+                "extra_ablation_sggr_update_K_effect",
+                "extra_ablation_sggc_update_K_effect",
+                "extra_ablation_sggr_weight_w_effect",
+                "extra_ablation_sggc_weight_w_effect",
+            ],
+        )
+
+    def test_ablation_variants_have_print_friendly_hatches(self):
+        from experiments.component_ablation.plot_component_ablation import VARIANT_HATCHES
+
+        self.assertEqual(VARIANT_HATCHES["full"], "//")
+        self.assertEqual(VARIANT_HATCHES["no_warmup"], "\\\\")
+        self.assertEqual(VARIANT_HATCHES["single_mining"], "xx")
+        self.assertEqual(VARIANT_HATCHES["uniform_weight"], "--")
+
+    def test_significance_split_specs_cover_primary_comparisons(self):
+        from experiments.statistical_significance.plot_significance_results import COMPARISON_EFFECT_SPECS
+
+        stems = [spec["file_stem"] for spec in COMPARISON_EFFECT_SPECS]
+
+        self.assertEqual(
+            stems,
+            [
+                "significance_sggr_vs_grace",
+                "significance_sggc_vs_gca",
+            ],
+        )
 
     def test_significance_delta_ylabel_uses_stable_score_wording(self):
         from experiments.statistical_significance.plot_significance_results import DELTA_YLABEL

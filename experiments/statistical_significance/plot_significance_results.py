@@ -50,6 +50,20 @@ PRIMARY_COMPARISONS = [
     ("grace", "ifl-gr", "SG-GR\nvs GRACE"),
     ("gca", "ifl-gc", "SG-GC\nvs GCA"),
 ]
+COMPARISON_EFFECT_SPECS = [
+    {
+        "baseline": "grace",
+        "target": "ifl-gr",
+        "label": "SG-GR VS GRACE",
+        "file_stem": "significance_sggr_vs_grace",
+    },
+    {
+        "baseline": "gca",
+        "target": "ifl-gc",
+        "label": "SG-GC VS GCA",
+        "file_stem": "significance_sggc_vs_gca",
+    },
+]
 
 
 def resolve_input_paths(repo_root, explicit_inputs):
@@ -272,6 +286,107 @@ def make_delta_plot(df, out_dir, dpi, formats):
     return saved_paths
 
 
+def comparison_delta_stats(df, spec):
+    run_df = df[df["stage"] == "run"].copy()
+    if run_df.empty:
+        raise RuntimeError("No run rows available for comparison delta plot.")
+    run_df["robust_score"] = pd.to_numeric(run_df["robust_score"], errors="coerce")
+
+    datasets = [item for item in DATASET_CHOICES if item in set(run_df["dataset"].astype(str))]
+    means = []
+    errors = []
+    significant_flags = []
+
+    for dataset in datasets:
+        dataset_df = run_df[run_df["dataset"].astype(str) == dataset]
+        base_df = dataset_df[dataset_df["method"].astype(str) == spec["baseline"]].set_index("run_idx")
+        target_df = dataset_df[dataset_df["method"].astype(str) == spec["target"]].set_index("run_idx")
+        shared = sorted(set(base_df.index) & set(target_df.index), key=lambda item: int(float(item)))
+        deltas = []
+        for run_idx in shared:
+            base = pd.to_numeric(pd.Series([base_df.loc[run_idx, "robust_score"]]), errors="coerce").iloc[0]
+            target = pd.to_numeric(pd.Series([target_df.loc[run_idx, "robust_score"]]), errors="coerce").iloc[0]
+            if pd.notna(base) and pd.notna(target):
+                deltas.append((float(target) - float(base)) * 100.0)
+
+        mean = float(np.mean(deltas)) if deltas else np.nan
+        error = float(np.std(deltas, ddof=0)) if len(deltas) > 1 else 0.0
+        means.append(mean)
+        errors.append(error)
+
+        test_df = df[
+            (df["stage"] == "test")
+            & (df["dataset"].astype(str) == dataset)
+            & (df["metric"].astype(str) == "robust_score")
+            & (df["baseline_method"].astype(str) == spec["baseline"])
+            & (df["target_method"].astype(str) == spec["target"])
+        ]
+        significant_flags.append(
+            not test_df.empty
+            and str(test_df.iloc[0].get("significant", "")).lower() == "true"
+            and mean > 0
+        )
+
+    return datasets, means, errors, significant_flags
+
+
+def make_comparison_delta_plot(df, spec, out_dir, dpi, formats):
+    datasets, means, errors, significant_flags = comparison_delta_stats(df, spec)
+    if not datasets:
+        raise RuntimeError(f"No datasets available for {spec['label']} comparison plot.")
+
+    finite_values = [0.0]
+    for mean, error in zip(means, errors):
+        if np.isfinite(mean):
+            finite_values.extend([mean - error, mean + error])
+    y_low = min(finite_values)
+    y_high = max(finite_values)
+    y_span = max(y_high - y_low, 1.0)
+    y_lim = (y_low - y_span * 0.22, y_high + y_span * 0.28)
+    star_offset = y_span * 0.06
+
+    x = np.arange(len(datasets), dtype=float)
+    fig, ax = plt.subplots(figsize=(7.2, 4.2))
+    bars = ax.bar(
+        x,
+        means,
+        yerr=errors,
+        color=METHOD_COLORS[spec["target"]],
+        edgecolor="white",
+        linewidth=0.45,
+        capsize=2.4,
+    )
+    ax.axhline(0.0, color="black", linewidth=0.75)
+    ax.set_xticks(x)
+    ax.set_xticklabels(datasets)
+    ax.set_ylabel("相对基线稳健性评分robust_score变化")
+    ax.set_ylim(*y_lim)
+    ax.grid(axis="y", color="#d9dde3", linewidth=0.6, alpha=0.9)
+    ax.set_axisbelow(True)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.tick_params(axis="both", colors="#303030", pad=2)
+
+    for bar, is_significant, mean, error in zip(bars, significant_flags, means, errors):
+        if not is_significant or not np.isfinite(mean):
+            continue
+        x_pos = bar.get_x() + bar.get_width() * 0.5
+        y_pos = mean + error + star_offset
+        ax.text(x_pos, y_pos, "*", ha="center", va="center", fontsize=12)
+
+    fig.tight_layout(rect=[0.0, 0.0, 1.0, 1.0])
+    saved_paths = save_figure_formats(fig, out_dir / spec["file_stem"], formats, dpi=dpi)
+    plt.close(fig)
+    return saved_paths
+
+
+def make_comparison_delta_plots(df, out_dir, dpi, formats):
+    generated = []
+    for spec in COMPARISON_EFFECT_SPECS:
+        generated.extend(make_comparison_delta_plot(df, spec, out_dir, dpi, formats))
+    return generated
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Plot statistical significance experiment summaries.")
     parser.add_argument("--inputs", nargs="+", default=None)
@@ -282,6 +397,11 @@ def parse_args():
         nargs="+",
         default=DEFAULT_FIGURE_FORMATS,
         help="Figure formats to save. Default: png pdf svg.",
+    )
+    parser.add_argument(
+        "--split-primary-comparisons",
+        action="store_true",
+        help="Save one robust_score delta figure for each primary significance comparison.",
     )
     return parser.parse_args()
 
@@ -300,8 +420,11 @@ def main():
     df = load_rows(input_paths)
 
     generated = []
-    generated.extend(make_mean_std_plot(df, out_dir, args.dpi, args.formats))
-    generated.extend(make_delta_plot(df, out_dir, args.dpi, args.formats))
+    if args.split_primary_comparisons:
+        generated.extend(make_comparison_delta_plots(df, out_dir, args.dpi, args.formats))
+    else:
+        generated.extend(make_mean_std_plot(df, out_dir, args.dpi, args.formats))
+        generated.extend(make_delta_plot(df, out_dir, args.dpi, args.formats))
     for path in generated:
         print(f"[significance-plot] saved: {path}")
 
