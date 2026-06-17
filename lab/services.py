@@ -286,7 +286,7 @@ def _register_image_pair(run, label, base_path):
 
 
 def _ordered_methods(methods):
-    order = ["grace", "gca", "ifl-gr", "ifl-gc"]
+    order = ["grace", "gca", "sg-gr", "sg-gc"]
     unique = list(dict.fromkeys(methods))
     return [method for method in order if method in unique] + [method for method in unique if method not in order]
 
@@ -327,9 +327,9 @@ def _run_method_comparison(run):
     _run_command(run, command, "method-comparison")
 
     _register_artifact(run, "Unified Results CSV", ExperimentArtifact.TYPE_CSV, out_csv)
-    for method_slug in ("iflgr", "gca", "iflgc"):
+    for method_slug in ("sggr", "gca", "sggc"):
         grid_file = grid_dir / f"grid_search_{method_slug}_{dataset_slug}_results.csv"
-        method_label = {"iflgr": "SG-GR", "gca": "GCA", "iflgc": "SG-GC"}[method_slug]
+        method_label = {"sggr": "SG-GR", "gca": "GCA", "sggc": "SG-GC"}[method_slug]
         _register_artifact(run, f"{method_label} Grid Search", ExperimentArtifact.TYPE_CSV, grid_file)
 
     summary = build_method_comparison_summary(BASE_DIR / out_csv)
@@ -416,7 +416,7 @@ def _run_sensitivity(run):
         out_csv = run_dir / f"sensitivity_{method_slug}_{dataset_slug}_results.csv"
         command = [
             sys.executable,
-            "experiments/hyperparameter_sensitivity/run_ifl_param_sensitivity.py",
+            "experiments/hyperparameter_sensitivity/run_sg_param_sensitivity.py",
             "--datasets",
             dataset,
             "--methods",
@@ -440,16 +440,16 @@ def _run_sensitivity(run):
             command.append("--continue_on_error")
 
         _run_command(run, command, f"sensitivity-{method}")
-        method_label = {"iflgr": "SG-GR", "iflgc": "SG-GC"}.get(method_slug, method_slug.upper())
+        method_label = {"sggr": "SG-GR", "sggc": "SG-GC"}.get(method_slug, method_slug.upper())
         _register_artifact(run, f"{method_label} Sensitivity CSV", ExperimentArtifact.TYPE_CSV, out_csv)
         csv_paths.append(out_csv)
 
-    plot_png = plots_dir / f"{dataset_slug}_ifl_sensitivity_overview.png"
-    plot_svg = plots_dir / f"{dataset_slug}_ifl_sensitivity_overview.svg"
-    report_md = plots_dir / f"{dataset_slug}_ifl_sensitivity_analysis.md"
+    plot_png = plots_dir / f"{dataset_slug}_sg_sensitivity_overview.png"
+    plot_svg = plots_dir / f"{dataset_slug}_sg_sensitivity_overview.svg"
+    report_md = plots_dir / f"{dataset_slug}_sg_sensitivity_analysis.md"
     plot_command = [
         sys.executable,
-        "experiments/hyperparameter_sensitivity/plot_ifl_param_sensitivity.py",
+        "experiments/hyperparameter_sensitivity/plot_sg_param_sensitivity.py",
         "--dataset",
         dataset,
         "--methods",

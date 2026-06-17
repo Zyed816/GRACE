@@ -14,15 +14,15 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from experiments.hyperparameter_sensitivity.run_ifl_param_sensitivity import parse_trace_stats
+from experiments.hyperparameter_sensitivity.run_sg_param_sensitivity import parse_trace_stats
 from experiments.method_comparison.run_full_pipeline import robust_score, run_train
 
 
 DATASET_CHOICES = ["Cora", "CiteSeer", "PubMed", "DBLP"]
-METHOD_CHOICES = ["ifl-gr", "ifl-gc"]
+METHOD_CHOICES = ["sg-gr", "sg-gc"]
 METHOD_FILE_SLUG = {
-    "ifl-gr": "iflgr",
-    "ifl-gc": "iflgc",
+    "sg-gr": "sggr",
+    "sg-gc": "sggc",
 }
 
 VARIANT_SPECS = [
@@ -289,16 +289,16 @@ def params_to_dataset_updates(params, method):
     else:
         updates["similarity_threshold"] = None
 
-    if method == "ifl-gc":
+    if method == "sg-gc":
         if has_value(params, "gca_drop_scheme"):
             updates["gca_drop_scheme"] = params["gca_drop_scheme"]
-        add_float("iflgc_refl_du_weight")
+        add_float("sggc_refl_du_weight")
         add_float("drop_edge_rate_1")
         add_float("drop_edge_rate_2")
         add_float("drop_feature_rate_1")
         add_float("drop_feature_rate_2")
         add_int("gca_pr_k")
-    elif method != "ifl-gr":
+    elif method != "sg-gr":
         raise ValueError(f"Unsupported component-ablation method: {method}")
 
     return updates
@@ -628,7 +628,7 @@ def run_one_combo(grace_dir, base_config, dataset, method, args, out_csv):
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Run SG-GCL component ablation experiments for IFL-GR and IFL-GC."
+        description="Run SG-GCL component ablation experiments for SG-GR and SG-GC."
     )
     parser.add_argument("--config", type=str, default="config.yaml")
     parser.add_argument("--gpu_id", type=int, default=0)

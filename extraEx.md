@@ -23,8 +23,8 @@
 
 实验对象为两个 SG 方法：
 
-- `SG-GR`：代码方法名 `ifl-gr`
-- `SG-GC`：代码方法名 `ifl-gc`
+- `SG-GR`：代码方法名 `sg-gr`
+- `SG-GC`：代码方法名 `sg-gc`
 
 ### 1.2 实验设计
 
@@ -99,14 +99,14 @@ results/plots/extra_ablation_analysis.md
 轻量验证命令：
 
 ```bash
-python experiments/component_ablation/run_component_ablation.py --datasets Cora --methods ifl-gr --runs 1 --gpu_id 0
+python experiments/component_ablation/run_component_ablation.py --datasets Cora --methods sg-gr --runs 1 --gpu_id 0
 python experiments/component_ablation/plot_component_ablation.py --inputs results/extra_ablation_cora_results.csv
 ```
 
 完整消融实验命令：
 
 ```bash
-python experiments/component_ablation/run_component_ablation.py --datasets Cora CiteSeer PubMed DBLP --methods ifl-gr ifl-gc --runs 3 --gpu_id 0
+python experiments/component_ablation/run_component_ablation.py --datasets Cora CiteSeer PubMed DBLP --methods sg-gr sg-gc --runs 3 --gpu_id 0
 python experiments/component_ablation/plot_component_ablation.py
 ```
 
@@ -128,8 +128,8 @@ python experiments/component_ablation/plot_component_ablation.py
 
 - `GRACE`：代码方法名 `grace`
 - `GCA`：代码方法名 `gca`
-- `SG-GR`：代码方法名 `ifl-gr`
-- `SG-GC`：代码方法名 `ifl-gc`
+- `SG-GR`：代码方法名 `sg-gr`
+- `SG-GC`：代码方法名 `sg-gc`
 
 其中：
 
@@ -142,8 +142,8 @@ python experiments/component_ablation/plot_component_ablation.py
 效率实验不重新搜索参数：
 
 1. `grace` 使用 `results/<dataset>_full_pipeline_results.csv` 中 `stage=baseline, method=grace` 的参数。
-2. `gca/ifl-gr/ifl-gc` 使用 `stage=top_verify` 中平均 `robust_score` 最高的 `candidate_rank`。
-3. 如果对应 full-pipeline CSV 不存在，则 `gca/ifl-gr/ifl-gc` 回退到对应 `grid_search_*_results.csv` 的第一行。
+2. `gca/sg-gr/sg-gc` 使用 `stage=top_verify` 中平均 `robust_score` 最高的 `candidate_rank`。
+3. 如果对应 full-pipeline CSV 不存在，则 `gca/sg-gr/sg-gc` 回退到对应 `grid_search_*_results.csv` 的第一行。
 4. 所有方法共享同一 seed 策略：第 `i` 次运行使用 `dataset_base_seed + i`。
 
 ### 2.3 记录指标与结果位置
@@ -186,14 +186,14 @@ results/plots/efficiency_analysis.md
 轻量验证命令：
 
 ```bash
-python experiments/efficiency/run_efficiency_experiment.py --datasets Cora --methods grace ifl-gr --runs 1 --gpu_id 0
+python experiments/efficiency/run_efficiency_experiment.py --datasets Cora --methods grace sg-gr --runs 1 --gpu_id 0
 python experiments/efficiency/plot_efficiency_experiment.py --inputs results/efficiency_cora_results.csv
 ```
 
 完整效率实验命令：
 
 ```bash
-python experiments/efficiency/run_efficiency_experiment.py --datasets Cora CiteSeer PubMed DBLP --methods grace gca ifl-gr ifl-gc --runs 3 --gpu_id 0
+python experiments/efficiency/run_efficiency_experiment.py --datasets Cora CiteSeer PubMed DBLP --methods grace gca sg-gr sg-gc --runs 3 --gpu_id 0
 python experiments/efficiency/plot_efficiency_experiment.py
 ```
 
@@ -220,8 +220,8 @@ python experiments/efficiency/plot_efficiency_experiment.py
 
 - `GRACE`：代码方法名 `grace`
 - `GCA`：代码方法名 `gca`
-- `SG-GR`：代码方法名 `ifl-gr`
-- `SG-GC`：代码方法名 `ifl-gc`
+- `SG-GR`：代码方法名 `sg-gr`
+- `SG-GC`：代码方法名 `sg-gc`
 
 默认每个 `(dataset, method)` 运行 `runs=10` 次。第 `i` 次运行的训练 seed 和评估 seed 均设置为：
 
@@ -236,7 +236,7 @@ seed = eval_seed = dataset_base_seed + i
 统计显著性实验不重新做网格搜索：
 
 1. `grace` 使用 `results/<dataset>_full_pipeline_results.csv` 中 `stage=baseline, method=grace` 的参数。
-2. `gca/ifl-gr/ifl-gc` 使用 `stage=top_verify` 中平均 `robust_score` 最高的 `candidate_rank`。
+2. `gca/sg-gr/sg-gc` 使用 `stage=top_verify` 中平均 `robust_score` 最高的 `candidate_rank`。
 3. 如果 full-pipeline CSV 不存在，则非 `grace` 方法回退到对应 `results/grid_search_<method_slug>_<dataset>_results.csv` 第一行。
 4. 所有方法在同一数据集上使用完全相同的 seed 列表，以支持配对检验。
 
@@ -244,12 +244,12 @@ seed = eval_seed = dataset_base_seed + i
 
 主比较：
 
-- `SG-GR` vs `GRACE`：`ifl-gr` 对比 `grace`
-- `SG-GC` vs `GCA`：`ifl-gc` 对比 `gca`
+- `SG-GR` vs `GRACE`：`sg-gr` 对比 `grace`
+- `SG-GC` vs `GCA`：`sg-gc` 对比 `gca`
 
 补充比较：
 
-- `SG-GC` vs `GRACE`：`ifl-gc` 对比 `grace`
+- `SG-GC` vs `GRACE`：`sg-gc` 对比 `grace`
 - `GCA` vs `GRACE`：`gca` 对比 `grace`
 
 主指标：
@@ -304,8 +304,8 @@ python experiments/run_efficiency_and_significance.py --gpu_id 0
 该脚本默认等价于依次执行：
 
 ```bash
-python experiments/efficiency/run_efficiency_experiment.py --datasets Cora CiteSeer PubMed DBLP --methods grace gca ifl-gr ifl-gc --runs 3 --gpu_id 0
-python experiments/statistical_significance/run_significance_experiment.py --datasets Cora CiteSeer PubMed DBLP --methods grace gca ifl-gr ifl-gc --runs 10 --gpu_id 0
+python experiments/efficiency/run_efficiency_experiment.py --datasets Cora CiteSeer PubMed DBLP --methods grace gca sg-gr sg-gc --runs 3 --gpu_id 0
+python experiments/statistical_significance/run_significance_experiment.py --datasets Cora CiteSeer PubMed DBLP --methods grace gca sg-gr sg-gc --runs 10 --gpu_id 0
 ```
 
 如果需要调整重复次数，可使用：
@@ -317,7 +317,7 @@ python experiments/run_efficiency_and_significance.py --efficiency_runs 3 --sign
 轻量验证命令：
 
 ```bash
-python experiments/statistical_significance/run_significance_experiment.py --datasets Cora --methods grace ifl-gr --runs 2 --gpu_id 0
+python experiments/statistical_significance/run_significance_experiment.py --datasets Cora --methods grace sg-gr --runs 2 --gpu_id 0
 python experiments/statistical_significance/analyze_significance_results.py --inputs results/significance_cora_results.csv
 python experiments/statistical_significance/plot_significance_results.py --inputs results/significance_cora_results.csv
 ```
@@ -325,7 +325,7 @@ python experiments/statistical_significance/plot_significance_results.py --input
 完整统计显著性实验命令：
 
 ```bash
-python experiments/statistical_significance/run_significance_experiment.py --datasets Cora CiteSeer PubMed DBLP --methods grace gca ifl-gr ifl-gc --runs 10 --gpu_id 0
+python experiments/statistical_significance/run_significance_experiment.py --datasets Cora CiteSeer PubMed DBLP --methods grace gca sg-gr sg-gc --runs 10 --gpu_id 0
 python experiments/statistical_significance/analyze_significance_results.py
 python experiments/statistical_significance/plot_significance_results.py
 ```
@@ -333,7 +333,7 @@ python experiments/statistical_significance/plot_significance_results.py
 如果使用当前项目 Conda 环境，也可以显式指定解释器：
 
 ```bash
-D:\SoftWare\anaconda\envs\GCL\python.exe experiments\statistical_significance\run_significance_experiment.py --datasets Cora CiteSeer PubMed DBLP --methods grace gca ifl-gr ifl-gc --runs 10 --gpu_id 0
+D:\SoftWare\anaconda\envs\GCL\python.exe experiments\statistical_significance\run_significance_experiment.py --datasets Cora CiteSeer PubMed DBLP --methods grace gca sg-gr sg-gc --runs 10 --gpu_id 0
 D:\SoftWare\anaconda\envs\GCL\python.exe experiments\statistical_significance\analyze_significance_results.py
 D:\SoftWare\anaconda\envs\GCL\python.exe experiments\statistical_significance\plot_significance_results.py
 ```

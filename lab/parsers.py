@@ -353,8 +353,8 @@ def build_efficiency_summary(csv_paths, report_path=None):
         "methods": [row["method"] for row in method_rows],
         "method_rows": method_rows,
         "fastest_method": fastest,
-        "sggr_ratio": (by_method.get("ifl-gr") or {}).get("time_ratio_vs_grace"),
-        "sggc_ratio": (by_method.get("ifl-gc") or {}).get("overhead_ratio_vs_base"),
+        "sggr_ratio": (by_method.get("sg-gr") or {}).get("time_ratio_vs_grace"),
+        "sggc_ratio": (by_method.get("sg-gc") or {}).get("overhead_ratio_vs_base"),
         "report_text": read_text_file(report_path) if report_path else "",
     }
 
@@ -373,7 +373,7 @@ def build_significance_summary(csv_paths, summary_csv=None, report_path=None):
         for row in test_rows
         if row.get("metric") == "robust_score"
         and row.get("notes") == "primary"
-        and (row.get("baseline_method"), row.get("target_method")) in {("grace", "ifl-gr"), ("gca", "ifl-gc")}
+        and (row.get("baseline_method"), row.get("target_method")) in {("grace", "sg-gr"), ("gca", "sg-gc")}
     ]
     significant_rows = [row for row in primary_rows if row.get("significant") == "True"]
 

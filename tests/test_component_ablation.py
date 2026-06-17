@@ -19,8 +19,8 @@ class ComponentAblationTests(unittest.TestCase):
         with (REPO_ROOT / "config.yaml").open("r", encoding="utf-8") as f:
             cls.base_config = yaml.safe_load(f)
 
-    def test_selects_best_verified_cora_iflgr_candidate(self):
-        selected = select_base_params(str(REPO_ROOT), "Cora", "ifl-gr")
+    def test_selects_best_verified_cora_sggr_candidate(self):
+        selected = select_base_params(str(REPO_ROOT), "Cora", "sg-gr")
 
         self.assertEqual(selected["source"], "full_pipeline")
         self.assertEqual(selected["candidate_rank"], "3")
@@ -40,15 +40,15 @@ class ComponentAblationTests(unittest.TestCase):
             "tau": "0.3",
         }
 
-        full = build_trial_updates(self.base_config, "Cora", "ifl-gr", base_params, "full", run_idx=1)
+        full = build_trial_updates(self.base_config, "Cora", "sg-gr", base_params, "full", run_idx=1)
         no_warmup = build_trial_updates(
-            self.base_config, "Cora", "ifl-gr", base_params, "no_warmup", run_idx=1
+            self.base_config, "Cora", "sg-gr", base_params, "no_warmup", run_idx=1
         )
         single_mining = build_trial_updates(
-            self.base_config, "Cora", "ifl-gr", base_params, "single_mining", run_idx=1
+            self.base_config, "Cora", "sg-gr", base_params, "single_mining", run_idx=1
         )
         uniform_weight = build_trial_updates(
-            self.base_config, "Cora", "ifl-gr", base_params, "uniform_weight", run_idx=1
+            self.base_config, "Cora", "sg-gr", base_params, "uniform_weight", run_idx=1
         )
 
         self.assertEqual(full["seed"], self.base_config["Cora"]["seed"] + 1)
@@ -58,13 +58,13 @@ class ComponentAblationTests(unittest.TestCase):
         self.assertEqual(single_mining["warmup_epochs"], full["warmup_epochs"])
         self.assertEqual(uniform_weight["warmup_epochs"], full["warmup_epochs"])
 
-    def test_iflgc_params_are_mapped_to_dataset_updates(self):
+    def test_sggc_params_are_mapped_to_dataset_updates(self):
         base_params = {
             "gca_drop_scheme": "degree",
             "similarity_percentile": "99.7",
             "max_du_per_node": "14",
             "unlabeled_weight": "0.3",
-            "iflgc_refl_du_weight": "0.5",
+            "sggc_refl_du_weight": "0.5",
             "warmup_epochs": "80",
             "tau": "0.4",
             "drop_edge_rate_1": "0.3",
@@ -78,11 +78,11 @@ class ComponentAblationTests(unittest.TestCase):
             "gca_pr_k": "200",
         }
 
-        updates = params_to_dataset_updates(base_params, "ifl-gc")
+        updates = params_to_dataset_updates(base_params, "sg-gc")
 
         self.assertEqual(updates["gca_drop_scheme"], "degree")
         self.assertEqual(updates["max_du_per_node"], 14)
-        self.assertEqual(updates["iflgc_refl_du_weight"], 0.5)
+        self.assertEqual(updates["sggc_refl_du_weight"], 0.5)
         self.assertEqual(updates["gca_pr_k"], 200)
         self.assertIsNone(updates["similarity_threshold"])
 

@@ -117,9 +117,8 @@ def main():
         "tau": float(dataset_cfg["tau"]),
     }
 
-    # Weak-baseline-strong-ifl preset: weaken GRACE/GCA to highlight IFL improvements.
     if dataset_key == "CiteSeer":
-        # CiteSeer-specific weaker GCA preset.
+        # CiteSeer-specific GCA preset.
         search_space = {
             "gca_drop_scheme": ["uniform"],
             "drop_edge_rate_1": [0.6, 0.7],
@@ -137,7 +136,7 @@ def main():
         }
 
     elif dataset_key == "PubMed":
-        # PubMed-specific tighter GCA preset: fewer trials, keep the weaker baseline behavior.
+        # PubMed-specific tighter GCA preset: fewer trials.
         search_space = {
             "gca_drop_scheme": ["uniform"],
             "drop_edge_rate_1": [0.5, 0.6, 0.7],
@@ -171,7 +170,7 @@ def main():
         }
 
     else:
-        # Standard weak preset for Cora.
+        # Standard preset for Cora.
         search_space = {
             "gca_drop_scheme": ["uniform"],
             "drop_edge_rate_1": [0.5, 0.6, 0.7],

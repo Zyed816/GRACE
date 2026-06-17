@@ -77,7 +77,7 @@ class SensitivityForm(StyledFormMixin, forms.Form):
     methods = forms.MultipleChoiceField(
         label="Methods",
         choices=SENSITIVITY_METHOD_CHOICES,
-        initial=["ifl-gr", "ifl-gc"],
+        initial=["sg-gr", "sg-gc"],
         widget=forms.CheckboxSelectMultiple(attrs={"class": CHECKBOX_CLASS}),
     )
     params = forms.MultipleChoiceField(
@@ -109,7 +109,7 @@ class ComponentAblationForm(StyledFormMixin, forms.Form):
     methods = forms.MultipleChoiceField(
         label="Methods",
         choices=SG_METHOD_CHOICES,
-        initial=["ifl-gr", "ifl-gc"],
+        initial=["sg-gr", "sg-gc"],
         widget=forms.CheckboxSelectMultiple(attrs={"class": CHECKBOX_CLASS}),
     )
     gpu_id = forms.IntegerField(label="gpu_id", min_value=0, max_value=7, initial=0)
@@ -131,7 +131,7 @@ class EfficiencyForm(StyledFormMixin, forms.Form):
     methods = forms.MultipleChoiceField(
         label="Methods",
         choices=METHOD_CHOICES,
-        initial=["grace", "gca", "ifl-gr", "ifl-gc"],
+        initial=["grace", "gca", "sg-gr", "sg-gc"],
         widget=forms.CheckboxSelectMultiple(attrs={"class": CHECKBOX_CLASS}),
     )
     gpu_id = forms.IntegerField(label="gpu_id", min_value=0, max_value=7, initial=0)

@@ -26,7 +26,7 @@ from experiments.method_comparison.run_full_pipeline import robust_score, run_tr
 
 
 DATASET_CHOICES = ["Cora", "CiteSeer", "PubMed", "DBLP"]
-METHOD_CHOICES = ["grace", "gca", "ifl-gr", "ifl-gc"]
+METHOD_CHOICES = ["grace", "gca", "sg-gr", "sg-gc"]
 
 CSV_HEADERS = [
     "timestamp",

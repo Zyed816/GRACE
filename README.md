@@ -14,8 +14,8 @@
 
 - `grace`：原始 GRACE
 - `gca`：Graph Contrastive Augmentation
-- `ifl-gr`：基于 IFL 的 GRACE 变体
-- `ifl-gc`：IFL 与 GCA 的混合方法
+- `sg-gr`：基于 IFL 的 GRACE 变体
+- `sg-gc`：IFL 与 GCA 的混合方法
 
 支持四个数据集：
 
@@ -36,15 +36,15 @@ GRACE/
   requirements.txt
   experiments/
     method_comparison/
-      grid_search_iflgr.py
+      grid_search_sggr.py
       grid_search_gca.py
-      grid_search_iflgc.py
+      grid_search_sggc.py
       verify_top_params.py
       run_full_pipeline.py
       run_full_pipeline_batch.py
     hyperparameter_sensitivity/
-      run_ifl_param_sensitivity.py
-      plot_ifl_param_sensitivity.py
+      run_sg_param_sensitivity.py
+      plot_sg_param_sensitivity.py
     sampling_bias_validation/
       plot_sampling_bias_curves.py
   docs/
@@ -113,15 +113,15 @@ python train.py --dataset <DATASET> --method <METHOD>
 其中：
 
 - `<DATASET>` 可选：`Cora`、`CiteSeer`、`PubMed`、`DBLP`
-- `<METHOD>` 可选：`grace`、`gca`、`ifl-gr`、`ifl-gc`
+- `<METHOD>` 可选：`grace`、`gca`、`sg-gr`、`sg-gc`
 
 常用示例：
 
 ```bash
 python train.py --dataset Cora --method grace
 python train.py --dataset Cora --method gca
-python train.py --dataset Cora --method ifl-gr
-python train.py --dataset Cora --method ifl-gc
+python train.py --dataset Cora --method sg-gr
+python train.py --dataset Cora --method sg-gc
 ```
 
 ## 实验模块一：采样偏差验证
@@ -139,7 +139,7 @@ python train.py --dataset Cora --method ifl-gc
 python train.py --dataset Cora --method grace --gpu_id 0 --exp1_metrics --exp1_log_csv logs/exp1_cora.csv
 ```
 
-如果你想比较其他方法，也可以把 `grace` 换成 `gca`、`ifl-gr` 或 `ifl-gc`。
+如果你想比较其他方法，也可以把 `grace` 换成 `gca`、`sg-gr` 或 `sg-gc`。
 
 第二步：将日志绘制为曲线
 
@@ -160,11 +160,11 @@ python experiments/sampling_bias_validation/plot_sampling_bias_curves.py --csv l
 
 ## 实验模块二：图对比学习方法比较
 
-该模块用于比较 `grace`、`gca`、`ifl-gr`、`ifl-gc` 四种方法的表现，是当前项目最核心的一组实验。正式入口位于 `experiments/method_comparison/`：
+该模块用于比较 `grace`、`gca`、`sg-gr`、`sg-gc` 四种方法的表现，是当前项目最核心的一组实验。正式入口位于 `experiments/method_comparison/`：
 
-- `grid_search_iflgr.py`
+- `grid_search_sggr.py`
 - `grid_search_gca.py`
-- `grid_search_iflgc.py`
+- `grid_search_sggc.py`
 - `verify_top_params.py`
 - `run_full_pipeline.py`
 - `run_full_pipeline_batch.py`
@@ -174,7 +174,7 @@ python experiments/sampling_bias_validation/plot_sampling_bias_curves.py --csv l
 建议按下面顺序复现实验：
 
 1. 先运行单次基础训练，确认环境正常
-2. 再对 `ifl-gr`、`gca`、`ifl-gc` 做网格搜索
+2. 再对 `sg-gr`、`gca`、`sg-gc` 做网格搜索
 3. 对每种方法的 Top-K 参数做重复实验复验
 4. 最后使用完整流程脚本统一生成对比结果
 
@@ -183,18 +183,18 @@ python experiments/sampling_bias_validation/plot_sampling_bias_curves.py --csv l
 如果只想快速看某个方法能否正常运行：
 
 ```bash
-python train.py --dataset Cora --method ifl-gr --gpu_id 0
+python train.py --dataset Cora --method sg-gr --gpu_id 0
 ```
 
 ### 2.2 网格搜索
 
-#### IFL-GR
+#### SG-GR
 
 ```bash
-python experiments/method_comparison/grid_search_iflgr.py --dataset Cora --gpu_id 0 --topk 10
-python experiments/method_comparison/grid_search_iflgr.py --dataset CiteSeer --gpu_id 0 --topk 10
-python experiments/method_comparison/grid_search_iflgr.py --dataset PubMed --gpu_id 0 --topk 10
-python experiments/method_comparison/grid_search_iflgr.py --dataset DBLP --gpu_id 0 --topk 10
+python experiments/method_comparison/grid_search_sggr.py --dataset Cora --gpu_id 0 --topk 10
+python experiments/method_comparison/grid_search_sggr.py --dataset CiteSeer --gpu_id 0 --topk 10
+python experiments/method_comparison/grid_search_sggr.py --dataset PubMed --gpu_id 0 --topk 10
+python experiments/method_comparison/grid_search_sggr.py --dataset DBLP --gpu_id 0 --topk 10
 ```
 
 #### GCA
@@ -206,20 +206,20 @@ python experiments/method_comparison/grid_search_gca.py --dataset PubMed --gpu_i
 python experiments/method_comparison/grid_search_gca.py --dataset DBLP --gpu_id 0 --topk 10
 ```
 
-#### IFL-GC
+#### SG-GC
 
 ```bash
-python experiments/method_comparison/grid_search_iflgc.py --dataset Cora --gpu_id 0 --topk 10
-python experiments/method_comparison/grid_search_iflgc.py --dataset CiteSeer --gpu_id 0 --topk 10
-python experiments/method_comparison/grid_search_iflgc.py --dataset PubMed --gpu_id 0 --topk 10
-python experiments/method_comparison/grid_search_iflgc.py --dataset DBLP --gpu_id 0 --topk 10
+python experiments/method_comparison/grid_search_sggc.py --dataset Cora --gpu_id 0 --topk 10
+python experiments/method_comparison/grid_search_sggc.py --dataset CiteSeer --gpu_id 0 --topk 10
+python experiments/method_comparison/grid_search_sggc.py --dataset PubMed --gpu_id 0 --topk 10
+python experiments/method_comparison/grid_search_sggc.py --dataset DBLP --gpu_id 0 --topk 10
 ```
 
 网格搜索结果默认输出到：
 
-- `results/grid_search_iflgr_<dataset>_results.csv`
+- `results/grid_search_sggr_<dataset>_results.csv`
 - `results/grid_search_gca_<dataset>_results.csv`
-- `results/grid_search_iflgc_<dataset>_results.csv`
+- `results/grid_search_sggc_<dataset>_results.csv`
 
 排序指标为：
 
@@ -234,9 +234,9 @@ robust_score = F1Mi_mean - std_weight * F1Mi_std
 网格搜索结束后，建议对前几组参数做重复实验，以降低单次随机性的影响。
 
 ```bash
-python experiments/method_comparison/verify_top_params.py --dataset Cora --method ifl-gr --top_params results/grid_search_iflgr_cora_results.csv --topk 3 --runs 3 --gpu_id 0
+python experiments/method_comparison/verify_top_params.py --dataset Cora --method sg-gr --top_params results/grid_search_sggr_cora_results.csv --topk 3 --runs 3 --gpu_id 0
 python experiments/method_comparison/verify_top_params.py --dataset Cora --method gca --top_params results/grid_search_gca_cora_results.csv --topk 3 --runs 3 --gpu_id 0
-python experiments/method_comparison/verify_top_params.py --dataset Cora --method ifl-gc --top_params results/grid_search_iflgc_cora_results.csv --topk 3 --runs 3 --gpu_id 0
+python experiments/method_comparison/verify_top_params.py --dataset Cora --method sg-gc --top_params results/grid_search_sggc_cora_results.csv --topk 3 --runs 3 --gpu_id 0
 ```
 
 关键参数：
@@ -302,13 +302,13 @@ python experiments/method_comparison/run_full_pipeline_batch.py --datasets PubMe
 
 该模块基于方法比较阶段生成的最优参数 CSV，固定其余参数，只改变一个论文超参数，观察性能变化。正式入口位于 `experiments/hyperparameter_sensitivity/`：
 
-- `run_ifl_param_sensitivity.py`
-- `plot_ifl_param_sensitivity.py`
+- `run_sg_param_sensitivity.py`
+- `plot_sg_param_sensitivity.py`
 
 当前支持的方法：
 
-- `ifl-gr`
-- `ifl-gc`
+- `sg-gr`
+- `sg-gc`
 
 当前支持的论文超参数映射：
 
@@ -320,13 +320,13 @@ python experiments/method_comparison/run_full_pipeline_batch.py --datasets PubMe
 
 先确保已经有对应的网格搜索结果文件，例如：
 
-- `results/grid_search_iflgr_cora_results.csv`
-- `results/grid_search_iflgc_cora_results.csv`
+- `results/grid_search_sggr_cora_results.csv`
+- `results/grid_search_sggc_cora_results.csv`
 
 然后运行：
 
 ```bash
-python experiments/hyperparameter_sensitivity/run_ifl_param_sensitivity.py --datasets Cora --methods ifl-gr ifl-gc --gpu_id 0
+python experiments/hyperparameter_sensitivity/run_sg_param_sensitivity.py --datasets Cora --methods sg-gr sg-gc --gpu_id 0
 ```
 
 默认行为：
@@ -337,31 +337,31 @@ python experiments/hyperparameter_sensitivity/run_ifl_param_sensitivity.py --dat
 
 输出文件默认为：
 
-- `results/sensitivity_iflgr_<dataset>_results.csv`
-- `results/sensitivity_iflgc_<dataset>_results.csv`
+- `results/sensitivity_sggr_<dataset>_results.csv`
+- `results/sensitivity_sggc_<dataset>_results.csv`
 
 自定义 sweep 范围示例：
 
 ```bash
-python experiments/hyperparameter_sensitivity/run_ifl_param_sensitivity.py --datasets Cora --methods ifl-gr --ts_values 99.5 99.7 99.9 --m_values 10 12 14 --k_values 80 100 120 --runs 3 --gpu_id 0
+python experiments/hyperparameter_sensitivity/run_sg_param_sensitivity.py --datasets Cora --methods sg-gr --ts_values 99.5 99.7 99.9 --m_values 10 12 14 --k_values 80 100 120 --runs 3 --gpu_id 0
 ```
 
 使用非 Top-1 结果作为锚点示例：
 
 ```bash
-python experiments/hyperparameter_sensitivity/run_ifl_param_sensitivity.py --datasets PubMed --methods ifl-gc --base_rank 2 --runs 3 --gpu_id 0
+python experiments/hyperparameter_sensitivity/run_sg_param_sensitivity.py --datasets PubMed --methods sg-gc --base_rank 2 --runs 3 --gpu_id 0
 ```
 
 ### 3.2 绘制敏感性分析图与报告
 
 ```bash
-python experiments/hyperparameter_sensitivity/plot_ifl_param_sensitivity.py --dataset Cora
+python experiments/hyperparameter_sensitivity/plot_sg_param_sensitivity.py --dataset Cora
 ```
 
 默认输出：
 
-- 图片：`results/plots/cora_ifl_sensitivity_overview.png`
-- 文字报告：`results/plots/cora_ifl_sensitivity_analysis.md`
+- 图片：`results/plots/cora_sg_sensitivity_overview.png`
+- 文字报告：`results/plots/cora_sg_sensitivity_analysis.md`
 
 ## 结果文件命名规范
 
@@ -370,14 +370,14 @@ python experiments/hyperparameter_sensitivity/plot_ifl_param_sensitivity.py --da
 - 方法搜索：`results/grid_search_<method_slug>_<dataset_slug>_results.csv`
 - 完整流程：`results/<dataset_slug>_full_pipeline_results.csv`
 - 敏感性分析：`results/sensitivity_<method_slug>_<dataset_slug>_results.csv`
-- 敏感性图表：`results/plots/<dataset_slug>_ifl_sensitivity_overview.png`
+- 敏感性图表：`results/plots/<dataset_slug>_sg_sensitivity_overview.png`
 - 采样偏差日志：`logs/exp1_<dataset_slug>.csv`
 - 采样偏差曲线：`logs/exp1_<dataset_slug>_curves.png`
 
 其中：
 
-- `ifl-gr -> iflgr`
-- `ifl-gc -> iflgc`
+- `sg-gr -> sggr`
+- `sg-gc -> sggc`
 - `Cora -> cora`
 - `CiteSeer -> citeseer`
 - `PubMed -> pubmed`
@@ -388,10 +388,10 @@ python experiments/hyperparameter_sensitivity/plot_ifl_param_sensitivity.py --da
 如果你第一次使用本仓库，建议按下列顺序执行：
 
 1. `python train.py --dataset Cora --method grace --gpu_id 0`
-2. `python experiments/method_comparison/grid_search_iflgr.py --dataset Cora --gpu_id 0 --topk 3`
-3. `python experiments/method_comparison/verify_top_params.py --dataset Cora --method ifl-gr --top_params results/grid_search_iflgr_cora_results.csv --topk 3 --runs 3 --gpu_id 0`
+2. `python experiments/method_comparison/grid_search_sggr.py --dataset Cora --gpu_id 0 --topk 3`
+3. `python experiments/method_comparison/verify_top_params.py --dataset Cora --method sg-gr --top_params results/grid_search_sggr_cora_results.csv --topk 3 --runs 3 --gpu_id 0`
 4. `python experiments/method_comparison/run_full_pipeline.py --dataset Cora --gpu_id 0`
-5. `python experiments/hyperparameter_sensitivity/run_ifl_param_sensitivity.py --datasets Cora --methods ifl-gr ifl-gc --gpu_id 0`
+5. `python experiments/hyperparameter_sensitivity/run_sg_param_sensitivity.py --datasets Cora --methods sg-gr sg-gc --gpu_id 0`
 6. `python train.py --dataset Cora --method grace --gpu_id 0 --exp1_metrics --exp1_log_csv logs/exp1_cora.csv`
 7. `python experiments/sampling_bias_validation/plot_sampling_bias_curves.py --csv logs/exp1_cora.csv --out logs/exp1_cora_curves.png`
 

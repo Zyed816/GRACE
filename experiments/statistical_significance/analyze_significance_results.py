@@ -21,21 +21,21 @@ from experiments.statistical_significance.run_significance_experiment import (
 
 
 COMPARISONS = [
-    ("grace", "ifl-gr", "primary"),
-    ("gca", "ifl-gc", "primary"),
-    ("grace", "ifl-gc", "supplementary"),
+    ("grace", "sg-gr", "primary"),
+    ("gca", "sg-gc", "primary"),
+    ("grace", "sg-gc", "supplementary"),
     ("grace", "gca", "supplementary"),
 ]
 METRICS = ["robust_score", "F1Mi_mean", "F1Ma_mean"]
 METHOD_LABELS = {
     "grace": "GRACE",
     "gca": "GCA",
-    "ifl-gr": "SG-GR",
-    "ifl-gc": "SG-GC",
+    "sg-gr": "SG-GR",
+    "sg-gc": "SG-GC",
 }
 PRIMARY_COMPARISON_ORDER = [
-    ("grace", "ifl-gr"),
-    ("gca", "ifl-gc"),
+    ("grace", "sg-gr"),
+    ("gca", "sg-gc"),
 ]
 
 

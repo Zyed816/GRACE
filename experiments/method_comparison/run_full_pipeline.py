@@ -333,7 +333,7 @@ def make_temp_config(base_config, dataset_key, dataset_updates):
 def make_temp_config_for_method(base_config, dataset_key, csv_row, method):
     cfg = copy.deepcopy(base_config)
 
-    if method == "ifl-gr":
+    if method == "sg-gr":
         dataset_updates = {
             "similarity_percentile": float(csv_row["similarity_percentile"]),
             "max_du_per_node": int(float(csv_row["max_du_per_node"])),
@@ -363,13 +363,13 @@ def make_temp_config_for_method(base_config, dataset_key, csv_row, method):
         if "gca_pr_k" in csv_row and csv_row["gca_pr_k"] != "":
             dataset_updates["gca_pr_k"] = int(float(csv_row["gca_pr_k"]))
 
-    elif method == "ifl-gc":
+    elif method == "sg-gc":
         dataset_updates = {
             "gca_drop_scheme": csv_row["gca_drop_scheme"],
             "similarity_percentile": float(csv_row["similarity_percentile"]),
             "max_du_per_node": int(float(csv_row["max_du_per_node"])),
             "unlabeled_weight": float(csv_row["unlabeled_weight"]),
-            "iflgc_refl_du_weight": float(csv_row["iflgc_refl_du_weight"]),
+            "sggc_refl_du_weight": float(csv_row["sggc_refl_du_weight"]),
             "warmup_epochs": int(float(csv_row["warmup_epochs"])),
             "tau": float(csv_row["tau"]),
             "drop_edge_rate_1": float(csv_row["drop_edge_rate_1"]),
@@ -425,7 +425,7 @@ def append_method_summary_rows(csv_path):
     Hierarchical summary output:
     1. For each (method, candidate_rank), output per-candidate mean (one row per candidate).
     2. For each method, then output overall mean across all candidates (one final row per method).
-    Baseline (grace) has only 1 candidate, others (ifl-gr, gca, ifl-gc) have multiple.
+    Baseline (grace) has only 1 candidate, others (sg-gr, gca, sg-gc) have multiple.
     """
     if not os.path.exists(csv_path):
         return
@@ -487,7 +487,7 @@ def append_method_summary_rows(csv_path):
     grace_candidates = candidate_means_by_method.get("grace", {})
     grace_robust_ref = _safe_mean([c["robust"] for c in grace_candidates.values()]) if grace_candidates else 0.0
 
-    preferred_order = ["grace", "ifl-gr", "gca", "ifl-gc"]
+    preferred_order = ["grace", "sg-gr", "gca", "sg-gc"]
     methods = [m for m in preferred_order if m in candidate_means_by_method]
     methods.extend(
         sorted([m for m in candidate_means_by_method.keys() if m not in preferred_order])
@@ -643,7 +643,7 @@ def method_pipeline(grace_dir, base_config, dataset_key, method, grid_script, gr
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Automate dataset comparison: GRACE baseline + IFL-GR/GCA/IFL-GC search and top verification"
+        description="Automate dataset comparison: GRACE baseline + SG-GR/GCA/SG-GC search and top verification"
     )
     parser.add_argument("--gpu_id", type=int, default=0)
     parser.add_argument("--config", type=str, default="config.yaml")
@@ -745,7 +745,7 @@ def main():
                 "delta_vs_grace": f"{0.0:.6f}",
                 "grid_csv": "",
                 "params_json": json.dumps(baseline_overrides, ensure_ascii=True),
-                "notes": "baseline reference (weak-baseline-strong-ifl unified mode)",
+                "notes": "baseline reference",
             },
         )
 
@@ -761,9 +761,9 @@ def main():
         grace_dir=grace_dir,
         base_config=base_config,
         dataset_key=args.dataset,
-        method="ifl-gr",
-        grid_script="grid_search_iflgr.py",
-        grid_csv_name=f"grid_search_iflgr_{dataset_slug}_results.csv",
+        method="sg-gr",
+        grid_script="grid_search_sggr.py",
+        grid_csv_name=f"grid_search_sggr_{dataset_slug}_results.csv",
         args=args,
         baseline_robust=baseline_robust,
         out_csv_path=out_path,
@@ -785,9 +785,9 @@ def main():
         grace_dir=grace_dir,
         base_config=base_config,
         dataset_key=args.dataset,
-        method="ifl-gc",
-        grid_script="grid_search_iflgc.py",
-        grid_csv_name=f"grid_search_iflgc_{dataset_slug}_results.csv",
+        method="sg-gc",
+        grid_script="grid_search_sggc.py",
+        grid_csv_name=f"grid_search_sggc_{dataset_slug}_results.csv",
         args=args,
         baseline_robust=baseline_robust,
         out_csv_path=out_path,

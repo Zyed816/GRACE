@@ -16,7 +16,7 @@
 
 3. 超参数敏感性分析
    支持选择数据集、方法集合、论文超参数、锚点排名和运行次数。
-   实验后台会逐方法复用 `run_ifl_param_sensitivity.py`，随后调用 `plot_ifl_param_sensitivity.py` 生成总览图与报告。
+   实验后台会逐方法复用 `run_sg_param_sensitivity.py`，随后调用 `plot_sg_param_sensitivity.py` 生成总览图与报告。
    结果页会展示最优稳健分数柱状图、CSV 预览、PNG 和 Markdown 报告。
 
 ## 目录结构

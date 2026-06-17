@@ -75,8 +75,8 @@ def _image_pair_artifacts(label, base_path):
 
 def _method_key_from_slug(method_slug):
     return {
-        "iflgr": "ifl-gr",
-        "iflgc": "ifl-gc",
+        "sggr": "sg-gr",
+        "sggc": "sg-gc",
     }.get(method_slug, method_slug)
 
 
@@ -100,9 +100,9 @@ def _method_comparison_entries(language):
         artifacts = [
             _artifact("Unified Results CSV", ExperimentArtifact.TYPE_CSV, full_csv),
             _artifact(
-                "IFL-GR Grid Search",
+                "SG-GR Grid Search",
                 ExperimentArtifact.TYPE_CSV,
-                RESULTS_DIR / f"grid_search_iflgr_{dataset_slug}_results.csv",
+                RESULTS_DIR / f"grid_search_sggr_{dataset_slug}_results.csv",
             ),
             _artifact(
                 "GCA Grid Search",
@@ -110,9 +110,9 @@ def _method_comparison_entries(language):
                 RESULTS_DIR / f"grid_search_gca_{dataset_slug}_results.csv",
             ),
             _artifact(
-                "IFL-GC Grid Search",
+                "SG-GC Grid Search",
                 ExperimentArtifact.TYPE_CSV,
-                RESULTS_DIR / f"grid_search_iflgc_{dataset_slug}_results.csv",
+                RESULTS_DIR / f"grid_search_sggc_{dataset_slug}_results.csv",
             ),
         ]
         artifacts = [artifact for artifact in artifacts if artifact]
@@ -206,8 +206,8 @@ def _sensitivity_entries(language):
     entries = []
     for dataset_slug, csv_paths in grouped.items():
         dataset = _dataset_label(dataset_slug)
-        plot_path = PLOTS_DIR / f"{dataset_slug}_ifl_sensitivity_overview.png"
-        report_path = PLOTS_DIR / f"{dataset_slug}_ifl_sensitivity_analysis.md"
+        plot_path = PLOTS_DIR / f"{dataset_slug}_sg_sensitivity_overview.png"
+        report_path = PLOTS_DIR / f"{dataset_slug}_sg_sensitivity_analysis.md"
         experiment_type = ExperimentRun.TYPE_SENSITIVITY
 
         artifacts = []
@@ -266,9 +266,9 @@ def _sensitivity_combined_entries(language, csv_paths):
 
     experiment_type = ExperimentRun.TYPE_SENSITIVITY
     plot_specs = [
-        ("Sensitivity t_s Effect Plot", PLOTS_DIR / "ifl_sensitivity_ts_effect"),
-        ("Sensitivity M Effect Plot", PLOTS_DIR / "ifl_sensitivity_M_effect"),
-        ("Sensitivity K Effect Plot", PLOTS_DIR / "ifl_sensitivity_K_effect"),
+        ("Sensitivity t_s Effect Plot", PLOTS_DIR / "sg_sensitivity_ts_effect"),
+        ("Sensitivity M Effect Plot", PLOTS_DIR / "sg_sensitivity_M_effect"),
+        ("Sensitivity K Effect Plot", PLOTS_DIR / "sg_sensitivity_K_effect"),
     ]
     artifacts = []
     for label, base_path in plot_specs:

@@ -1,4 +1,4 @@
-timestamp,gca_drop_scheme,similarity_percentile,max_du_per_node,unlabeled_weight,iflgc_refl_du_weight,warmup_epochs,tau,drop_edge_rate_1,drop_edge_rate_2,drop_feature_rate_1,drop_feature_rate_2,update_interval,beta,use_mutual_topk,corrected_ramp_epochs,gca_pr_k,F1Mi_mean,F1Mi_std,F1Ma_mean,F1Ma_std,robust_score,delta_vs_grace
+timestamp,gca_drop_scheme,similarity_percentile,max_du_per_node,unlabeled_weight,sggc_refl_du_weight,warmup_epochs,tau,drop_edge_rate_1,drop_edge_rate_2,drop_feature_rate_1,drop_feature_rate_2,update_interval,beta,use_mutual_topk,corrected_ramp_epochs,gca_pr_k,F1Mi_mean,F1Mi_std,F1Ma_mean,F1Ma_std,robust_score,delta_vs_grace
 2026-04-11 23:05:12,degree,99.5,12,0.3,0.4,100,0.8,0.3,0.5,0.3,0.4,3,2.2,True,40,200,0.717400,0.002200,0.640000,0.004500,0.716300,0.009000
 2026-04-11 23:05:12,degree,99.5,12,0.3,0.5,100,0.7,0.3,0.5,0.3,0.4,3,2.2,True,40,200,0.720000,0.007900,0.649800,0.012700,0.716050,0.008750
 2026-04-11 23:05:12,degree,99.5,12,0.2,0.5,100,0.7,0.3,0.5,0.3,0.4,3,2.2,True,40,200,0.718000,0.011200,0.646400,0.011100,0.712400,0.005100

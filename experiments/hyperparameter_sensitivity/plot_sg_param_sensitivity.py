@@ -26,23 +26,23 @@ from experiments.plotting_common import (
 
 
 METHOD_FILE_SLUG = {
-    "ifl-gr": "iflgr",
-    "ifl-gc": "iflgc",
+    "sg-gr": "sggr",
+    "sg-gc": "sggc",
 }
 
 METHOD_LABELS = {
-    "ifl-gr": "SG-GR",
-    "ifl-gc": "SG-GC",
+    "sg-gr": "SG-GR",
+    "sg-gc": "SG-GC",
 }
 
 METHOD_COLORS = {
-    "ifl-gr": "#73B86E",
-    "ifl-gc": "#7A6E9F",
+    "sg-gr": "#73B86E",
+    "sg-gc": "#7A6E9F",
 }
 
 METHOD_MARKERS = {
-    "ifl-gr": "o",
-    "ifl-gc": "s",
+    "sg-gr": "o",
+    "sg-gc": "s",
 }
 ROBUST_SCORE_YLABEL = "robust_score（%）"
 ANCHOR_LABEL = "观测点"
@@ -54,9 +54,9 @@ PARAM_LABELS = {
     "K": "K",
 }
 PARAM_EFFECT_SPECS = [
-    {"param": "t_s", "file_stem": "ifl_sensitivity_ts_effect"},
-    {"param": "M", "file_stem": "ifl_sensitivity_M_effect"},
-    {"param": "K", "file_stem": "ifl_sensitivity_K_effect"},
+    {"param": "t_s", "file_stem": "sg_sensitivity_ts_effect"},
+    {"param": "M", "file_stem": "sg_sensitivity_M_effect"},
+    {"param": "K", "file_stem": "sg_sensitivity_K_effect"},
 ]
 
 DATASET_ORDER = ["Cora", "CiteSeer", "DBLP", "PubMed"]
@@ -108,7 +108,7 @@ def parse_args():
         default=DATASET_ORDER,
         help="Datasets used by --combined. Default: Cora CiteSeer DBLP PubMed.",
     )
-    parser.add_argument("--methods", nargs="+", default=["ifl-gr", "ifl-gc"], choices=list(METHOD_FILE_SLUG))
+    parser.add_argument("--methods", nargs="+", default=["sg-gr", "sg-gc"], choices=list(METHOD_FILE_SLUG))
     parser.add_argument("--inputs", nargs="+", default=None, help="Optional explicit CSV paths.")
     parser.add_argument("--out_dir", type=str, default=os.path.join("results", "plots"))
     parser.add_argument(
@@ -551,8 +551,8 @@ def make_combined_robust_plot(grace_dir, datasets, methods, out_dir, dpi):
         columnspacing=1.6,
     )
 
-    png_path = os.path.join(out_dir, "ifl_sensitivity_robust_overview.png")
-    pdf_path = os.path.join(out_dir, "ifl_sensitivity_robust_overview.pdf")
+    png_path = os.path.join(out_dir, "sg_sensitivity_robust_overview.png")
+    pdf_path = os.path.join(out_dir, "sg_sensitivity_robust_overview.pdf")
     fig.savefig(png_path, dpi=dpi)
     fig.savefig(pdf_path)
     plt.close(fig)
@@ -760,7 +760,7 @@ def main():
 
     merged_summary = pd.concat(summary_frames, ignore_index=True) if summary_frames else pd.DataFrame()
     dataset_slug = args.dataset.lower()
-    out_base = os.path.join(out_dir, f"{dataset_slug}_ifl_sensitivity_overview")
+    out_base = os.path.join(out_dir, f"{dataset_slug}_sg_sensitivity_overview")
 
     saved_paths = make_plot(args.dataset, args.methods, merged_summary, out_base, args.formats, args.dpi)
 

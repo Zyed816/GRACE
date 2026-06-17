@@ -1,10 +1,10 @@
 # DBLP Sensitivity Analysis
 
-- Plot: `results\plots\dblp_ifl_sensitivity_overview.png`
+- Plot: `results\plots\dblp_sg_sensitivity_overview.png`
 
 ## Data Status
-- `results\sensitivity_iflgr_dblp_results.csv`: status=ok, rows=60, summary_rows=15
-- `results\sensitivity_iflgc_dblp_results.csv`: status=ok, rows=60, summary_rows=15
+- `results\sensitivity_sggr_dblp_results.csv`: status=ok, rows=60, summary_rows=15
+- `results\sensitivity_sggc_dblp_results.csv`: status=ok, rows=60, summary_rows=15
 
 ## Findings
 - SG-GR / t_s: best robust at 0.8662 (robust=0.7217, F1Mi=0.7240); robust range=0.0100. Delta vs anchor=+0.0100. Trend is non-monotonic, suggesting a local optimum.

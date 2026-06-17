@@ -20,9 +20,9 @@ from eval import label_classification
 
 # Unified training entry for four methods on one dataset:
 # - grace   : vanilla GRACE augment + InfoNCE
-# - ifl-gr  : GRACE augment + semantically guided corrected InfoNCE
+# - sg-gr  : GRACE augment + semantically guided corrected InfoNCE
 # - gca     : GCA structure-aware augment + InfoNCE
-# - ifl-gc  : GCA augment + semantically guided corrected InfoNCE
+# - sg-gc  : GCA augment + semantically guided corrected InfoNCE
 
 def experiment1_metrics(z1: torch.Tensor, z2: torch.Tensor, batch_size: int = 0):
     with torch.no_grad():
@@ -581,7 +581,7 @@ def mine_unlabeled_positives(
     }
 
 
-def train_iflgr(model: Model, x, edge_index, du_pos_mask, du_pos_weight, unlabeled_weight, corrected_batch_size=0,
+def train_sggr(model: Model, x, edge_index, du_pos_mask, du_pos_weight, unlabeled_weight, corrected_batch_size=0,
                 du_pos_csr=None, du_pos_csr_t=None, return_exp1_stats=False, exp1_batch_size=0):
     model.train()
     optimizer.zero_grad()
@@ -611,7 +611,7 @@ def train_iflgr(model: Model, x, edge_index, du_pos_mask, du_pos_weight, unlabel
     return loss.item(), exp1_stats
 
 
-def train_iflgc(
+def train_sggc(
         model: Model,
         x,
         edge_index,
@@ -630,7 +630,7 @@ def train_iflgc(
     model.train()
     optimizer.zero_grad()
 
-    # Reuse GCA-style structure-aware views for IFL-GC.
+    # Reuse GCA-style structure-aware views for SG-GC.
     def gca_drop_edge(rate):
         if drop_scheme == 'uniform':
             return dropout_adj(edge_index, p=rate)[0]
@@ -664,7 +664,7 @@ def train_iflgc(
         du_pos_csr=du_pos_csr,
         du_pos_csr_t=du_pos_csr_t,
         unlabeled_weight=unlabeled_weight,
-        corrected_variant='ifl-gc',
+        corrected_variant='sg-gc',
         refl_du_weight=refl_du_weight)
 
     loss.backward()
@@ -721,7 +721,7 @@ if __name__ == '__main__':
     parser.add_argument('--config', type=str, default='config.yaml')
     parser.add_argument('--dataset_root', type=str, default=None,
                         help='Dataset cache root. Defaults to GRACE/datasets')
-    parser.add_argument('--method', type=str, default='grace', choices=['grace', 'ifl-gr', 'gca', 'ifl-gc'])
+    parser.add_argument('--method', type=str, default='grace', choices=['grace', 'sg-gr', 'gca', 'sg-gc'])
     parser.add_argument('--exp1_metrics', action='store_true',
                         help='Compute sampling-bias validation metrics for the current run.')
     parser.add_argument('--exp1_log_csv', type=str, default='')
@@ -765,7 +765,7 @@ if __name__ == '__main__':
     mining_batch_size = int(config.get('mining_batch_size', 0))
     gca_drop_scheme = config.get('gca_drop_scheme', 'degree')
     gca_pr_k = config.get('gca_pr_k', 200)
-    iflgc_refl_du_weight = config.get('iflgc_refl_du_weight', 0.3)
+    sggc_refl_du_weight = config.get('sggc_refl_du_weight', 0.3)
     eval_repeats = int(config.get('eval_repeats', 3))
     eval_seed = config.get('eval_seed', None)
     use_subset = bool(config.get('use_subset', False))
@@ -854,7 +854,7 @@ if __name__ == '__main__':
     gca_feature_weights = None
 
     # Precompute GCA augmentation weights once if needed by method.
-    if args.method in ['gca', 'ifl-gc']:
+    if args.method in ['gca', 'sg-gc']:
         if gca_drop_scheme == 'degree':
             gca_drop_weights = degree_drop_weights(data.edge_index).to(device)
             edge_index_ = to_undirected(data.edge_index)
@@ -901,8 +901,8 @@ if __name__ == '__main__':
                 return_exp1_stats=exp1_metrics_enabled,
                 exp1_batch_size=exp1_metrics_batch_size)
             phase = 'gca'
-        elif args.method == 'ifl-gc':
-            # IFL-GC branch:
+        elif args.method == 'sg-gc':
+            # SG-GC branch:
             # 1) warmup with GCA objective
             # 2) periodically mine D_U^+
             # 3) optimize corrected InfoNCE (cross-view + same-view semantic terms)
@@ -940,7 +940,7 @@ if __name__ == '__main__':
                 progress = max(epoch - warmup_epochs, 0) / max(corrected_ramp_epochs, 1)
                 current_unlabeled_weight = unlabeled_weight * min(progress, 1.0)
 
-                loss, exp1_stats = train_iflgc(
+                loss, exp1_stats = train_sggc(
                     model,
                     data.x,
                     data.edge_index,
@@ -950,7 +950,7 @@ if __name__ == '__main__':
                     du_cache['du_pos_mask'],
                     du_cache['du_pos_weight'],
                     current_unlabeled_weight,
-                    iflgc_refl_du_weight,
+                    sggc_refl_du_weight,
                     corrected_batch_size=corrected_batch_size,
                     du_pos_csr=du_cache.get('du_pos_csr'),
                     du_pos_csr_t=du_cache.get('du_pos_csr_t'),
@@ -958,7 +958,7 @@ if __name__ == '__main__':
                     exp1_batch_size=exp1_metrics_batch_size)
                 phase = 'corrected-gca'
         else:
-            # IFL-GR branch:
+            # SG-GR branch:
             # 1) warmup with GRACE objective
             # 2) periodically mine D_U^+
             # 3) optimize corrected InfoNCE (cross-view semantic term)
@@ -993,7 +993,7 @@ if __name__ == '__main__':
                 progress = max(epoch - warmup_epochs, 0) / max(corrected_ramp_epochs, 1)
                 current_unlabeled_weight = unlabeled_weight * min(progress, 1.0)
 
-                loss, exp1_stats = train_iflgr(
+                loss, exp1_stats = train_sggr(
                     model,
                     data.x,
                     data.edge_index,

@@ -8,18 +8,18 @@ DATASET_CHOICES = [
 METHOD_CHOICES = [
     ("grace", "GRACE"),
     ("gca", "GCA"),
-    ("ifl-gr", "SG-GR"),
-    ("ifl-gc", "SG-GC"),
+    ("sg-gr", "SG-GR"),
+    ("sg-gc", "SG-GC"),
 ]
 
 SENSITIVITY_METHOD_CHOICES = [
-    ("ifl-gr", "SG-GR"),
-    ("ifl-gc", "SG-GC"),
+    ("sg-gr", "SG-GR"),
+    ("sg-gc", "SG-GC"),
 ]
 
 SG_METHOD_CHOICES = [
-    ("ifl-gr", "SG-GR"),
-    ("ifl-gc", "SG-GC"),
+    ("sg-gr", "SG-GR"),
+    ("sg-gc", "SG-GC"),
 ]
 
 SIGNIFICANCE_COMPARISON_CHOICES = [
@@ -36,15 +36,15 @@ SENSITIVITY_PARAM_CHOICES = [
 METHOD_LABELS = {
     "grace": "GRACE",
     "gca": "GCA",
-    "ifl-gr": "SG-GR",
-    "ifl-gc": "SG-GC",
+    "sg-gr": "SG-GR",
+    "sg-gc": "SG-GC",
 }
 
 METHOD_DISPLAY_ORDER = [
     "grace",
     "gca",
-    "ifl-gr",
-    "ifl-gc",
+    "sg-gr",
+    "sg-gc",
 ]
 
 EXPERIMENT_TYPE_LABELS = {
@@ -57,8 +57,8 @@ EXPERIMENT_TYPE_LABELS = {
 }
 
 SIGNIFICANCE_COMPARISON_METHODS = {
-    "sg_gr_vs_grace": ("grace", "ifl-gr"),
-    "sg_gc_vs_gca": ("gca", "ifl-gc"),
+    "sg_gr_vs_grace": ("grace", "sg-gr"),
+    "sg_gc_vs_gca": ("gca", "sg-gc"),
 }
 
 SENSITIVITY_PARAM_LABELS = {
@@ -70,6 +70,6 @@ SENSITIVITY_PARAM_LABELS = {
 METHOD_FILE_SLUG = {
     "grace": "grace",
     "gca": "gca",
-    "ifl-gr": "iflgr",
-    "ifl-gc": "iflgc",
+    "sg-gr": "sggr",
+    "sg-gc": "sggc",
 }

@@ -12,7 +12,7 @@ from time import perf_counter as t
 
 import yaml
 
-# Grid-search pipeline (IFL-GC on a selected dataset):
+# Grid-search pipeline (SG-GC on a selected dataset):
 # 1) run GRACE baseline
 # 2) sweep GCA sampling + corrected-loss controls
 # 3) rank by robust_score and save CSV
@@ -88,7 +88,7 @@ def make_temp_config(base_config, dataset_key, dataset_updates):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Grid search for IFL-GC on selected dataset")
+    parser = argparse.ArgumentParser(description="Grid search for SG-GC on selected dataset")
     parser.add_argument("--config", type=str, default="config.yaml")
     parser.add_argument("--gpu_id", type=int, default=0)
     parser.add_argument("--dataset", type=str, default="Cora", choices=["Cora", "CiteSeer", "PubMed", "DBLP"])
@@ -106,7 +106,7 @@ def main():
 
     dataset_key = args.dataset
     dataset_slug = dataset_key.lower()
-    out_rel_path = args.out if args.out else f"results/grid_search_iflgc_{dataset_slug}_results.csv"
+    out_rel_path = args.out if args.out else f"results/grid_search_sggc_{dataset_slug}_results.csv"
 
     dataset_cfg = base_config.get(dataset_key, {})
     baseline_overrides = {
@@ -117,16 +117,15 @@ def main():
         "tau": float(dataset_cfg["tau"]),
     }
 
-    # Weak-baseline-strong-ifl preset: weaken GRACE baseline and strengthen IFL-GC.
     if dataset_key == "CiteSeer":
-        # CiteSeer-specific stronger IFL-GC preset.
+        # CiteSeer-specific stronger SG-GC preset.
         search_space = {
             "gca_drop_scheme": ["degree", "pr"],
             "similarity_percentile": [99.3, 99.5],
             "max_du_per_node": [8, 10],
             "unlabeled_weight": [0.3, 0.4],
             "warmup_epochs": [80],
-            "iflgc_refl_du_weight": [0.5, 0.6],
+            "sggc_refl_du_weight": [0.5, 0.6],
             "tau": [0.7, 0.9],
         }
 
@@ -148,14 +147,14 @@ def main():
         }
 
     elif dataset_key == "PubMed":
-        # PubMed-specific tighter IFL-GC preset: drop the expensive PR branch and keep a small sweep.
+        # PubMed-specific tighter SG-GC preset: drop the expensive PR branch and keep a small sweep.
         search_space = {
             "gca_drop_scheme": ["degree"],
             "similarity_percentile": [99.5, 99.7],
             "max_du_per_node": [12, 14],
             "unlabeled_weight": [0.2, 0.3],
             "warmup_epochs": [100],
-            "iflgc_refl_du_weight": [0.4, 0.5],
+            "sggc_refl_du_weight": [0.4, 0.5],
             "tau": [0.3],
         }
 
@@ -177,7 +176,7 @@ def main():
         }
 
     elif dataset_key == "DBLP":
-        # DBLP-specific compact IFL-GC preset:
+        # DBLP-specific compact SG-GC preset:
         # keep GCA-strong augmentations and apply lighter semantic correction.
         search_space = {
             "gca_drop_scheme": ["degree"],
@@ -185,7 +184,7 @@ def main():
             "max_du_per_node": [12],
             "unlabeled_weight": [0.2, 0.3],
             "warmup_epochs": [100],
-            "iflgc_refl_du_weight": [0.4, 0.5],
+            "sggc_refl_du_weight": [0.4, 0.5],
             "tau": [0.7, 0.8],
         }
 
@@ -207,14 +206,14 @@ def main():
         }
 
     else:
-        # Standard strong IFL-GC preset for Cora.
+        # Standard strong SG-GC preset for Cora.
         search_space = {
             "gca_drop_scheme": ["degree", "pr"],
             "similarity_percentile": [99.5, 99.7],
             "max_du_per_node": [12, 14],
             "unlabeled_weight": [0.2, 0.3],
             "warmup_epochs": [80],
-            "iflgc_refl_du_weight": [0.4, 0.5, 0.6],
+            "sggc_refl_du_weight": [0.4, 0.5, 0.6],
             "tau": [0.3, 0.4],
         }
 
@@ -288,7 +287,7 @@ def main():
                     f"sim_p={trial_params['similarity_percentile']}, "
                     f"max_du={trial_params['max_du_per_node']}, "
                     f"lambda_u={trial_params['unlabeled_weight']}, "
-                    f"alpha_refl={trial_params['iflgc_refl_du_weight']}, "
+                    f"alpha_refl={trial_params['sggc_refl_du_weight']}, "
                     f"tau={trial_params['tau']}, "
                     f"de=({trial_params['drop_edge_rate_1']},{trial_params['drop_edge_rate_2']}), "
                     f"df=({trial_params['drop_feature_rate_1']},{trial_params['drop_feature_rate_2']})"
@@ -303,7 +302,7 @@ def main():
                         grace_dir,
                         temp_cfg,
                         dataset=dataset_key,
-                        method="ifl-gc",
+                        method="sg-gc",
                         gpu_id=args.gpu_id,
                     )
                     score = robust_score(metrics, args.std_weight)
@@ -349,7 +348,7 @@ def main():
             f"similarity_percentile={r['similarity_percentile']}, "
             f"max_du_per_node={r['max_du_per_node']}, "
             f"unlabeled_weight={r['unlabeled_weight']}, "
-            f"iflgc_refl_du_weight={r['iflgc_refl_du_weight']}, "
+            f"sggc_refl_du_weight={r['sggc_refl_du_weight']}, "
             f"tau={r['tau']}, "
             f"drop_edge_rate_1={r['drop_edge_rate_1']}, "
             f"drop_edge_rate_2={r['drop_edge_rate_2']}, "
@@ -367,7 +366,7 @@ def main():
         "similarity_percentile",
         "max_du_per_node",
         "unlabeled_weight",
-        "iflgc_refl_du_weight",
+        "sggc_refl_du_weight",
         "warmup_epochs",
         "tau",
         "drop_edge_rate_1",
@@ -399,7 +398,7 @@ def main():
                 "similarity_percentile": r["similarity_percentile"],
                 "max_du_per_node": r["max_du_per_node"],
                 "unlabeled_weight": r["unlabeled_weight"],
-                "iflgc_refl_du_weight": r["iflgc_refl_du_weight"],
+                "sggc_refl_du_weight": r["sggc_refl_du_weight"],
                 "warmup_epochs": r["warmup_epochs"],
                 "tau": r["tau"],
                 "drop_edge_rate_1": r["drop_edge_rate_1"],

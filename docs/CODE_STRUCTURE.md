@@ -35,16 +35,16 @@ GRACE/
 
 用途：
 
-- 比较 `grace`、`gca`、`ifl-gr`、`ifl-gc`
+- 比较 `grace`、`gca`、`sg-gr`、`sg-gc`
 - 进行网格搜索
 - 对 Top-K 参数做复验
 - 自动生成单数据集或多数据集完整对比流程
 
 关键脚本：
 
-- `grid_search_iflgr.py`
+- `grid_search_sggr.py`
 - `grid_search_gca.py`
-- `grid_search_iflgc.py`
+- `grid_search_sggc.py`
 - `verify_top_params.py`
 - `run_full_pipeline.py`
 - `run_full_pipeline_batch.py`
@@ -53,13 +53,13 @@ GRACE/
 
 用途：
 
-- 对 `ifl-gr`、`ifl-gc` 做单因素超参数敏感性分析
+- 对 `sg-gr`、`sg-gc` 做单因素超参数敏感性分析
 - 输出 CSV、图片和简短文字报告
 
 关键脚本：
 
-- `run_ifl_param_sensitivity.py`
-- `plot_ifl_param_sensitivity.py`
+- `run_sg_param_sensitivity.py`
+- `plot_sg_param_sensitivity.py`
 
 ### 2.3 `experiments/sampling_bias_validation/`
 
@@ -94,24 +94,24 @@ GRACE/
 
 ```bash
 python train.py --dataset Cora --method grace
-python train.py --dataset Cora --method ifl-gr
+python train.py --dataset Cora --method sg-gr
 python train.py --dataset Cora --method gca
-python train.py --dataset Cora --method ifl-gc
+python train.py --dataset Cora --method sg-gc
 ```
 
 ### 方法比较
 
 ```bash
-python experiments/method_comparison/grid_search_iflgr.py --dataset Cora --gpu_id 0 --topk 10
-python experiments/method_comparison/verify_top_params.py --dataset Cora --method ifl-gr --top_params results/grid_search_iflgr_cora_results.csv --topk 3 --runs 3 --gpu_id 0
+python experiments/method_comparison/grid_search_sggr.py --dataset Cora --gpu_id 0 --topk 10
+python experiments/method_comparison/verify_top_params.py --dataset Cora --method sg-gr --top_params results/grid_search_sggr_cora_results.csv --topk 3 --runs 3 --gpu_id 0
 python experiments/method_comparison/run_full_pipeline.py --dataset Cora --gpu_id 0
 ```
 
 ### 超参数敏感性分析
 
 ```bash
-python experiments/hyperparameter_sensitivity/run_ifl_param_sensitivity.py --datasets Cora --methods ifl-gr ifl-gc --gpu_id 0
-python experiments/hyperparameter_sensitivity/plot_ifl_param_sensitivity.py --dataset Cora
+python experiments/hyperparameter_sensitivity/run_sg_param_sensitivity.py --datasets Cora --methods sg-gr sg-gc --gpu_id 0
+python experiments/hyperparameter_sensitivity/plot_sg_param_sensitivity.py --dataset Cora
 ```
 
 ### 采样偏差验证
@@ -128,5 +128,5 @@ python experiments/sampling_bias_validation/plot_sampling_bias_curves.py --csv l
 3. `eval.py`
 4. `experiments/method_comparison/run_full_pipeline.py`
 5. `experiments/method_comparison/grid_search_*.py`
-6. `experiments/hyperparameter_sensitivity/run_ifl_param_sensitivity.py`
+6. `experiments/hyperparameter_sensitivity/run_sg_param_sensitivity.py`
 7. `experiments/sampling_bias_validation/plot_sampling_bias_curves.py`

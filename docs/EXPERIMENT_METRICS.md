@@ -382,7 +382,7 @@ significant = (p_value_holm < alpha) and (mean_delta > 0)
 
 ## 超参数影响分析实验
 
-相关代码：`experiments/hyperparameter_sensitivity/run_ifl_param_sensitivity.py`、`experiments/hyperparameter_sensitivity/plot_ifl_param_sensitivity.py`
+相关代码：`experiments/hyperparameter_sensitivity/run_sg_param_sensitivity.py`、`experiments/hyperparameter_sensitivity/plot_sg_param_sensitivity.py`
 
 本实验只针对 `SG-GR` 与 `SG-GC`，分析三个论文参数的影响：
 

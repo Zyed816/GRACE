@@ -116,10 +116,10 @@ def make_temp_config_from_row(base_config, dataset_key, csv_row):
 
 def make_temp_config_from_row_for_method(base_config, dataset_key, csv_row, method):
     # Dispatch CSV->config mapping by method-specific columns.
-    if method == "ifl-gr":
+    if method == "sg-gr":
         return make_temp_config_from_row(base_config, dataset_key, csv_row)
 
-    if method == "ifl-gc":
+    if method == "sg-gc":
         import copy
         cfg = copy.deepcopy(base_config)
 
@@ -128,7 +128,7 @@ def make_temp_config_from_row_for_method(base_config, dataset_key, csv_row, meth
             "similarity_percentile": float(csv_row["similarity_percentile"]),
             "max_du_per_node": int(float(csv_row["max_du_per_node"])),
             "unlabeled_weight": float(csv_row["unlabeled_weight"]),
-            "iflgc_refl_du_weight": float(csv_row["iflgc_refl_du_weight"]),
+            "sggc_refl_du_weight": float(csv_row["sggc_refl_du_weight"]),
             "warmup_epochs": int(float(csv_row["warmup_epochs"])),
             "tau": float(csv_row["tau"]),
             "drop_edge_rate_1": float(csv_row["drop_edge_rate_1"]),
@@ -181,7 +181,7 @@ def make_temp_config_from_row_for_method(base_config, dataset_key, csv_row, meth
 
 
 def print_param_summary(csv_row, method):
-    if method == "ifl-gr":
+    if method == "sg-gr":
         tau_text = f", tau={csv_row['tau']}" if "tau" in csv_row and csv_row["tau"] != "" else ""
         print(
             f"sim_p={csv_row['similarity_percentile']}, "
@@ -203,13 +203,13 @@ def print_param_summary(csv_row, method):
         )
         return
 
-    if method == "ifl-gc":
+    if method == "sg-gc":
         print(
             f"scheme={csv_row['gca_drop_scheme']}, "
             f"sim_p={csv_row['similarity_percentile']}, "
             f"max_du={csv_row['max_du_per_node']}, "
             f"lambda_u={csv_row['unlabeled_weight']}, "
-            f"alpha_refl={csv_row['iflgc_refl_du_weight']}, "
+            f"alpha_refl={csv_row['sggc_refl_du_weight']}, "
             f"tau={csv_row['tau']}, "
             f"de=({csv_row['drop_edge_rate_1']},{csv_row['drop_edge_rate_2']}), "
             f"df=({csv_row['drop_feature_rate_1']},{csv_row['drop_feature_rate_2']})"
@@ -226,7 +226,7 @@ def main():
     parser.add_argument("--runs", type=int, default=3, help="Runs per parameter")
     parser.add_argument("--gpu_id", type=int, default=0)
     parser.add_argument("--dataset", type=str, default="Cora", choices=["Cora", "CiteSeer", "PubMed", "DBLP"])
-    parser.add_argument("--method", type=str, default="ifl-gr", choices=["ifl-gr", "gca", "ifl-gc"])
+    parser.add_argument("--method", type=str, default="sg-gr", choices=["sg-gr", "gca", "sg-gc"])
     args = parser.parse_args()
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -304,7 +304,7 @@ def main():
             "avg_F1Ma_std": avg_f1ma_std,
         }
 
-        if args.method == "ifl-gr":
+        if args.method == "sg-gr":
             result.update({
                 "similarity_percentile": csv_row["similarity_percentile"],
                 "max_du_per_node": csv_row["max_du_per_node"],
@@ -327,7 +327,7 @@ def main():
                 "similarity_percentile": csv_row["similarity_percentile"],
                 "max_du_per_node": csv_row["max_du_per_node"],
                 "unlabeled_weight": csv_row["unlabeled_weight"],
-                "iflgc_refl_du_weight": csv_row["iflgc_refl_du_weight"],
+                "sggc_refl_du_weight": csv_row["sggc_refl_du_weight"],
                 "tau": csv_row["tau"],
                 "drop_edge_rate_1": csv_row["drop_edge_rate_1"],
                 "drop_edge_rate_2": csv_row["drop_edge_rate_2"],
@@ -347,7 +347,7 @@ def main():
     print("VERIFICATION SUMMARY")
     print("=" * 80)
     for res in verification_results:
-        if args.method == "ifl-gr":
+        if args.method == "sg-gr":
             tau_tail = f", tau={res['tau']}" if res.get("tau", "") else ""
             print(
                 f"#{res['param_rank']}: "
@@ -377,7 +377,7 @@ def main():
                 f"sim_p={res['similarity_percentile']}, "
                 f"max_du={res['max_du_per_node']}, "
                 f"lambda_u={res['unlabeled_weight']}, "
-                f"alpha_refl={res['iflgc_refl_du_weight']}, "
+                f"alpha_refl={res['sggc_refl_du_weight']}, "
                 f"tau={res['tau']}"
             )
 

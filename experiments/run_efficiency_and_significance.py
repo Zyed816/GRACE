@@ -6,7 +6,7 @@ from time import perf_counter as t
 
 
 DATASET_CHOICES = ["Cora", "CiteSeer", "PubMed", "DBLP"]
-METHOD_CHOICES = ["grace", "gca", "ifl-gr", "ifl-gc"]
+METHOD_CHOICES = ["grace", "gca", "sg-gr", "sg-gc"]
 
 
 def dedupe_keep_order(values):

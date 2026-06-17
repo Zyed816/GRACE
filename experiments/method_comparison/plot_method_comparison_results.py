@@ -28,24 +28,24 @@ from experiments.plotting_common import (
 )
 
 
-METHOD_ORDER = ["grace", "gca", "ifl-gr", "ifl-gc"]
+METHOD_ORDER = ["grace", "gca", "sg-gr", "sg-gc"]
 METHOD_LABELS = {
     "grace": "GRACE",
     "gca": "GCA",
-    "ifl-gr": "SG-GR",
-    "ifl-gc": "SG-GC",
+    "sg-gr": "SG-GR",
+    "sg-gc": "SG-GC",
 }
 METHOD_COLORS = {
     "grace": "#42567A",
     "gca": "#348380",
-    "ifl-gr": "#73B86E",
-    "ifl-gc": "#7A6E9F",
+    "sg-gr": "#73B86E",
+    "sg-gc": "#7A6E9F",
 }
 METHOD_HATCHES = {
     "grace": "//",
     "gca": "\\" * 2,
-    "ifl-gr": "xx",
-    "ifl-gc": "--",
+    "sg-gr": "xx",
+    "sg-gc": "--",
 }
 METHOD_HATCH_COLOR = "#4A4A4A"
 METHOD_HATCH_LINEWIDTH = 0.35

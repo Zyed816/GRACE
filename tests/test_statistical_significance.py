@@ -28,7 +28,7 @@ class StatisticalSignificanceTests(unittest.TestCase):
             cls.base_config = yaml.safe_load(f)
 
     def test_selects_existing_best_verified_params(self):
-        selected = select_base_params(str(REPO_ROOT), "Cora", "ifl-gr")
+        selected = select_base_params(str(REPO_ROOT), "Cora", "sg-gr")
 
         self.assertEqual(selected["source"], "full_pipeline")
         self.assertIn("similarity_percentile", selected["params"])

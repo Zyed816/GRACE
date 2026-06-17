@@ -1,10 +1,10 @@
 # PubMed Sensitivity Analysis
 
-- Plot: `results\plots\pubmed_ifl_sensitivity_overview.png`
+- Plot: `results\plots\pubmed_sg_sensitivity_overview.png`
 
 ## Data Status
-- `results\sensitivity_iflgr_pubmed_results.csv`: status=ok, rows=60, summary_rows=15
-- `results\sensitivity_iflgc_pubmed_results.csv`: status=ok, rows=60, summary_rows=15
+- `results\sensitivity_sggr_pubmed_results.csv`: status=ok, rows=60, summary_rows=15
+- `results\sensitivity_sggc_pubmed_results.csv`: status=ok, rows=60, summary_rows=15
 
 ## Findings
 - SG-GR / t_s: best robust at 0.9273 (robust=0.7930, F1Mi=0.7955); robust range=0.0074. Delta vs anchor=+0.0000. Trend is non-monotonic, suggesting a local optimum.

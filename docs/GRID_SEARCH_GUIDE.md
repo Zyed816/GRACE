@@ -23,17 +23,17 @@ python train.py --dataset Cora --method grace --gpu_id 0
 ### 第二步：做网格搜索
 
 ```bash
-python experiments/method_comparison/grid_search_iflgr.py --dataset Cora --gpu_id 0 --topk 10
+python experiments/method_comparison/grid_search_sggr.py --dataset Cora --gpu_id 0 --topk 10
 python experiments/method_comparison/grid_search_gca.py --dataset Cora --gpu_id 0 --topk 10
-python experiments/method_comparison/grid_search_iflgc.py --dataset Cora --gpu_id 0 --topk 10
+python experiments/method_comparison/grid_search_sggc.py --dataset Cora --gpu_id 0 --topk 10
 ```
 
 ### 第三步：复验前几组参数
 
 ```bash
-python experiments/method_comparison/verify_top_params.py --dataset Cora --method ifl-gr --top_params results/grid_search_iflgr_cora_results.csv --topk 3 --runs 3 --gpu_id 0
+python experiments/method_comparison/verify_top_params.py --dataset Cora --method sg-gr --top_params results/grid_search_sggr_cora_results.csv --topk 3 --runs 3 --gpu_id 0
 python experiments/method_comparison/verify_top_params.py --dataset Cora --method gca --top_params results/grid_search_gca_cora_results.csv --topk 3 --runs 3 --gpu_id 0
-python experiments/method_comparison/verify_top_params.py --dataset Cora --method ifl-gc --top_params results/grid_search_iflgc_cora_results.csv --topk 3 --runs 3 --gpu_id 0
+python experiments/method_comparison/verify_top_params.py --dataset Cora --method sg-gc --top_params results/grid_search_sggc_cora_results.csv --topk 3 --runs 3 --gpu_id 0
 ```
 
 ### 第四步：直接跑完整流程
@@ -47,9 +47,9 @@ python experiments/method_comparison/run_full_pipeline.py --dataset Cora --gpu_i
 这个脚本会自动完成：
 
 1. `grace` 基线重复实验
-2. `ifl-gr` 网格搜索与复验
+2. `sg-gr` 网格搜索与复验
 3. `gca` 网格搜索与复验
-4. `ifl-gc` 网格搜索与复验
+4. `sg-gc` 网格搜索与复验
 5. 最终汇总输出
 
 ## 3. 多数据集批量运行
@@ -68,9 +68,9 @@ python experiments/method_comparison/run_full_pipeline_batch.py --datasets Cora 
 
 ### 4.1 网格搜索输出
 
-- `results/grid_search_iflgr_<dataset>_results.csv`
+- `results/grid_search_sggr_<dataset>_results.csv`
 - `results/grid_search_gca_<dataset>_results.csv`
-- `results/grid_search_iflgc_<dataset>_results.csv`
+- `results/grid_search_sggc_<dataset>_results.csv`
 
 常见字段：
 

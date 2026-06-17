@@ -26,10 +26,10 @@ from experiments.plotting_common import (
 
 
 DATASET_ORDER = ["Cora", "CiteSeer", "PubMed", "DBLP"]
-METHOD_ORDER = ["ifl-gr", "ifl-gc"]
+METHOD_ORDER = ["sg-gr", "sg-gc"]
 METHOD_LABELS = {
-    "ifl-gr": "SG-GR",
-    "ifl-gc": "SG-GC",
+    "sg-gr": "SG-GR",
+    "sg-gc": "SG-GC",
 }
 VARIANT_ORDER = ["full", "no_warmup", "single_mining", "uniform_weight"]
 VARIANT_LABELS = {
@@ -87,7 +87,7 @@ METHOD_EFFECT_SPECS = [
         "figure_label": f"{METHOD_LABELS[method]}方法{spec['module_label']}消融实验结果图",
     }
     for spec in EFFECT_SPECS
-    for method, METHOD_FILE_SLUG in [("ifl-gr", "sggr"), ("ifl-gc", "sggc")]
+    for method, METHOD_FILE_SLUG in [("sg-gr", "sggr"), ("sg-gc", "sggc")]
 ]
 
 NUMERIC_COLUMNS = [

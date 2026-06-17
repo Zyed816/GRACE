@@ -1,10 +1,10 @@
 # Cora Sensitivity Analysis
 
-- Plot: `results\plots\cora_ifl_sensitivity_overview.png`
+- Plot: `results\plots\cora_sg_sensitivity_overview.png`
 
 ## Data Status
-- `results\sensitivity_iflgr_cora_results.csv`: status=ok, rows=60, summary_rows=15
-- `results\sensitivity_iflgc_cora_results.csv`: status=ok, rows=60, summary_rows=15
+- `results\sensitivity_sggr_cora_results.csv`: status=ok, rows=60, summary_rows=15
+- `results\sensitivity_sggc_cora_results.csv`: status=ok, rows=60, summary_rows=15
 
 ## Findings
 - SG-GR / t_s: best robust at 0.9834 (robust=0.8427, F1Mi=0.8444); robust range=0.0109. Delta vs anchor=+0.0057. Trend is non-monotonic, suggesting a local optimum.

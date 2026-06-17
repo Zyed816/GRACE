@@ -20,7 +20,7 @@ from experiments.component_ablation.run_component_ablation import (
     has_value,
     make_temp_config,
     parse_params_json,
-    params_to_dataset_updates as ifl_params_to_dataset_updates,
+    params_to_dataset_updates as sg_params_to_dataset_updates,
     read_csv_rows,
     safe_mean,
     safe_pstdev,
@@ -31,17 +31,17 @@ from experiments.method_comparison.run_full_pipeline import robust_score, run_tr
 
 
 DATASET_CHOICES = ["Cora", "CiteSeer", "PubMed", "DBLP"]
-METHOD_CHOICES = ["grace", "gca", "ifl-gr", "ifl-gc"]
+METHOD_CHOICES = ["grace", "gca", "sg-gr", "sg-gc"]
 METHOD_FILE_SLUG = {
     "gca": "gca",
-    "ifl-gr": "iflgr",
-    "ifl-gc": "iflgc",
+    "sg-gr": "sggr",
+    "sg-gc": "sggc",
 }
 BASE_METHOD = {
     "grace": "",
     "gca": "grace",
-    "ifl-gr": "grace",
-    "ifl-gc": "gca",
+    "sg-gr": "grace",
+    "sg-gc": "gca",
 }
 
 EPOCH_TIMING_PATTERN = re.compile(
@@ -237,8 +237,8 @@ def add_int_if_present(updates, params, key):
 
 
 def params_to_dataset_updates(params, method):
-    if method in {"ifl-gr", "ifl-gc"}:
-        return ifl_params_to_dataset_updates(params, method)
+    if method in {"sg-gr", "sg-gc"}:
+        return sg_params_to_dataset_updates(params, method)
 
     updates = {}
     add_float_if_present(updates, params, "drop_edge_rate_1")

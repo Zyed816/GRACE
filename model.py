@@ -112,7 +112,7 @@ class Model(torch.nn.Module):
 
         return dl_loss + unlabeled_weight * du_loss
 
-    def corrected_semi_loss_iflgc(self,
+    def corrected_semi_loss_sggc(self,
                                   z1: torch.Tensor,
                                   z2: torch.Tensor,
                                   du_pos_mask: torch.Tensor,
@@ -150,7 +150,7 @@ class Model(torch.nn.Module):
                                     du_pos_weight: torch.Tensor,
                                     batch_size: int,
                                     unlabeled_weight: float = 1.0):
-        # Space complexity: O(BN) for corrected IFL-GR variant.
+        # Space complexity: O(BN) for corrected SG-GR variant.
         device = z1.device
         num_nodes = z1.size(0)
         num_batches = (num_nodes - 1) // batch_size + 1
@@ -184,14 +184,14 @@ class Model(torch.nn.Module):
 
         return torch.cat(losses)
 
-    def batched_corrected_semi_loss_iflgc(self,
+    def batched_corrected_semi_loss_sggc(self,
                                           z1: torch.Tensor,
                                           z2: torch.Tensor,
                                           du_pos_weight: torch.Tensor,
                                           batch_size: int,
                                           unlabeled_weight: float = 1.0,
                                           refl_du_weight: float = 0.3):
-        # Space complexity: O(BN) for corrected IFL-GC variant.
+        # Space complexity: O(BN) for corrected SG-GC variant.
         device = z1.device
         num_nodes = z1.size(0)
         num_batches = (num_nodes - 1) // batch_size + 1
@@ -241,7 +241,7 @@ class Model(torch.nn.Module):
                                            du_col_w: torch.Tensor,
                                            batch_size: int,
                                            unlabeled_weight: float = 1.0):
-        # Sparse DU+ version for IFL-GR: O(BN + B*K), avoids dense NxN DU weights.
+        # Sparse DU+ version for SG-GR: O(BN + B*K), avoids dense NxN DU weights.
         device = z1.device
         num_nodes = z1.size(0)
         num_batches = (num_nodes - 1) // batch_size + 1
@@ -280,7 +280,7 @@ class Model(torch.nn.Module):
 
         return torch.cat(losses)
 
-    def batched_corrected_semi_loss_iflgc_sparse(self,
+    def batched_corrected_semi_loss_sggc_sparse(self,
                                                  z1: torch.Tensor,
                                                  z2: torch.Tensor,
                                                  du_row_ptr: torch.Tensor,
@@ -289,7 +289,7 @@ class Model(torch.nn.Module):
                                                  batch_size: int,
                                                  unlabeled_weight: float = 1.0,
                                                  refl_du_weight: float = 0.3):
-        # Sparse DU+ version for IFL-GC: O(BN + B*K), avoids dense NxN DU weights.
+        # Sparse DU+ version for SG-GC: O(BN + B*K), avoids dense NxN DU weights.
         device = z1.device
         num_nodes = z1.size(0)
         num_batches = (num_nodes - 1) // batch_size + 1
@@ -376,7 +376,7 @@ class Model(torch.nn.Module):
              du_pos_csr=None,
              du_pos_csr_t=None,
              unlabeled_weight: float = 1.0,
-             corrected_variant: str = 'ifl-gr',
+             corrected_variant: str = 'sg-gr',
              refl_du_weight: float = 0.3):
         h1 = self.projection(z1)
         h2 = self.projection(z2)
@@ -387,15 +387,15 @@ class Model(torch.nn.Module):
                 assert du_pos_weight is not None
 
             if batch_size == 0:
-                if corrected_variant == 'ifl-gc':
-                    l1 = self.corrected_semi_loss_iflgc(
+                if corrected_variant == 'sg-gc':
+                    l1 = self.corrected_semi_loss_sggc(
                         h1,
                         h2,
                         du_pos_mask=du_pos_mask,
                         du_pos_weight=du_pos_weight,
                         unlabeled_weight=unlabeled_weight,
                         refl_du_weight=refl_du_weight)
-                    l2 = self.corrected_semi_loss_iflgc(
+                    l2 = self.corrected_semi_loss_sggc(
                         h2,
                         h1,
                         du_pos_mask=du_pos_mask.t(),
@@ -423,8 +423,8 @@ class Model(torch.nn.Module):
                     row_ptr, col_idx, col_w = du_pos_csr
                     row_ptr_t, col_idx_t, col_w_t = du_pos_csr_t
 
-                    if corrected_variant == 'ifl-gc':
-                        l1 = self.batched_corrected_semi_loss_iflgc_sparse(
+                    if corrected_variant == 'sg-gc':
+                        l1 = self.batched_corrected_semi_loss_sggc_sparse(
                             h1,
                             h2,
                             du_row_ptr=row_ptr,
@@ -433,7 +433,7 @@ class Model(torch.nn.Module):
                             batch_size=batch_size,
                             unlabeled_weight=unlabeled_weight,
                             refl_du_weight=refl_du_weight)
-                        l2 = self.batched_corrected_semi_loss_iflgc_sparse(
+                        l2 = self.batched_corrected_semi_loss_sggc_sparse(
                             h2,
                             h1,
                             du_row_ptr=row_ptr_t,
@@ -460,15 +460,15 @@ class Model(torch.nn.Module):
                             batch_size=batch_size,
                             unlabeled_weight=unlabeled_weight)
                 else:
-                    if corrected_variant == 'ifl-gc':
-                        l1 = self.batched_corrected_semi_loss_iflgc(
+                    if corrected_variant == 'sg-gc':
+                        l1 = self.batched_corrected_semi_loss_sggc(
                             h1,
                             h2,
                             du_pos_weight=du_pos_weight,
                             batch_size=batch_size,
                             unlabeled_weight=unlabeled_weight,
                             refl_du_weight=refl_du_weight)
-                        l2 = self.batched_corrected_semi_loss_iflgc(
+                        l2 = self.batched_corrected_semi_loss_sggc(
                             h2,
                             h1,
                             du_pos_weight=du_pos_weight.t(),

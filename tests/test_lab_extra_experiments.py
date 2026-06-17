@@ -46,8 +46,8 @@ class ExtraExperimentFormTests(SimpleTestCase):
         efficiency = EfficiencyForm(prefix="efficiency")
         significance = SignificanceForm(prefix="significance")
 
-        self.assertEqual(ablation.fields["methods"].initial, ["ifl-gr", "ifl-gc"])
-        self.assertEqual(efficiency.fields["methods"].initial, ["grace", "gca", "ifl-gr", "ifl-gc"])
+        self.assertEqual(ablation.fields["methods"].initial, ["sg-gr", "sg-gc"])
+        self.assertEqual(efficiency.fields["methods"].initial, ["grace", "gca", "sg-gr", "sg-gc"])
         self.assertEqual(significance.fields["comparison_pairs"].initial, ["sg_gr_vs_grace", "sg_gc_vs_gca"])
         self.assertEqual(significance.fields["runs"].min_value, 2)
 
@@ -78,8 +78,8 @@ class ExtraExperimentParserTests(unittest.TestCase):
                 csv_path,
                 ["stage", "dataset", "method", "variant", "robust_score", "drop_vs_full"],
                 [
-                    {"stage": "summary", "dataset": "Cora", "method": "ifl-gr", "variant": "full", "robust_score": "0.82", "drop_vs_full": ""},
-                    {"stage": "summary", "dataset": "Cora", "method": "ifl-gr", "variant": "no_warmup", "robust_score": "0.81", "drop_vs_full": "0.01"},
+                    {"stage": "summary", "dataset": "Cora", "method": "sg-gr", "variant": "full", "robust_score": "0.82", "drop_vs_full": ""},
+                    {"stage": "summary", "dataset": "Cora", "method": "sg-gr", "variant": "no_warmup", "robust_score": "0.81", "drop_vs_full": "0.01"},
                 ],
             )
 
@@ -105,8 +105,8 @@ class ExtraExperimentParserTests(unittest.TestCase):
                 ],
                 [
                     {"stage": "summary", "dataset": "Cora", "method": "grace", "train_total_sec": "3.0", "wall_time_sec": "5.0", "time_ratio_vs_grace": "1.0", "overhead_ratio_vs_base": ""},
-                    {"stage": "summary", "dataset": "Cora", "method": "ifl-gr", "train_total_sec": "4.5", "wall_time_sec": "6.0", "time_ratio_vs_grace": "1.5", "overhead_ratio_vs_base": "1.5"},
-                    {"stage": "summary", "dataset": "Cora", "method": "ifl-gc", "train_total_sec": "6.0", "wall_time_sec": "7.0", "time_ratio_vs_grace": "2.0", "overhead_ratio_vs_base": "1.25"},
+                    {"stage": "summary", "dataset": "Cora", "method": "sg-gr", "train_total_sec": "4.5", "wall_time_sec": "6.0", "time_ratio_vs_grace": "1.5", "overhead_ratio_vs_base": "1.5"},
+                    {"stage": "summary", "dataset": "Cora", "method": "sg-gc", "train_total_sec": "6.0", "wall_time_sec": "7.0", "time_ratio_vs_grace": "2.0", "overhead_ratio_vs_base": "1.25"},
                 ],
             )
 
@@ -134,8 +134,8 @@ class ExtraExperimentParserTests(unittest.TestCase):
                 csv_path,
                 fieldnames,
                 [
-                    {"stage": "test", "dataset": "Cora", "metric": "robust_score", "baseline_method": "grace", "target_method": "ifl-gr", "mean_delta": "0.01", "p_value_holm": "0.01", "significant": "True", "notes": "primary"},
-                    {"stage": "test", "dataset": "Cora", "metric": "F1Mi_mean", "baseline_method": "grace", "target_method": "ifl-gr", "mean_delta": "0.02", "p_value_holm": "0.01", "significant": "True", "notes": "primary"},
+                    {"stage": "test", "dataset": "Cora", "metric": "robust_score", "baseline_method": "grace", "target_method": "sg-gr", "mean_delta": "0.01", "p_value_holm": "0.01", "significant": "True", "notes": "primary"},
+                    {"stage": "test", "dataset": "Cora", "metric": "F1Mi_mean", "baseline_method": "grace", "target_method": "sg-gr", "mean_delta": "0.02", "p_value_holm": "0.01", "significant": "True", "notes": "primary"},
                     {"stage": "test", "dataset": "Cora", "metric": "robust_score", "baseline_method": "grace", "target_method": "gca", "mean_delta": "0.03", "p_value_holm": "0.01", "significant": "True", "notes": "supplementary"},
                 ],
             )
@@ -184,7 +184,7 @@ class ExtraExperimentServiceCommandTests(SimpleTestCase):
             pk=123,
             config={
                 "dataset": "Cora",
-                "methods": ["ifl-gr"],
+                "methods": ["sg-gr"],
                 "gpu_id": 0,
                 "runs": 1,
                 "std_weight": 0.5,
@@ -234,7 +234,7 @@ class ExtraExperimentServiceCommandTests(SimpleTestCase):
             pk=126,
             config={
                 "dataset": "Cora",
-                "methods": ["ifl-gr"],
+                "methods": ["sg-gr"],
                 "gpu_id": 0,
                 "runs": 1,
                 "std_weight": 0.5,
@@ -264,7 +264,7 @@ class ExtraExperimentServiceCommandTests(SimpleTestCase):
             pk=124,
             config={
                 "dataset": "Cora",
-                "methods": ["grace", "ifl-gr"],
+                "methods": ["grace", "sg-gr"],
                 "gpu_id": 0,
                 "runs": 1,
                 "std_weight": 0.5,
@@ -289,7 +289,7 @@ class ExtraExperimentServiceCommandTests(SimpleTestCase):
             pk=127,
             config={
                 "dataset": "Cora",
-                "methods": ["grace", "ifl-gr"],
+                "methods": ["grace", "sg-gr"],
                 "gpu_id": 0,
                 "runs": 1,
                 "std_weight": 0.5,
@@ -336,7 +336,7 @@ class ExtraExperimentServiceCommandTests(SimpleTestCase):
         self.assertEqual(commands[0][0], "significance")
         self.assertIn("experiments/statistical_significance/run_significance_experiment.py", commands[0][1])
         self.assertIn("grace", commands[0][1])
-        self.assertIn("ifl-gr", commands[0][1])
+        self.assertIn("sg-gr", commands[0][1])
         self.assertNotIn("gca", commands[0][1])
         self.assertIn("results/webapp/run_125/significance_cora_results.csv", commands[0][1])
         self.assertEqual(commands[1][0], "significance-analyze")
@@ -417,6 +417,6 @@ class OfficialResultArtifactTests(SimpleTestCase):
         combined = [entry for entry in entries if entry["slug"] == "sensitivity-all"]
         self.assertEqual(len(combined), 1)
         paths = [artifact["relative_path"] for artifact in combined[0]["artifacts"]]
-        for stem in ["ifl_sensitivity_ts_effect", "ifl_sensitivity_M_effect", "ifl_sensitivity_K_effect"]:
+        for stem in ["sg_sensitivity_ts_effect", "sg_sensitivity_M_effect", "sg_sensitivity_K_effect"]:
             self.assertTrue(any(path.endswith(f"{stem}.png") for path in paths), stem)
             self.assertTrue(any(path.endswith(f"{stem}.svg") for path in paths), stem)

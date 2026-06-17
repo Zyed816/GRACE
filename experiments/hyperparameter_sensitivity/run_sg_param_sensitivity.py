@@ -20,10 +20,10 @@ from experiments.method_comparison.run_full_pipeline import (
 
 
 DATASET_CHOICES = ["Cora", "CiteSeer", "PubMed", "DBLP"]
-METHOD_CHOICES = ["ifl-gr", "ifl-gc"]
+METHOD_CHOICES = ["sg-gr", "sg-gc"]
 METHOD_FILE_SLUG = {
-    "ifl-gr": "iflgr",
-    "ifl-gc": "iflgc",
+    "sg-gr": "sggr",
+    "sg-gc": "sggc",
 }
 PARAM_SPECS = {
     "t_s": {
@@ -606,7 +606,7 @@ def run_one_combo(grace_dir, base_config, dataset, method, args, top_params_over
 def parse_args():
     parser = argparse.ArgumentParser(
         description=(
-            "Sensitivity analysis for IFL-GR / IFL-GC. "
+            "Sensitivity analysis for SG-GR / SG-GC. "
             "Starting from a ranked grid-search CSV, keep the best parameter set fixed "
             "and vary one paper hyper-parameter at a time."
         )

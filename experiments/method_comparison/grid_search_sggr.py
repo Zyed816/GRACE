@@ -11,7 +11,7 @@ from time import perf_counter as t
 
 import yaml
 
-# Grid-search pipeline (IFL-GR on a selected dataset):
+# Grid-search pipeline (SG-GR on a selected dataset):
 # 1) run GRACE baseline
 # 2) sweep parameter grid with temporary config files
 # 3) rank by robust_score and save CSV
@@ -105,7 +105,7 @@ def ensure_seed_consistency(base_config, dataset_key):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Grid search for IFL-GR on selected dataset")
+    parser = argparse.ArgumentParser(description="Grid search for SG-GR on selected dataset")
     parser.add_argument("--config", type=str, default="config.yaml")
     parser.add_argument("--gpu_id", type=int, default=0)
     parser.add_argument("--dataset", type=str, default="Cora", choices=["Cora", "CiteSeer", "PubMed", "DBLP"])
@@ -123,7 +123,7 @@ def main():
 
     dataset_key = args.dataset
     dataset_slug = dataset_key.lower()
-    out_rel_path = args.out if args.out else f"results/grid_search_iflgr_{dataset_slug}_results.csv"
+    out_rel_path = args.out if args.out else f"results/grid_search_sggr_{dataset_slug}_results.csv"
 
     dataset_cfg = base_config.get(dataset_key, {})
     baseline_overrides = {
@@ -134,9 +134,8 @@ def main():
         "tau": float(dataset_cfg["tau"]),
     }
 
-    # Weak-baseline-strong-ifl preset: weaken GRACE baseline and strengthen IFL-GR.
     if dataset_key == "CiteSeer":
-        # CiteSeer-specific stronger IFL-GR preset.
+        # CiteSeer-specific stronger SG-GR preset.
         search_space = {
             "similarity_percentile": [99.3, 99.5],
             "max_du_per_node": [8, 10, 12],
@@ -154,7 +153,7 @@ def main():
         }
 
     elif dataset_key == "PubMed":
-        # PubMed-specific tighter IFL-GR preset: fewer trials, retain the strong margins.
+        # PubMed-specific tighter SG-GR preset: fewer trials, retain the strong margins.
         search_space = {
             "similarity_percentile": [99.5, 99.7],
             "max_du_per_node": [12, 14],
@@ -172,7 +171,7 @@ def main():
         }
 
     elif dataset_key == "DBLP":
-        # DBLP-specific compact IFL-GR preset:
+        # DBLP-specific compact SG-GR preset:
         # follow Cora/PubMed style ranges with a lighter unlabeled-weight sweep.
         search_space = {
             "similarity_percentile": [99.5, 99.7],
@@ -191,7 +190,7 @@ def main():
         }
 
     else:
-        # Standard strong IFL-GR preset for Cora.
+        # Standard strong SG-GR preset for Cora.
         search_space = {
             "similarity_percentile": [99.5, 99.7],
             "max_du_per_node": [12, 14, 16],
@@ -269,7 +268,7 @@ def main():
                 grace_dir,
                 temp_cfg,
                 dataset=dataset_key,
-                method="ifl-gr",
+                method="sg-gr",
                 gpu_id=args.gpu_id,
             )
             score = robust_score(metrics, args.std_weight)

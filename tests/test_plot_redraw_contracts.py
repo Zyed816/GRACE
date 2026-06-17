@@ -57,16 +57,16 @@ class PlotRedrawContractTests(unittest.TestCase):
         )
 
     def test_sensitivity_effect_specs_use_requested_file_names(self):
-        from experiments.hyperparameter_sensitivity.plot_ifl_param_sensitivity import PARAM_EFFECT_SPECS
+        from experiments.hyperparameter_sensitivity.plot_sg_param_sensitivity import PARAM_EFFECT_SPECS
 
         stems = [spec["file_stem"] for spec in PARAM_EFFECT_SPECS]
 
         self.assertEqual(
             stems,
             [
-                "ifl_sensitivity_ts_effect",
-                "ifl_sensitivity_M_effect",
-                "ifl_sensitivity_K_effect",
+                "sg_sensitivity_ts_effect",
+                "sg_sensitivity_M_effect",
+                "sg_sensitivity_K_effect",
             ],
         )
 
@@ -104,10 +104,10 @@ class PlotRedrawContractTests(unittest.TestCase):
 
         summary_df = pd.DataFrame(
             [
-                {"dataset": "Cora", "method": "ifl-gr", "variant": "full", "robust_score": 0.790, "robust_score_std": 0.001},
-                {"dataset": "Cora", "method": "ifl-gr", "variant": "uniform_weight", "robust_score": 0.775, "robust_score_std": 0.001},
-                {"dataset": "Cora", "method": "ifl-gc", "variant": "full", "robust_score": 0.787, "robust_score_std": 0.001},
-                {"dataset": "Cora", "method": "ifl-gc", "variant": "uniform_weight", "robust_score": 0.772, "robust_score_std": 0.001},
+                {"dataset": "Cora", "method": "sg-gr", "variant": "full", "robust_score": 0.790, "robust_score_std": 0.001},
+                {"dataset": "Cora", "method": "sg-gr", "variant": "uniform_weight", "robust_score": 0.775, "robust_score_std": 0.001},
+                {"dataset": "Cora", "method": "sg-gc", "variant": "full", "robust_score": 0.787, "robust_score_std": 0.001},
+                {"dataset": "Cora", "method": "sg-gc", "variant": "uniform_weight", "robust_score": 0.772, "robust_score_std": 0.001},
             ]
         )
 
@@ -122,7 +122,7 @@ class PlotRedrawContractTests(unittest.TestCase):
 
         rows = []
         for dataset, base in [("Cora", 0.790), ("DBLP", 0.710)]:
-            for method in ["ifl-gr", "ifl-gc"]:
+            for method in ["sg-gr", "sg-gc"]:
                 rows.append(
                     {
                         "dataset": dataset,
@@ -208,7 +208,7 @@ class PlotRedrawContractTests(unittest.TestCase):
         self.assertEqual(DELTA_YLABEL, "相对基线稳健性评分\nrobust_score变化")
 
     def test_sensitivity_labels_use_stable_score_and_observation_point(self):
-        from experiments.hyperparameter_sensitivity.plot_ifl_param_sensitivity import (
+        from experiments.hyperparameter_sensitivity.plot_sg_param_sensitivity import (
             ANCHOR_LABEL,
             ROBUST_SCORE_YLABEL,
         )

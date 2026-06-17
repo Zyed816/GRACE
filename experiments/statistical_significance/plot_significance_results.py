@@ -31,14 +31,14 @@ from experiments.statistical_significance.run_significance_experiment import DAT
 METHOD_LABELS = {
     "grace": "GRACE",
     "gca": "GCA",
-    "ifl-gr": "SG-GR",
-    "ifl-gc": "SG-GC",
+    "sg-gr": "SG-GR",
+    "sg-gc": "SG-GC",
 }
 METHOD_COLORS = {
     "grace": "#42567A",
     "gca": "#348380",
-    "ifl-gr": "#73B86E",
-    "ifl-gc": "#7A6E9F",
+    "sg-gr": "#73B86E",
+    "sg-gc": "#7A6E9F",
 }
 METRIC_LABELS = {
     "robust_score": "robust_score",
@@ -47,19 +47,19 @@ METRIC_LABELS = {
 }
 DELTA_YLABEL = "相对基线稳健性评分\nrobust_score变化"
 PRIMARY_COMPARISONS = [
-    ("grace", "ifl-gr", "SG-GR\nvs GRACE"),
-    ("gca", "ifl-gc", "SG-GC\nvs GCA"),
+    ("grace", "sg-gr", "SG-GR\nvs GRACE"),
+    ("gca", "sg-gc", "SG-GC\nvs GCA"),
 ]
 COMPARISON_EFFECT_SPECS = [
     {
         "baseline": "grace",
-        "target": "ifl-gr",
+        "target": "sg-gr",
         "label": "SG-GR VS GRACE",
         "file_stem": "significance_sggr_vs_grace",
     },
     {
         "baseline": "gca",
-        "target": "ifl-gc",
+        "target": "sg-gc",
         "label": "SG-GC VS GCA",
         "file_stem": "significance_sggc_vs_gca",
     },

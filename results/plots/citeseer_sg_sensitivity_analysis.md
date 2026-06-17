@@ -1,10 +1,10 @@
 # CiteSeer Sensitivity Analysis
 
-- Plot: `results\plots\citeseer_ifl_sensitivity_overview.png`
+- Plot: `results\plots\citeseer_sg_sensitivity_overview.png`
 
 ## Data Status
-- `results\sensitivity_iflgr_citeseer_results.csv`: status=ok, rows=56, summary_rows=14
-- `results\sensitivity_iflgc_citeseer_results.csv`: status=ok, rows=60, summary_rows=15
+- `results\sensitivity_sggr_citeseer_results.csv`: status=ok, rows=56, summary_rows=14
+- `results\sensitivity_sggc_citeseer_results.csv`: status=ok, rows=60, summary_rows=15
 
 ## Findings
 - SG-GR / t_s: best robust at 1.0000 (robust=0.7048, F1Mi=0.7093); robust range=0.0060. Delta vs anchor=+0.0030. Trend is non-monotonic, suggesting a local optimum.
