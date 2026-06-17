@@ -142,13 +142,13 @@ def configure_plot_style():
             "font.family": "serif",
             "font.serif": ["Times New Roman", "Times", "DejaVu Serif"],
             "font.size": 11,
-            "axes.labelsize": 12,
-            "axes.titlesize": 12,
+            "axes.labelsize": 13,
+            "axes.titlesize": 13,
             "axes.titleweight": "semibold",
             "axes.edgecolor": "#303030",
             "axes.linewidth": 0.8,
-            "xtick.labelsize": 10.5,
-            "ytick.labelsize": 10.5,
+            "xtick.labelsize": 11.5,
+            "ytick.labelsize": 11.5,
             "legend.fontsize": 8.5,
             "figure.facecolor": "white",
             "axes.facecolor": "white",
@@ -210,7 +210,7 @@ def draw_method_bars(ax, subset, metric, err_metric=None, baseline_zero=True):
     ax.set_ylim(*axis_limits(values, errors=errors, baseline_zero=baseline_zero))
 
 
-def make_panel_plot(summary_df, metric, err_metric, ylabel, title, out_base, dpi, formats, baseline_zero=True):
+def make_panel_plot(summary_df, metric, err_metric, ylabel, title, out_base, dpi, formats, baseline_zero=True, svg_out_dir=None):
     datasets = available_ordered(summary_df["dataset"].dropna().astype(str), DATASET_ORDER)
     if not datasets:
         raise RuntimeError("No dataset summary rows available for plotting.")
@@ -235,7 +235,7 @@ def make_panel_plot(summary_df, metric, err_metric, ylabel, title, out_base, dpi
             err_metric=err_metric,
             baseline_zero=baseline_zero,
         )
-        add_panel_label_below(ax, panel_label(idx, dataset), y=-0.27, fontsize=10)
+        add_panel_label_below(ax, panel_label(idx, dataset), y=-0.27, fontsize=11)
         ax.set_ylabel(ylabel)
         if metric == "time_ratio_vs_grace":
             ax.axhline(1.0, color="#303030", linewidth=0.8)
@@ -245,7 +245,18 @@ def make_panel_plot(summary_df, metric, err_metric, ylabel, title, out_base, dpi
         axes[row_idx][col_idx].set_visible(False)
 
     fig.tight_layout(rect=[0.0, 0.04, 1.0, 1.0], w_pad=1.2, h_pad=2.5)
-    saved_paths = save_figure_formats(fig, out_base, formats, dpi=dpi)
+
+    raster_formats = [fmt for fmt in formats if fmt != "svg"]
+    saved_paths = save_figure_formats(fig, out_base, raster_formats, dpi=dpi)
+    if "svg" in formats and svg_out_dir is not None:
+        svg_out_dir = Path(svg_out_dir)
+        svg_out_dir.mkdir(parents=True, exist_ok=True)
+        svg_path = svg_out_dir / f"{Path(out_base).name}.svg"
+        fig.savefig(svg_path, facecolor="white", pad_inches=0.04)
+        saved_paths.append(svg_path)
+    elif "svg" in formats:
+        saved_paths.extend(save_figure_formats(fig, out_base, ["svg"], dpi=dpi))
+
     plt.close(fig)
     return saved_paths
 
@@ -311,6 +322,8 @@ def main():
     if not out_dir.is_absolute():
         out_dir = PROJECT_ROOT / out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
+    svg_out_dir = PROJECT_ROOT / "results" / "plot"
+    svg_out_dir.mkdir(parents=True, exist_ok=True)
 
     input_paths = resolve_input_paths(args.inputs)
     if not input_paths:
@@ -332,12 +345,13 @@ def main():
             summary_df=summary_df,
             metric="train_total_sec",
             err_metric="train_total_std_sec",
-            ylabel="训练时间",
+            ylabel="训练时间（s）",
             title="",
             out_base=out_dir / "efficiency_train_total_time",
             dpi=args.dpi,
             formats=args.formats,
             baseline_zero=True,
+            svg_out_dir=svg_out_dir,
         )
     )
 
@@ -346,12 +360,13 @@ def main():
             summary_df=summary_df,
             metric="wall_time_sec",
             err_metric="wall_time_std_sec",
-            ylabel="端到端时间",
+            ylabel="端到端时间（s）",
             title="",
             out_base=out_dir / "efficiency_wall_time",
             dpi=args.dpi,
             formats=args.formats,
             baseline_zero=True,
+            svg_out_dir=svg_out_dir,
         )
     )
 
